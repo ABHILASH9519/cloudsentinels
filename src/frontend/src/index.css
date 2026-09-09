@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/fonts/BricolageGrotesque.woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/assets/fonts/JetBrainsMono.woff2") format("woff2");
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "General Sans";
+  src: url("/assets/fonts/GeneralSans.woff2") format("woff2");
+  font-weight: 200 700;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --background: 0.13 0.015 240;
+    --foreground: 0.94 0.01 240;
+    --card: 0.16 0.018 240;
+    --card-foreground: 0.94 0.01 240;
+    --popover: 0.15 0.018 240;
+    --popover-foreground: 0.94 0.01 240;
+    --primary: 0.72 0.18 195;
+    --primary-foreground: 0.1 0.015 240;
+    --secondary: 0.2 0.02 240;
+    --secondary-foreground: 0.85 0.01 240;
+    --muted: 0.19 0.018 240;
+    --muted-foreground: 0.55 0.02 240;
+    --accent: 0.25 0.025 240;
+    --accent-foreground: 0.94 0.01 240;
+    --destructive: 0.62 0.21 25;
+    --destructive-foreground: 0.98 0.005 0;
+    --border: 0.22 0.02 240;
+    --input: 0.2 0.02 240;
+    --ring: 0.72 0.18 195;
+    --radius: 0.375rem;
+
+    --chart-1: 0.72 0.18 195;
+    --chart-2: 0.68 0.16 150;
+    --chart-3: 0.65 0.19 55;
+    --chart-4: 0.62 0.21 25;
+    --chart-5: 0.7 0.17 290;
+
+    --sidebar: 0.11 0.015 240;
+    --sidebar-foreground: 0.9 0.01 240;
+    --sidebar-primary: 0.72 0.18 195;
+    --sidebar-primary-foreground: 0.1 0.015 240;
+    --sidebar-accent: 0.18 0.02 240;
+    --sidebar-accent-foreground: 0.9 0.01 240;
+    --sidebar-border: 0.2 0.018 240;
+    --sidebar-ring: 0.72 0.18 195;
+
+    /* severity */
+    --severity-critical: 0.62 0.21 25;
+    --severity-high: 0.68 0.18 55;
+    --severity-medium: 0.75 0.17 90;
+    --severity-low: 0.68 0.16 150;
+
+    /* status */
+    --status-open: 0.65 0.18 220;
+    --status-in-progress: 0.72 0.17 60;
+    --status-resolved: 0.68 0.16 150;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display;
+  }
+  code,
+  pre,
+  .mono {
+    @apply font-mono;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: oklch(var(--background));
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(var(--border));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(var(--muted-foreground));
+}
+
+/* Grid background pattern for login page */
+.grid-bg {
+  background-image: linear-gradient(
+      oklch(var(--border) / 0.3) 1px,
+      transparent 1px
+    ), linear-gradient(90deg, oklch(var(--border) / 0.3) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Glow effects */
+.glow-cyan {
+  box-shadow: 0 0 20px oklch(var(--primary) / 0.3), 0 0 60px
+    oklch(var(--primary) / 0.1);
+}
+.text-glow {
+  text-shadow: 0 0 20px oklch(var(--primary) / 0.5);
+}
+
+/* Pulse animation for active indicators */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
