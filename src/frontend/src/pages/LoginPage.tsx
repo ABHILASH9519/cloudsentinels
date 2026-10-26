@@ -47,11 +47,10 @@ export function LoginPage() {
         {/* Login card */}
         <div className="bg-card border border-border rounded-xl p-6 shadow-2xl">
           <h2 className="font-display text-lg font-600 text-foreground mb-1">
-            Sign In
+            Sign in securely
           </h2>
           <p className="text-sm text-muted-foreground mb-5">
-            Access your DevOps command center. Authenticate securely to
-            continue.
+            Use Internet Identity to access your incident and monitoring workspace.
           </p>
           <Button
             className="w-full bg-primary/90 hover:bg-primary text-primary-foreground font-semibold"
@@ -67,7 +66,7 @@ export function LoginPage() {
             ) : (
               <span className="flex items-center gap-2">
                 <Shield className="w-4 h-4" />
-                Sign In
+                Sign in with Internet Identity
               </span>
             )}
           </Button>
@@ -75,15 +74,7 @@ export function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          &copy; {new Date().getFullYear()}. Built with love using{" "}
-          <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-            className="text-primary hover:underline"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            caffeine.ai
-          </a>
+          CloudSentinels · Cloud operations and incident response
         </p>
       </div>
     </div>
