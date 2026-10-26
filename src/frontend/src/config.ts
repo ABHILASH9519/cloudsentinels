@@ -7,7 +7,7 @@ import {
 import { StorageClient } from "./utils/StorageClient";
 import { HttpAgent } from "@icp-sdk/core/agent";
 
-const DEFAULT_STORAGE_GATEWAY_URL = "https://storage.invalid.example";
+const DEFAULT_STORAGE_GATEWAY_URL = "http://localhost:6188";
 const DEFAULT_BUCKET_NAME = "default-bucket";
 const DEFAULT_PROJECT_ID = "0000000-0000-0000-0000-00000000000";
 
