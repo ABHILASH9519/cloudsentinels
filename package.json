@@ -1,10 +1,9 @@
 {
-  "name": "@caffeine/template-app",
+  "name": "cloudsentinels",
   "type": "module",
   "engines": {
-    "node": ">=16.0.0",
-    "pnpm": ">=7.0.0",
-    "npm": "please use pnpm"
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
   },
   "scripts": {
     "build": "pnpm -r --if-present run build",
@@ -14,5 +13,6 @@
   },
   "devDependencies": {
     "sharp": "^0.34.4"
-  }
+  },
+  "private": true
 }
