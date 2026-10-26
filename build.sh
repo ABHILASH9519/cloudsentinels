@@ -22,7 +22,7 @@ if [ ! -d "$CALM_MOTOKO_CORE" ]; then
 fi
 
 pnpm install --prefer-offline --child-concurrency 2 --network-concurrency 6
-pnpm --filter '@caffeine/template-frontend' build:skip-bindings
+pnpm --filter '@cloudsentinels/frontend' build:skip-bindings
 node scripts/prune-unused-images.js
 node scripts/resize-images.js
 
