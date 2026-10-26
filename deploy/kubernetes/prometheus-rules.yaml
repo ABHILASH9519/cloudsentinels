@@ -1,0 +1,50 @@
+# Requires Prometheus Operator (for example kube-prometheus-stack).
+# Adjust namespaces, workload labels, and thresholds for your cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudsentinels-kubernetes-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: cloudsentinels
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cloudsentinels.kubernetes.workloads
+      rules:
+        - alert: KubernetesPodCrashLooping
+          expr: 'max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff",namespace!=""}[5m]) >= 1'
+          for: 5m
+          labels:
+            severity: critical
+            source: kubernetes
+          annotations:
+            summary: "Pod is crash looping"
+            description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} has been in CrashLoopBackOff."
+        - alert: KubernetesDeploymentReplicasUnavailable
+          expr: 'kube_deployment_spec_replicas{namespace!=""} > kube_deployment_status_replicas_available'
+          for: 10m
+          labels:
+            severity: warning
+            source: kubernetes
+          annotations:
+            summary: "Deployment has unavailable replicas"
+            description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has fewer available replicas than desired."
+        - alert: KubernetesContainerHighCPU
+          expr: '(sum by (namespace, pod, container) (rate(container_cpu_usage_seconds_total{container!="",container!="POD",namespace!=""}[5m])) / sum by (namespace, pod, container) (kube_pod_container_resource_requests{resource="cpu",unit="core"})) > 0.9'
+          for: 10m
+          labels:
+            severity: warning
+            source: kubernetes
+          annotations:
+            summary: "Container CPU usage is high relative to request"
+            description: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} is using over 90% of its requested CPU."
+        - alert: KubernetesContainerHighMemory
+          expr: '(sum by (namespace, pod, container) (container_memory_working_set_bytes{container!="",container!="POD",namespace!=""}) / sum by (namespace, pod, container) (kube_pod_container_resource_requests{resource="memory",unit="byte"})) > 0.9'
+          for: 10m
+          labels:
+            severity: warning
+            source: kubernetes
+          annotations:
+            summary: "Container memory usage is high relative to request"
+            description: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} is using over 90% of its requested memory."
