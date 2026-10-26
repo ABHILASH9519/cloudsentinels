@@ -50,7 +50,8 @@ export function LoginPage() {
             Sign in securely
           </h2>
           <p className="text-sm text-muted-foreground mb-5">
-            Use Internet Identity to access your incident and monitoring workspace.
+            Use Internet Identity to access your incident and monitoring
+            workspace.
           </p>
           <Button
             className="w-full bg-primary/90 hover:bg-primary text-primary-foreground font-semibold"
