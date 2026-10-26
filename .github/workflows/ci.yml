@@ -1,0 +1,33 @@
+name: CloudSentinels CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type-check frontend
+        run: pnpm --filter @cloudsentinels/frontend typecheck
+      - name: Lint frontend
+        run: pnpm --filter @cloudsentinels/frontend check
+      - name: Build frontend
+        run: pnpm --filter @cloudsentinels/frontend build
