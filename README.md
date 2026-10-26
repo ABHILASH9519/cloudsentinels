@@ -10,9 +10,15 @@ CloudSentinels is an incident-management and observability console for teams ope
 - AI insight fields for summaries, root causes, and suggested fixes, populated through authorized backend calls
 - Role/permission checks in backend methods
 
+## Kubernetes monitoring starter
+
+A Prometheus Operator ruleset is available at [deploy/kubernetes/prometheus-rules.yaml](deploy/kubernetes/prometheus-rules.yaml). It covers pod crash loops, unavailable deployment replicas, and high container CPU/memory relative to resource requests. Installation prerequisites and commands are documented in [deploy/kubernetes/README.md](deploy/kubernetes/README.md).
+
+These rules create alerts in Prometheus; they do not automatically ingest alerts into the CloudSentinels UI. An authenticated Alertmanager/webhook adapter is still required for that connection.
+
 ## Important scope and integration notes
 
-The repository currently stores application records in the backend canister's in-memory Map values. Those values are not a substitute for a separately managed SQL database, and persistence across canister upgrades must be verified before treating this as production durable. The source describes ingestion from an external monitoring/AI backend, but a production Kubernetes/Prometheus ingestion adapter, live cluster discovery, and a real AI inference service must be configured and tested separately. The UI's metric/alert records should not be represented as live cluster telemetry until an ingestion source is connected.
+The repository currently stores application records in the backend canister's in-memory Map values. Those values are not a substitute for a separately managed SQL database, and persistence across canister upgrades must be verified before treating this as production durable. A production Kubernetes/Prometheus ingestion adapter, live cluster discovery, and a real AI inference service must be configured and tested separately. The UI's metric/alert records should not be represented as live cluster telemetry until an ingestion source is connected.
 
 Authentication currently uses Internet Identity rather than email/password. Roles and permissions are governed by the backend authorization module; test role assignment and first-admin bootstrap explicitly before production use.
 
