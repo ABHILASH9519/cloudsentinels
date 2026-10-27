@@ -1,0 +1,112 @@
+{
+  "dataset": "CloudSentinels fictional demo observability dataset",
+  "generatedAt": "2026-10-28T00:00:00Z",
+  "disclaimer": "Synthetic examples only. Not live infrastructure telemetry and not automatically imported.",
+  "incidents": [
+    {
+      "title": "payments-api pod crash loop",
+      "severity": "critical",
+      "status": "open",
+      "source": "kubernetes",
+      "assignee": "Platform On-call",
+      "rawLog": "Back-off restarting failed container payments-api-7cdd9d. Readiness probe failed 5 times; exit code 137.",
+      "aiSummary": "The payments-api pod is repeatedly restarting.",
+      "rootCause": "Possible memory pressure or a failing startup dependency; inspect container events and limits.",
+      "suggestedFix": "Check kubectl describe pod and previous container logs; verify memory limits and dependency health."
+    },
+    {
+      "title": "Elevated API latency in checkout",
+      "severity": "high",
+      "status": "in_progress",
+      "source": "prometheus",
+      "assignee": "SRE Team",
+      "rawLog": "p95 latency 1.8s for 10m; target < 500ms; request rate stable.",
+      "aiSummary": "Checkout latency has exceeded its target.",
+      "rootCause": "Likely downstream latency or saturated workers; trace slow requests.",
+      "suggestedFix": "Inspect traces, database pool saturation, and recent deployments."
+    },
+    {
+      "title": "Node memory pressure warning",
+      "severity": "medium",
+      "status": "open",
+      "source": "kubernetes",
+      "assignee": "",
+      "rawLog": "Node condition MemoryPressure=True; available memory below threshold.",
+      "aiSummary": "A worker node is approaching memory capacity.",
+      "rootCause": "Workload memory usage is high relative to node capacity.",
+      "suggestedFix": "Review top pods, resource requests/limits, and cluster capacity."
+    },
+    {
+      "title": "TLS certificate renewal verified",
+      "severity": "low",
+      "status": "resolved",
+      "source": "synthetic-monitor",
+      "assignee": "Platform Team",
+      "rawLog": "Certificate renewal test completed successfully.",
+      "aiSummary": "Certificate renewal check completed.",
+      "rootCause": "Routine validation event.",
+      "suggestedFix": "No action required; keep renewal monitoring enabled."
+    }
+  ],
+  "metrics": [
+    {
+      "name": "container_cpu_usage_percent",
+      "value": 82.4,
+      "unit": "%",
+      "source": "demo-cluster"
+    },
+    {
+      "name": "container_memory_usage_percent",
+      "value": 76.1,
+      "unit": "%",
+      "source": "demo-cluster"
+    },
+    {
+      "name": "http_request_duration_p95_ms",
+      "value": 1840,
+      "unit": "ms",
+      "source": "prometheus-demo"
+    },
+    {
+      "name": "http_requests_per_second",
+      "value": 243.7,
+      "unit": "req/s",
+      "source": "prometheus-demo"
+    },
+    {
+      "name": "kubernetes_ready_replicas",
+      "value": 2,
+      "unit": "pods",
+      "source": "demo-cluster"
+    },
+    {
+      "name": "node_filesystem_usage_percent",
+      "value": 68.2,
+      "unit": "%",
+      "source": "node-exporter-demo"
+    }
+  ],
+  "alerts": [
+    {
+      "title": "High CPU on payments-api",
+      "severity": "high",
+      "source": "prometheus-demo",
+      "status": "active",
+      "message": "CPU utilization remained above 80% for 10 minutes."
+    },
+    {
+      "title": "Deployment replicas unavailable",
+      "severity": "critical",
+      "source": "prometheus-demo",
+      "status": "active",
+      "message": "payments-api has fewer ready replicas than desired."
+    },
+    {
+      "title": "Checkout latency elevated",
+      "severity": "medium",
+      "source": "synthetic-monitor",
+      "status": "acknowledged",
+      "message": "p95 latency is above the 500 ms service objective."
+    }
+  ]
+}
