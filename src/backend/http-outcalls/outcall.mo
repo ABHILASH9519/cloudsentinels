@@ -30,7 +30,7 @@ module {
   public func httpGetRequest(url : Text, extraHeaders : [Header], transform : Transform) : async Text {
     let headers = extraHeaders.concat([{
       name = "User-Agent";
-      value = "caffeine.ai";
+      value = "CloudSentinels/1.0";
     }]);
     let http_request : IC.http_request_args = {
       url;
@@ -53,7 +53,7 @@ module {
 
   public func httpPostRequest(url : Text, extraHeaders : [Header], body : Text, transform : Transform) : async Text {
     let headers = extraHeaders.concat([
-      { name = "User-Agent"; value = "caffeine.ai" },
+      { name = "User-Agent"; value = "CloudSentinels/1.0" },
       { name = "Idempotency-Key"; value = "Time-" # Time.now().toText() },
     ]);
     let requestBody = body.encodeUtf8();
