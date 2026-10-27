@@ -10,7 +10,7 @@ const ii_url =
 
 process.env.II_URL = process.env.II_URL || ii_url;
 process.env.STORAGE_GATEWAY_URL =
-  process.env.STORAGE_GATEWAY_URL || "https://blob.caffeine.ai";
+  process.env.STORAGE_GATEWAY_URL || "http://localhost:6188";
 
 export default defineConfig({
   logLevel: "error",
