@@ -180,15 +180,20 @@ export function getSecretFromHash(paramName: string): string | null {
     return null;
   }
 
-  // Remove the leading #
+  // Support both a plain fragment (#token=value) and hash-router URLs
+  // such as (#/dashboard?token=value).
   const hashContent = hash.substring(1);
-  const params = new URLSearchParams(hashContent);
+  const queryStartIndex = hashContent.indexOf("?");
+  const parameterText =
+    queryStartIndex >= 0
+      ? hashContent.substring(queryStartIndex + 1)
+      : hashContent;
+  const params = new URLSearchParams(parameterText);
   const secret = params.get(paramName);
 
   if (secret) {
-    // Store in session for persistence
+    // Keep the token only for this browser session, then remove it from the URL.
     storeSessionParameter(paramName, secret);
-    // Immediately clear the secret parameter from URL to avoid history leakage
     clearParamFromHash(paramName);
     return secret;
   }
