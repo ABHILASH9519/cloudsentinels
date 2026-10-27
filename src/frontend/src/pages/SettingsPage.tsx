@@ -103,12 +103,12 @@ export function SettingsPage() {
       <p className="text-xs text-muted-foreground">
         &copy; {new Date().getFullYear()}. Built with love using{" "}
         <a
-          href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
+          href="https://github.com/ABHILASH9519/cloudsentinels"
           className="text-primary hover:underline"
           target="_blank"
           rel="noopener noreferrer"
         >
-          caffeine.ai
+          CloudSentinels
         </a>
       </p>
     </div>
