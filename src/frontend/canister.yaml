@@ -16,7 +16,7 @@ build:
             "ii_derivation_origin": "undefined"
           }
           EOF
-        - pnpm --filter '@caffeine/template-frontend' build:skip-bindings
+        - pnpm --filter '@cloudsentinels/frontend' build:skip-bindings
 
     - type: pre-built
       url: https://github.com/dfinity/sdk/raw/refs/tags/0.27.0/src/distributed/assetstorage.wasm.gz
