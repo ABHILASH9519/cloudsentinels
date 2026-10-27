@@ -37,3 +37,27 @@ The repository is an Internet Computer project with a pnpm workspace, React/Vite
 - [ ] Deploy to a non-production environment and run end-to-end smoke tests
 
 CloudSentinels should not be described as production-ready until these checks pass in the target environment.
+
+
+## Demo walkthrough and sample dataset
+
+A safe, fictional demo dataset is provided at [`sample-data/demo-observability.json`](sample-data/demo-observability.json). It models Kubernetes incidents, Prometheus-style metrics, and alerts; it is reference data, not live telemetry and is not automatically inserted into a deployed canister.
+
+### Sign-in and first-run role setup
+
+1. Deploy the backend with `CLOUDSENTINELS_ADMIN_TOKEN` configured as a strong secret in the canister/runtime environment. Never commit that value.
+2. Open the app and choose **Sign in with Internet Identity**.
+3. For the first administrator only, provide the bootstrap token in the URL hash fragment as `#cloudSentinelsAdminToken=YOUR_TOKEN` before authentication. The frontend extracts it and removes that parameter from the address bar. Do not use a normal query string.
+4. Subsequent users should sign in without the bootstrap token; they are assigned the regular user role. Keep the admin token out of screenshots, chat messages, shell history, and source control.
+
+If the token is not configured in the backend environment, role initialization fails. If an administrator has already been assigned, presenting the token does not promote another principal.
+
+### Walkthrough
+
+1. Sign in, then open **Incidents** and create an incident with a source such as `kubernetes` and a pod event in the raw log.
+2. Open **Monitoring** and add a metric such as `container_cpu_usage_percent = 82` (%) with source `demo-cluster`.
+3. Add an alert such as **High CPU on payments-api** with severity `high` and source `prometheus-demo`.
+4. Return to **Dashboard** to see incident counts, severity/status charts, active alerts, and latest metric records.
+5. Acknowledge or resolve the alert from Monitoring and verify that the active-alert count updates.
+
+The demo records created through the UI are stored by the current backend implementation. The JSON file is only a reference dataset; importing it automatically requires a separate seed/import flow. Backend maps and role state currently require upgrade-persistence verification before production use. Kubernetes rule files generate Prometheus alerts but do not by themselves send them into this UI.
