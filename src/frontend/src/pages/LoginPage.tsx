@@ -3,7 +3,7 @@ import { Activity, BrainCircuit, Shield, Zap } from "lucide-react";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 
 export function LoginPage() {
-  const { login, isLoggingIn } = useInternetIdentity();
+  const { login, isLoggingIn, loginError } = useInternetIdentity();
 
   return (
     <div className="min-h-screen bg-background grid-bg flex items-center justify-center p-4">
@@ -53,6 +53,19 @@ export function LoginPage() {
             Use Internet Identity to access your incident and monitoring
             workspace.
           </p>
+          {loginError && (
+            <div
+              role="alert"
+              className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+              data-ocid="auth.login.error_state"
+            >
+              <p className="font-semibold">Sign-in could not be completed</p>
+              <p className="mt-1 break-words">{loginError.message}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Check that Internet Identity is reachable and the configured provider URL is correct, then try again.
+              </p>
+            </div>
+          )}
           <Button
             className="w-full bg-primary/90 hover:bg-primary text-primary-foreground font-semibold"
             onClick={login}
