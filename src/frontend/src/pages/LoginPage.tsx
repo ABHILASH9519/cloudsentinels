@@ -62,7 +62,8 @@ export function LoginPage() {
               <p className="font-semibold">Sign-in could not be completed</p>
               <p className="mt-1 break-words">{loginError.message}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Check that Internet Identity is reachable and the configured provider URL is correct, then try again.
+                Check that Internet Identity is reachable and the configured
+                provider URL is correct, then try again.
               </p>
             </div>
           )}
