@@ -37,6 +37,14 @@ PROFILE="$(icp canister call backend getCallerUserProfile)"
 
 # Incident lifecycle and AI fields.
 icp canister call backend createIncident '("CI smoke incident", "high", "ci", "synthetic test log")'
+if icp canister call backend createIncident '("Invalid severity", "urgent", "ci", "must be rejected")' >"$TMP_DIR/invalid-severity.log" 2>&1; then
+  echo "Backend accepted an unsupported incident severity"
+  exit 1
+fi
+if icp canister call backend updateIncidentStatus '(1, "closed")' >"$TMP_DIR/invalid-status.log" 2>&1; then
+  echo "Backend accepted an unsupported incident status"
+  exit 1
+fi
 icp canister call backend updateIncidentStatus '(1, "in_progress")'
 icp canister call backend updateIncidentAIFields '(1, "summary", "root cause", "suggested fix")'
 INCIDENT="$(icp canister call backend getIncident '(1)')"
