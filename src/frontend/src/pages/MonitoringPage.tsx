@@ -159,7 +159,21 @@ export function MonitoringPage() {
             Live alerts and system metrics
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">\n          <Button\n            variant="outline"\n            onClick={handleImportDemoData}\n            disabled={importDemoData.isPending}\n            title="Adds fictional demo records to this workspace; safe to retry"\n            data-ocid="monitoring.import_demo.button"\n          >\n            {importDemoData.isPending ? (\n              <Loader2 className="mr-2 h-4 w-4 animate-spin" />\n            ) : (\n              <Database className="mr-2 h-4 w-4" />\n            )}\n            Load sample data\n          </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={handleImportDemoData}
+            disabled={importDemoData.isPending}
+            title="Adds fictional demo records to this workspace; safe to retry"
+            data-ocid="monitoring.import_demo.button"
+          >
+            {importDemoData.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Database className="mr-2 h-4 w-4" />
+            )}
+            Load sample data
+          </Button>
           <Dialog open={alertOpen} onOpenChange={setAlertOpen}>
             <DialogTrigger asChild>
               <Button
