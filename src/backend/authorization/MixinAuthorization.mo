@@ -1,6 +1,7 @@
 import AccessControl "./access-control";
 import Prim "mo:prim";
 import Runtime "mo:core/Runtime";
+import Principal "mo:core/Principal";
 
 mixin (accessControlState : AccessControl.AccessControlState) {
   // Initialize authorization. The first non-anonymous caller with the configured
