@@ -1,20 +1,17 @@
 import AccessControl "./access-control";
 import Prim "mo:prim";
-import Runtime "mo:core/Runtime";
 import Principal "mo:core/Principal";
 
 mixin (accessControlState : AccessControl.AccessControlState) {
-  // Initialize authorization. The first non-anonymous caller with the configured
-  // bootstrap token becomes the initial administrator.
+  // Register authenticated callers on first login. The configured bootstrap
+  // token grants admin only to the first caller who supplies the exact token.
+  // If no token is configured, callers are still registered as regular users.
   public shared ({ caller }) func _initializeAccessControlWithSecret(userSecret : Text) : async () {
-    switch (Prim.envVar<system>("CLOUDSENTINELS_ADMIN_TOKEN")) {
-      case (null) {
-        Runtime.trap("CLOUDSENTINELS_ADMIN_TOKEN environment variable is not set");
-      };
-      case (?adminToken) {
-        AccessControl.initialize(accessControlState, caller, adminToken, userSecret);
-      };
+    let adminToken = switch (Prim.envVar<system>("CLOUDSENTINELS_ADMIN_TOKEN")) {
+      case (null) { "" };
+      case (?token) { token };
     };
+    AccessControl.initialize(accessControlState, caller, adminToken, userSecret);
   };
 
   public query ({ caller }) func getCallerUserRole() : async AccessControl.UserRole {
