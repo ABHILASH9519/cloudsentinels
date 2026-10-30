@@ -87,7 +87,6 @@ if ! grep -qi "Unauthorized" "$TMP_DIR/unauthorized-delete.log"; then
   echo "Regular-user delete failed for a reason other than authorization"
   exit 1
 fi
-icp canister call --identity "$CURRENT_IDENTITY" backend updateIncidentStatus '(2, "resolved")'
 
 # Upgrade the canister and verify that records and authorization survive it.
 icp identity default "$ADMIN_IDENTITY"
