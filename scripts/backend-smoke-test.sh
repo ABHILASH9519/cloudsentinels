@@ -27,12 +27,12 @@ icp deploy backend
 # registration method called by the authenticated frontend actor.
 icp canister settings update backend --add-environment-variable "CLOUDSENTINELS_ADMIN_TOKEN=$ADMIN_TOKEN"
 icp canister call backend _initializeAccessControlWithSecret "(\"$ADMIN_TOKEN\")"
-ADMIN_ROLE="$(icp canister call backend getCallerUserRole)"
+ADMIN_ROLE="$(icp canister call backend getCallerUserRole '()')"
 [[ "$ADMIN_ROLE" == *admin* ]] || { echo "First authenticated caller was not made admin"; exit 1; }
 
 # Profile CRUD.
 icp canister call backend saveCallerUserProfile '(record { name = "CI Admin" })'
-PROFILE="$(icp canister call backend getCallerUserProfile)"
+PROFILE="$(icp canister call backend getCallerUserProfile '()')"
 [[ "$PROFILE" == *"CI Admin"* ]] || { echo "Profile round-trip failed"; exit 1; }
 
 # Incident lifecycle and AI fields.
@@ -63,14 +63,14 @@ METRICS="$(icp canister call backend getMetricsByName '("cpu_usage")')"
 
 icp canister call backend addAlert '("CI test alert", "medium", "ci", "test message")'
 icp canister call backend updateAlertStatus '(1, "acknowledged")'
-ALERTS="$(icp canister call backend getAlerts)"
+ALERTS="$(icp canister call backend getAlerts '()')"
 [[ "$ALERTS" == *"acknowledged"* ]] || { echo "Alert update/read failed"; exit 1; }
 icp canister call backend getDashboardSummary
 
 # A second principal must register as a normal user and must not delete incidents.
 icp identity default "$USER_IDENTITY"
 icp canister call backend _initializeAccessControlWithSecret '("")'
-USER_ROLE="$(icp canister call backend getCallerUserRole)"
+USER_ROLE="$(icp canister call backend getCallerUserRole '()')"
 [[ "$USER_ROLE" == *user* ]] || { echo "Regular caller did not receive user role"; exit 1; }
 icp canister call backend createIncident '("CI user incident", "low", "ci", "user-created log")'
 if icp canister call backend deleteIncident '(1)' >"$TMP_DIR/unauthorized-delete.log" 2>&1; then
@@ -85,15 +85,15 @@ icp build backend
 icp canister install backend --mode upgrade
 POST_UPGRADE_INCIDENT="$(icp canister call backend getIncident '(1)')"
 POST_UPGRADE_METRICS="$(icp canister call backend getMetricsByName '("cpu_usage")')"
-POST_UPGRADE_ALERTS="$(icp canister call backend getAlerts)"
-POST_UPGRADE_PROFILE="$(icp canister call backend getCallerUserProfile)"
+POST_UPGRADE_ALERTS="$(icp canister call backend getAlerts '()')"
+POST_UPGRADE_PROFILE="$(icp canister call backend getCallerUserProfile '()')"
 [[ "$POST_UPGRADE_INCIDENT" == *"summary"* ]] || { echo "Incident state did not survive canister upgrade"; exit 1; }
 [[ "$POST_UPGRADE_METRICS" == *"42.5"* ]] || { echo "Metric state did not survive canister upgrade"; exit 1; }
 [[ "$POST_UPGRADE_ALERTS" == *"acknowledged"* ]] || { echo "Alert state did not survive canister upgrade"; exit 1; }
 [[ "$POST_UPGRADE_PROFILE" == *"CI Admin"* ]] || { echo "Profile state did not survive canister upgrade"; exit 1; }
 
 icp identity default "$USER_IDENTITY"
-USER_ROLE_AFTER_UPGRADE="$(icp canister call backend getCallerUserRole)"
+USER_ROLE_AFTER_UPGRADE="$(icp canister call backend getCallerUserRole '()')"
 [[ "$USER_ROLE_AFTER_UPGRADE" == *user* ]] || { echo "User role did not survive canister upgrade"; exit 1; }
 if icp canister call backend deleteIncident '(1)' >"$TMP_DIR/post-upgrade-unauthorized-delete.log" 2>&1; then
   echo "Regular user unexpectedly gained admin permission after upgrade"
