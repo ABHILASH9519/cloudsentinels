@@ -70,6 +70,7 @@ icp canister call --identity "$CURRENT_IDENTITY" backend updateAlertStatus '(1, 
 ALERTS="$(icp canister call --identity "$CURRENT_IDENTITY" backend getAlerts '()')"
 [[ "$ALERTS" == *"acknowledged"* ]] || { echo "Alert update/read failed"; exit 1; }
 icp canister call --identity "$CURRENT_IDENTITY" backend getDashboardSummary '()'
+node scripts/import-demo-data-smoke.mjs "$ADMIN_IDENTITY"
 
 # A second principal must register as a normal user and must not delete incidents.
 icp identity default "$USER_IDENTITY"
