@@ -138,6 +138,19 @@ actor {
   var nextMetricId : MetricPointId = 1;
   var nextAlertId : AlertId = 1;
 
+  // Input validation helpers. Enforce limits in the canister, not only in the UI.
+  func requireLength(value : Text, field : Text, maxLength : Nat) : () {
+    if (value.size() == 0 or value.size() > maxLength) {
+      Runtime.trap(field # " must contain between 1 and " # maxLength.toText() # " characters");
+    };
+  };
+
+  func requireSeverity(severity : Text) : () {
+    if (severity != "critical" and severity != "high" and severity != "medium" and severity != "low") {
+      Runtime.trap("Invalid severity");
+    };
+  };
+
   // Helper functions
   func checkIncidentExists(id : IncidentId) : () {
     if (not incidents.containsKey(id)) {
@@ -150,6 +163,11 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can create incidents");
     };
+
+    requireLength(title, "Incident title", 200);
+    requireSeverity(severity);
+    requireLength(source, "Incident source", 100);
+    if (rawLog.size() > 20000) { Runtime.trap("Raw log exceeds 20000 characters"); };
 
     let id = nextIncidentId;
     let now = Time.now();
@@ -198,6 +216,9 @@ actor {
     };
 
     checkIncidentExists(id);
+    if (status != "open" and status != "in_progress" and status != "resolved") {
+      Runtime.trap("Invalid incident status");
+    };
 
     switch (incidents.get(id)) {
       case (null) { Runtime.trap("Incident with id: " # id.toText() # " does not exist") };
@@ -268,11 +289,13 @@ actor {
 
     checkIncidentExists(incidentId);
 
+    requireLength(text, "Comment", 5000);
     let id = nextCommentId;
     let comment : Comment = {
       id;
       incidentId;
-      author;
+      // Never trust a display name supplied by the browser as comment identity.
+      author = caller.toText();
       text;
       createdAt = Time.now();
     };
@@ -296,6 +319,9 @@ actor {
       Runtime.trap("Unauthorized: Only users can add metrics");
     };
 
+    requireLength(name, "Metric name", 100);
+    requireLength(unit, "Metric unit", 30);
+    requireLength(source, "Metric source", 100);
     let id = nextMetricId;
     let metric : MetricPoint = {
       id;
@@ -338,6 +364,11 @@ actor {
       Runtime.trap("Unauthorized: Only users can add alerts");
     };
 
+    requireLength(title, "Alert title", 200);
+    requireSeverity(severity);
+    requireLength(source, "Alert source", 100);
+    if (message.size() > 5000) { Runtime.trap("Alert message exceeds 5000 characters"); };
+
     let id = nextAlertId;
     let alert : Alert = {
       id;
@@ -367,6 +398,9 @@ actor {
       Runtime.trap("Unauthorized: Only users can update alerts");
     };
 
+    if (status != "active" and status != "acknowledged" and status != "resolved") {
+      Runtime.trap("Invalid alert status");
+    };
     switch (alerts.get(id)) {
       case (null) { Runtime.trap("Alert with id: " # id.toText() # " does not exist") };
       case (?alert) {
