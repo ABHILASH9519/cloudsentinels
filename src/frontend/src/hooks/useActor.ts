@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
-import { getSecretParameter } from "../utils/urlParams";
+import { clearSessionParameter, getSecretParameter } from "../utils/urlParams";
 import { useInternetIdentity } from "./useInternetIdentity";
 
 const ACTOR_QUERY_KEY = "actor";
@@ -28,6 +28,9 @@ export function useActor() {
       const actor = await createActorWithConfig(actorOptions);
       const adminToken = getSecretParameter("cloudSentinelsAdminToken") || "";
       await actor._initializeAccessControlWithSecret(adminToken);
+      // The canister has accepted the bootstrap/registration call; do not keep
+      // the bootstrap credential in browser session storage longer than needed.
+      clearSessionParameter("cloudSentinelsAdminToken");
       return actor;
     },
     // Only refetch when identity changes
