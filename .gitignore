@@ -1,0 +1,2 @@
+# Local canister secrets must never be committed.
+src/backend/secrets/
