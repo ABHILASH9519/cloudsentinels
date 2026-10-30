@@ -65,7 +65,7 @@ icp canister call backend addAlert '("CI test alert", "medium", "ci", "test mess
 icp canister call backend updateAlertStatus '(1, "acknowledged")'
 ALERTS="$(icp canister call backend getAlerts '()')"
 [[ "$ALERTS" == *"acknowledged"* ]] || { echo "Alert update/read failed"; exit 1; }
-icp canister call backend getDashboardSummary
+icp canister call backend getDashboardSummary '()'
 
 # A second principal must register as a normal user and must not delete incidents.
 icp identity default "$USER_IDENTITY"
