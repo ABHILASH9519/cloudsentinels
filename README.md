@@ -29,7 +29,7 @@ The repository is an Internet Computer project with a pnpm workspace, React/Vite
 ## Deployment checklist
 
 - [ ] Reproducible clean install and build
-- [ ] Authentication and role-permission integration tests
+- [ ] Authentication and role-permission integration tests against a local replica
 - [ ] Verify stable persistence across canister upgrades
 - [ ] Connect and validate Prometheus/Kubernetes telemetry ingestion
 - [ ] Configure alert delivery and AI inference provider securely
@@ -60,4 +60,4 @@ If the token is not configured in the backend environment, role initialization f
 4. Return to **Dashboard** to see incident counts, severity/status charts, active alerts, and latest metric records.
 5. Acknowledge or resolve the alert from Monitoring and verify that the active-alert count updates.
 
-The demo records created through the UI are stored by the current backend implementation. The JSON file is only a reference dataset; importing it automatically requires a separate seed/import flow. Backend maps and role state currently require upgrade-persistence verification before production use. Kubernetes rule files generate Prometheus alerts but do not by themselves send them into this UI.
+The demo records created through the UI are stored by the current backend implementation. The Monitoring page now includes **Load sample data**, which imports the fictional incidents, metrics, and alerts through the authenticated backend methods. Imported records use a `demo/` source prefix and the operation can be safely retried without duplicating matching records. This is test data, not live telemetry. Backend maps and role state still require upgrade-persistence verification before production use. Kubernetes rule files generate Prometheus alerts but do not by themselves send them into this UI.
