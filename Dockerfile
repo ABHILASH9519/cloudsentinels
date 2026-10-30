@@ -106,21 +106,9 @@ SOURCE_SUB_FOLDER="motoko-core-${CORE_LIB_VERSION}/src"
 curl -L "$CORE_LIB_URL" | tar -xz --strip-components=2 -C "$CORE_LIB_INSTALL_DIR" "$SOURCE_SUB_FOLDER"
 EOF
 
-# Install Motoko base library
-RUN <<EOF
-set -e
-BASE_LIB_VERSION=SKIP
-BASE_LIB_INSTALL_DIR="$HOME/.motoko/base/$BASE_LIB_VERSION"
-mkdir -p "$BASE_LIB_INSTALL_DIR"
-BASE_LIB_URL="https://github.com/caffeinelabs/motoko-base/archive/refs/tags/moc-${BASE_LIB_VERSION}.tar.gz"
-SOURCE_SUB_FOLDER="motoko-base-moc-${BASE_LIB_VERSION}/src"
-curl -L "$BASE_LIB_URL" | tar -xz --strip-components=2 -C "$BASE_LIB_INSTALL_DIR" "$SOURCE_SUB_FOLDER"
-EOF
-
 # Set Motoko environment variables for deploy.sh and other scripts
 ENV MOC_PATH="/home/ubuntu/.motoko/moc/0.16.3-implicits-26/bin/moc"
 ENV MOTOKO_CORE="/home/ubuntu/.motoko/core/implicits-20"
-ENV MOTOKO_BASE="/home/ubuntu/.motoko/base/SKIP"
 
 WORKDIR /workdir
 
