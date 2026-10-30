@@ -31,3 +31,13 @@ jobs:
         run: pnpm --filter @cloudsentinels/frontend check
       - name: Build frontend
         run: pnpm --filter @cloudsentinels/frontend build
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Build the project toolchain image
+        run: docker build --tag cloudsentinels-ci .
+      - name: Compile frontend assets and Motoko backend
+        run: docker run --rm --entrypoint /workdir/build.sh cloudsentinels-ci
