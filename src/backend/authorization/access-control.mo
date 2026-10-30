@@ -21,13 +21,19 @@ module {
     };
   };
 
-  // First principal that calls this function becomes admin, all other principals become users.
+  // A configured, non-empty bootstrap token is required for administrator assignment.
+  // Without one, authenticated callers are safely registered as regular users.
   public func initialize(state : AccessControlState, caller : Principal, adminToken : Text, userProvidedToken : Text) {
     if (caller.isAnonymous()) { return };
     switch (state.userRoles.get(caller)) {
       case (?_) {};
       case (null) {
-        if (not state.adminAssigned and userProvidedToken == adminToken) {
+        if (
+          not state.adminAssigned and
+          adminToken != "" and
+          userProvidedToken != "" and
+          userProvidedToken == adminToken
+        ) {
           state.userRoles.add(caller, #admin);
           state.adminAssigned := true;
         } else {
