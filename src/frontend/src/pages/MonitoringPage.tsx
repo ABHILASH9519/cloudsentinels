@@ -92,14 +92,20 @@ export function MonitoringPage() {
   };
 
   const handleAddMetric = async () => {
-    if (!metricForm.name.trim() || !metricForm.value) {
-      toast.error("Name and value required");
+    const value = Number(metricForm.value);
+    if (!metricForm.name.trim() || metricForm.value.trim() === "") {
+      toast.error("Metric name and value are required");
+      return;
+    }
+    if (!Number.isFinite(value)) {
+      toast.error("Enter a valid finite metric value");
       return;
     }
     try {
       await addMetric.mutateAsync({
         ...metricForm,
-        value: Number.parseFloat(metricForm.value),
+        name: metricForm.name.trim(),
+        value,
       });
       toast.success("Metric added");
       setMetricOpen(false);
