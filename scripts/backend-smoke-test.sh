@@ -51,13 +51,13 @@ if icp canister call --identity "$CURRENT_IDENTITY" backend updateIncidentStatus
 fi
 icp canister call --identity "$CURRENT_IDENTITY" backend updateIncidentStatus '(1, "in_progress")'
 icp canister call --identity "$CURRENT_IDENTITY" backend updateIncidentAIFields '(1, "summary", "root cause", "suggested fix")'
-INCIDENT="$(icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1)')"
+INCIDENT="$(icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1 : nat)')"
 [[ "$INCIDENT" == *"in_progress"* && "$INCIDENT" == *"summary"* ]] || { echo "Incident update/read failed"; exit 1; }
 
 # Comment identity must come from the authenticated principal, not a browser label.
 icp canister call --identity "$CURRENT_IDENTITY" backend addComment '(1, "forged display name", "CI comment")'
 ADMIN_PRINCIPAL="$(icp identity principal --identity "$ADMIN_IDENTITY")"
-COMMENTS="$(icp canister call --identity "$CURRENT_IDENTITY" backend getCommentsByIncident '(1)')"
+COMMENTS="$(icp canister call --identity "$CURRENT_IDENTITY" backend getCommentsByIncident '(1 : nat)')"
 [[ "$COMMENTS" == *"$ADMIN_PRINCIPAL"* && "$COMMENTS" != *"forged display name"* ]] || { echo "Comment author identity check failed"; exit 1; }
 
 # Metric and alert write/read/update paths.
@@ -78,8 +78,13 @@ icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessContro
 USER_ADMIN_STATUS="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
 [[ "$USER_ADMIN_STATUS" == *false* ]] || { echo "Regular caller unexpectedly received admin role"; exit 1; }
 icp canister call --identity "$CURRENT_IDENTITY" backend createIncident '("CI user incident", "low", "ci", "user-created log")'
-if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1)' >"$TMP_DIR/unauthorized-delete.log" 2>&1; then
+if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1 : nat)' >"$TMP_DIR/unauthorized-delete.log" 2>&1; then
   echo "Regular user unexpectedly deleted an incident"
+  exit 1
+fi
+if ! grep -qi "Unauthorized" "$TMP_DIR/unauthorized-delete.log"; then
+  cat "$TMP_DIR/unauthorized-delete.log"
+  echo "Regular-user delete failed for a reason other than authorization"
   exit 1
 fi
 icp canister call --identity "$CURRENT_IDENTITY" backend updateIncidentStatus '(2, "resolved")'
@@ -89,7 +94,7 @@ icp identity default "$ADMIN_IDENTITY"
 CURRENT_IDENTITY="$ADMIN_IDENTITY"
 icp build backend
 icp canister install backend --mode upgrade --identity "$ADMIN_IDENTITY"
-POST_UPGRADE_INCIDENT="$(icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1)')"
+POST_UPGRADE_INCIDENT="$(icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1 : nat)')"
 POST_UPGRADE_METRICS="$(icp canister call --identity "$CURRENT_IDENTITY" backend getMetricsByName '("cpu_usage")')"
 POST_UPGRADE_ALERTS="$(icp canister call --identity "$CURRENT_IDENTITY" backend getAlerts '()')"
 POST_UPGRADE_PROFILE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getCallerUserProfile '()')"
@@ -102,16 +107,21 @@ icp identity default "$USER_IDENTITY"
 CURRENT_IDENTITY="$USER_IDENTITY"
 USER_ADMIN_AFTER_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
 [[ "$USER_ADMIN_AFTER_UPGRADE" == *false* ]] || { echo "Regular caller gained admin role after canister upgrade"; exit 1; }
-if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1)' >"$TMP_DIR/post-upgrade-unauthorized-delete.log" 2>&1; then
+if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1 : nat)' >"$TMP_DIR/post-upgrade-unauthorized-delete.log" 2>&1; then
   echo "Regular user unexpectedly gained admin permission after upgrade"
+  exit 1
+fi
+if ! grep -qi "Unauthorized" "$TMP_DIR/post-upgrade-unauthorized-delete.log"; then
+  cat "$TMP_DIR/post-upgrade-unauthorized-delete.log"
+  echo "Post-upgrade permission check failed for an unexpected reason"
   exit 1
 fi
 
 # Admin-only deletion must work, while regular-user attempts were denied.
 icp identity default "$ADMIN_IDENTITY"
 CURRENT_IDENTITY="$ADMIN_IDENTITY"
-icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1)'
-if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1)' >"$TMP_DIR/deleted-incident.log" 2>&1; then
+icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1 : nat)'
+if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1 : nat)' >"$TMP_DIR/deleted-incident.log" 2>&1; then
   echo "Deleted incident is still readable"
   exit 1
 fi
