@@ -22,6 +22,9 @@ pnpm --filter '@cloudsentinels/frontend' build:skip-bindings
 node scripts/prune-unused-images.js
 node scripts/resize-images.js
 
+# Run backend authorization unit tests before producing the canister artifact.
+"$MOC_PATH" -r --package core "$MOTOKO_CORE" src/backend/tests/access-control.test.mo
+
 "$MOC_PATH" --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --actor-idl src/backend/system-idl --package core "$MOTOKO_CORE" src/backend/main.mo -o src/backend/backend.wasm
 
 echo "CloudSentinels frontend assets and Motoko backend compiled successfully."
