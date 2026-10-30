@@ -84,7 +84,16 @@ POST_UPGRADE_PROFILE="$(icp canister call backend getCallerUserProfile)"
 [[ "$POST_UPGRADE_ALERTS" == *"acknowledged"* ]] || { echo "Alert state did not survive canister upgrade"; exit 1; }
 [[ "$POST_UPGRADE_PROFILE" == *"CI Admin"* ]] || { echo "Profile state did not survive canister upgrade"; exit 1; }
 
-# Admin-only deletion must work, while a regular user's attempt above was denied.
+icp identity default "$USER_IDENTITY"
+USER_ROLE_AFTER_UPGRADE="$(icp canister call backend getCallerUserRole)"
+[[ "$USER_ROLE_AFTER_UPGRADE" == *user* ]] || { echo "User role did not survive canister upgrade"; exit 1; }
+if icp canister call backend deleteIncident '(1)' >"$TMP_DIR/post-upgrade-unauthorized-delete.log" 2>&1; then
+  echo "Regular user unexpectedly gained admin permission after upgrade"
+  exit 1
+fi
+
+# Admin-only deletion must work, while regular-user attempts were denied.
+icp identity default "$ADMIN_IDENTITY"
 icp canister call backend deleteIncident '(1)'
 if icp canister call backend getIncident '(1)' >"$TMP_DIR/deleted-incident.log" 2>&1; then
   echo "Deleted incident is still readable"
