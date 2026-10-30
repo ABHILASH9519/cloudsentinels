@@ -71,8 +71,20 @@ if icp canister call backend deleteIncident '(1)' >"$TMP_DIR/unauthorized-delete
 fi
 icp canister call backend updateIncidentStatus '(2, "resolved")'
 
-# Admin-only deletion must work, while a regular user's attempt above was denied.
+# Upgrade the canister and verify that records and authorization survive it.
 icp identity default "$ADMIN_IDENTITY"
+icp build backend
+icp canister install backend --mode upgrade
+POST_UPGRADE_INCIDENT="$(icp canister call backend getIncident '(1)')"
+POST_UPGRADE_METRICS="$(icp canister call backend getMetricsByName '("cpu_usage")')"
+POST_UPGRADE_ALERTS="$(icp canister call backend getAlerts)"
+POST_UPGRADE_PROFILE="$(icp canister call backend getCallerUserProfile)"
+[[ "$POST_UPGRADE_INCIDENT" == *"summary"* ]] || { echo "Incident state did not survive canister upgrade"; exit 1; }
+[[ "$POST_UPGRADE_METRICS" == *"42.5"* ]] || { echo "Metric state did not survive canister upgrade"; exit 1; }
+[[ "$POST_UPGRADE_ALERTS" == *"acknowledged"* ]] || { echo "Alert state did not survive canister upgrade"; exit 1; }
+[[ "$POST_UPGRADE_PROFILE" == *"CI Admin"* ]] || { echo "Profile state did not survive canister upgrade"; exit 1; }
+
+# Admin-only deletion must work, while a regular user's attempt above was denied.
 icp canister call backend deleteIncident '(1)'
 if icp canister call backend getIncident '(1)' >"$TMP_DIR/deleted-incident.log" 2>&1; then
   echo "Deleted incident is still readable"
