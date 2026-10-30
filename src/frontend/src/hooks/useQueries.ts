@@ -1,5 +1,5 @@
-import demoDataset from "../../../../sample-data/demo-observability.json";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import demoDataset from "../../../../sample-data/demo-observability.json";
 import type {
   Alert,
   Comment,
@@ -281,7 +281,6 @@ export function useSaveUserProfile() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["userProfile"] }),
   });
 }
-
 
 /**
  * Import the repository's fictional observability fixture through the same
