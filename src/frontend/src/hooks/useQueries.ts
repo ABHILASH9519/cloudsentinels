@@ -1,3 +1,4 @@
+import demoDataset from "../../../../sample-data/demo-observability.json";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Alert,
@@ -278,5 +279,97 @@ export function useSaveUserProfile() {
       return actor.saveCallerUserProfile(profile);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["userProfile"] }),
+  });
+}
+
+
+/**
+ * Import the repository's fictional observability fixture through the same
+ * authenticated canister methods used by the UI. Matching source/title pairs
+ * make the operation safe to retry after an interrupted import.
+ */
+export function useImportDemoData() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!actor) throw new Error("Sign in before importing demo data");
+
+      const [existingIncidents, existingAlerts, existingMetrics] =
+        await Promise.all([
+          actor.listIncidents(),
+          actor.getAlerts(),
+          actor.getRecentMetrics(200n),
+        ]);
+
+      let incidentsImported = 0;
+      let metricsImported = 0;
+      let alertsImported = 0;
+
+      for (const item of demoDataset.incidents) {
+        const source = `demo/${item.source}`;
+        const existing = existingIncidents.find(
+          (record) => record.title === item.title && record.source === source,
+        );
+        const id = existing
+          ? existing.id
+          : await actor.createIncident(
+              item.title,
+              item.severity,
+              source,
+              item.rawLog,
+            );
+
+        if (!existing) incidentsImported += 1;
+        if (item.status !== "open") {
+          await actor.updateIncidentStatus(id, item.status);
+        }
+        await actor.updateIncidentAIFields(
+          id,
+          item.aiSummary,
+          item.rootCause,
+          item.suggestedFix,
+        );
+      }
+
+      for (const item of demoDataset.metrics) {
+        const source = `demo/${item.source}`;
+        const exists = existingMetrics.some(
+          (record) => record.name === item.name && record.source === source,
+        );
+        if (!exists) {
+          await actor.addMetric(item.name, item.value, item.unit, source);
+          metricsImported += 1;
+        }
+      }
+
+      for (const item of demoDataset.alerts) {
+        const source = `demo/${item.source}`;
+        const existing = existingAlerts.find(
+          (record) => record.title === item.title && record.source === source,
+        );
+        const id = existing
+          ? existing.id
+          : await actor.addAlert(
+              item.title,
+              item.severity,
+              source,
+              item.message,
+            );
+        if (!existing) alertsImported += 1;
+        if (item.status !== "active") {
+          await actor.updateAlertStatus(id, item.status);
+        }
+      }
+
+      return { incidentsImported, metricsImported, alertsImported };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["incidents"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["metrics"] });
+      qc.invalidateQueries({ queryKey: ["alerts"] });
+    },
   });
 }
