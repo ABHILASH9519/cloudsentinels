@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bell, CheckCheck, Loader2, Plus } from "lucide-react";
+import { Bell, CheckCheck, Database, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import {
   Legend,
@@ -37,6 +37,7 @@ import {
   useAddMetric,
   useGetActiveAlerts,
   useGetRecentMetrics,
+  useImportDemoData,
   useUpdateAlertStatus,
 } from "../hooks/useQueries";
 
@@ -48,6 +49,7 @@ export function MonitoringPage() {
   const addAlert = useAddAlert();
   const addMetric = useAddMetric();
   const updateAlertStatus = useUpdateAlertStatus();
+  const importDemoData = useImportDemoData();
 
   const [alertOpen, setAlertOpen] = useState(false);
   const [metricOpen, setMetricOpen] = useState(false);
@@ -115,6 +117,19 @@ export function MonitoringPage() {
     }
   };
 
+  const handleImportDemoData = async () => {
+    try {
+      const result = await importDemoData.mutateAsync();
+      toast.success(
+        `Sample data loaded: ${result.incidentsImported} incidents, ${result.metricsImported} metrics, ${result.alertsImported} alerts`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to import sample data",
+      );
+    }
+  };
+
   const handleAck = async (id: bigint) => {
     try {
       await updateAlertStatus.mutateAsync({ id, status: "acknowledged" });
@@ -144,7 +159,7 @@ export function MonitoringPage() {
             Live alerts and system metrics
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">\n          <Button\n            variant="outline"\n            onClick={handleImportDemoData}\n            disabled={importDemoData.isPending}\n            title="Adds fictional demo records to this workspace; safe to retry"\n            data-ocid="monitoring.import_demo.button"\n          >\n            {importDemoData.isPending ? (\n              <Loader2 className="mr-2 h-4 w-4 animate-spin" />\n            ) : (\n              <Database className="mr-2 h-4 w-4" />\n            )}\n            Load sample data\n          </Button>
           <Dialog open={alertOpen} onOpenChange={setAlertOpen}>
             <DialogTrigger asChild>
               <Button
