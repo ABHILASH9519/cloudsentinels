@@ -28,13 +28,14 @@ The repository is an Internet Computer project with a pnpm workspace, React/Vite
 
 ## Automated backend verification
 
-The backend CI job starts a disposable local Internet Computer replica and uses two independent identities. It verifies first-admin bootstrap from the canister runtime token, normal-user registration, profile and incident CRUD, invalid incident value rejection, comment-author binding to the caller principal, metric and alert operations, dashboard aggregation, denial of regular-user incident deletion, and state/role preservation across a canister upgrade. The CI job destroys the local replica and test identities afterward.
+The backend CI job starts a disposable local Internet Computer replica and uses two independent identities. It verifies first-admin bootstrap from the canister runtime token, normal-user registration, profile and incident CRUD, invalid incident value rejection, comment-author binding to the caller principal, metric and alert operations, dashboard aggregation, denial of regular-user incident deletion, and state/role preservation across a canister upgrade. It also imports the actual fictional fixture and reads back all 4 incidents, 6 metrics, and 3 alerts. The CI job destroys the local replica and test identities afterward.
 
 ## Deployment checklist
 
 - [x] Reproducible frontend install/build and backend canister build in CI
 - [x] Local-replica authentication and role-permission smoke tests (admin bootstrap, regular-user registration, denied admin action)
 - [x] Verify profiles, incidents, metrics, alerts, and authorization state survive a canister upgrade
+- [x] Import and read back the complete sample fixture (4 incidents, 6 metrics, 3 alerts)
 - [ ] Connect and validate Prometheus/Kubernetes telemetry ingestion
 - [ ] Configure alert delivery and AI inference provider securely
 - [ ] Validate API authentication, rate limits, input bounds, and audit history
