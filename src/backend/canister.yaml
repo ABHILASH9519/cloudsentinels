@@ -4,5 +4,6 @@ build:
   steps:
     - type: script
       commands:
+        - $MOC_PATH -r --package core $MOTOKO_CORE tests/access-control.test.mo
         - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --actor-idl system-idl --package core $MOTOKO_CORE main.mo -o backend.wasm
         - mv backend.wasm "$ICP_WASM_OUTPUT_PATH"
