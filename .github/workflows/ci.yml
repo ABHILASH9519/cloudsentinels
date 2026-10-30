@@ -40,4 +40,4 @@ jobs:
       - name: Build the project toolchain image
         run: docker build --tag cloudsentinels-ci .
       - name: Compile frontend assets and Motoko backend
-        run: docker run --rm --entrypoint /workdir/build.sh cloudsentinels-ci
+        run: docker run --rm --entrypoint /workdir/scripts/backend-smoke-test.sh cloudsentinels-ci
