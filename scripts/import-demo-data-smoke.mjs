@@ -28,7 +28,11 @@ function tuple(...values) {
   return `(${values.map((value) => typeof value === "string" ? text(value) : String(value)).join(", ")})`;
 }
 
-function floatLiteral(value) {\n  return Number.isInteger(value) ? `${value}.0` : String(value);\n}\n\nfunction natFrom(result, operation) {
+function floatLiteral(value) {
+  return Number.isInteger(value) ? `${value}.0` : String(value);
+}
+
+function natFrom(result, operation) {
   const match = result.match(/\(\s*(\d+)\s*:\s*nat\s*\)/);
   if (!match) throw new Error(`Could not read the id returned by ${operation}: ${result}`);
   return Number(match[1]);
