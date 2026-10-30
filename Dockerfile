@@ -115,7 +115,7 @@ WORKDIR /workdir
 # Copy project files into the image
 COPY --chown=ubuntu:ubuntu . /workdir/
 
-RUN chmod +x /workdir/deploy.sh /workdir/build.sh
+RUN chmod +x /workdir/deploy.sh /workdir/build.sh /workdir/scripts/backend-smoke-test.sh
 
 ENTRYPOINT ["/workdir/deploy.sh"]
 
