@@ -139,10 +139,17 @@ actor {
   var nextAlertId : AlertId = 1;
 
   // Input validation helpers. Enforce limits in the canister, not only in the UI.
-  func requireLength(value : Text, field : Text, maxLength : Nat) : () {
-    if (value.size() == 0 or value.size() > maxLength) {
-      Runtime.trap(field # " must contain between 1 and " # maxLength.toText() # " characters");
+  func requireMaxLength(value : Text, field : Text, maxLength : Nat) : () {
+    if (value.size() > maxLength) {
+      Runtime.trap(field # " exceeds " # maxLength.toText() # " characters");
     };
+  };
+
+  func requireLength(value : Text, field : Text, maxLength : Nat) : () {
+    if (value.size() == 0) {
+      Runtime.trap(field # " is required");
+    };
+    requireMaxLength(value, field, maxLength);
   };
 
   func requireSeverity(severity : Text) : () {
@@ -166,8 +173,8 @@ actor {
 
     requireLength(title, "Incident title", 200);
     requireSeverity(severity);
-    requireLength(source, "Incident source", 100);
-    if (rawLog.size() > 20000) { Runtime.trap("Raw log exceeds 20000 characters"); };
+    requireMaxLength(source, "Incident source", 100);
+    requireMaxLength(rawLog, "Raw log", 20000);
 
     let id = nextIncidentId;
     let now = Time.now();
@@ -320,8 +327,8 @@ actor {
     };
 
     requireLength(name, "Metric name", 100);
-    requireLength(unit, "Metric unit", 30);
-    requireLength(source, "Metric source", 100);
+    requireMaxLength(unit, "Metric unit", 30);
+    requireMaxLength(source, "Metric source", 100);
     let id = nextMetricId;
     let metric : MetricPoint = {
       id;
@@ -366,8 +373,8 @@ actor {
 
     requireLength(title, "Alert title", 200);
     requireSeverity(severity);
-    requireLength(source, "Alert source", 100);
-    if (message.size() > 5000) { Runtime.trap("Alert message exceeds 5000 characters"); };
+    requireMaxLength(source, "Alert source", 100);
+    requireMaxLength(message, "Alert message", 5000);
 
     let id = nextAlertId;
     let alert : Alert = {
