@@ -63,7 +63,6 @@ export function IncidentDetailPage() {
     suggestedFix: "",
   });
   const [commentText, setCommentText] = useState("");
-  const [commentAuthor, setCommentAuthor] = useState("");
 
   if (isLoading) {
     return (
@@ -119,7 +118,7 @@ export function IncidentDetailPage() {
     try {
       await addComment.mutateAsync({
         incidentId,
-        author: commentAuthor || "Anonymous",
+        author: "",
         text: commentText,
       });
       toast.success("Comment added");
@@ -427,12 +426,6 @@ export function IncidentDetailPage() {
 
           <Card className="bg-card border-border">
             <CardContent className="p-4 space-y-3">
-              <Input
-                data-ocid="incident_detail.comment_author.input"
-                placeholder="Your name"
-                value={commentAuthor}
-                onChange={(e) => setCommentAuthor(e.target.value)}
-              />
               <Textarea
                 data-ocid="incident_detail.comment.textarea"
                 placeholder="Add a comment..."
