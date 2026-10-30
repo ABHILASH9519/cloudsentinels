@@ -28,7 +28,7 @@ icp deploy backend
 # Configure a test-only canister runtime secret, then exercise the same
 # registration method called by the authenticated frontend actor.
 icp canister settings update backend --identity "$ADMIN_IDENTITY" --add-environment-variable "CLOUDSENTINELS_ADMIN_TOKEN=$ADMIN_TOKEN"
-SETTINGS="$(icp canister settings show backend --json)"
+SETTINGS="$(icp canister settings show backend --json --identity "$ADMIN_IDENTITY")"
 [[ "$SETTINGS" == *"CLOUDSENTINELS_ADMIN_TOKEN"* ]] || { echo "Admin token runtime setting was not applied"; exit 1; }
 icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessControlWithSecret "(\"$ADMIN_TOKEN\")"
 ADMIN_ROLE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getCallerUserRole '()')"
@@ -86,6 +86,7 @@ icp canister call --identity "$CURRENT_IDENTITY" backend updateIncidentStatus '(
 
 # Upgrade the canister and verify that records and authorization survive it.
 icp identity default "$ADMIN_IDENTITY"
+CURRENT_IDENTITY="$ADMIN_IDENTITY"
 icp build backend
 icp canister install backend --mode upgrade --identity "$ADMIN_IDENTITY"
 POST_UPGRADE_INCIDENT="$(icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1)')"
@@ -98,6 +99,7 @@ POST_UPGRADE_PROFILE="$(icp canister call --identity "$CURRENT_IDENTITY" backend
 [[ "$POST_UPGRADE_PROFILE" == *"CI Admin"* ]] || { echo "Profile state did not survive canister upgrade"; exit 1; }
 
 icp identity default "$USER_IDENTITY"
+CURRENT_IDENTITY="$USER_IDENTITY"
 USER_ROLE_AFTER_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getCallerUserRole '()')"
 [[ "$USER_ROLE_AFTER_UPGRADE" == *user* ]] || { echo "User role did not survive canister upgrade"; exit 1; }
 if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1)' >"$TMP_DIR/post-upgrade-unauthorized-delete.log" 2>&1; then
@@ -107,6 +109,7 @@ fi
 
 # Admin-only deletion must work, while regular-user attempts were denied.
 icp identity default "$ADMIN_IDENTITY"
+CURRENT_IDENTITY="$ADMIN_IDENTITY"
 icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1)'
 if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1)' >"$TMP_DIR/deleted-incident.log" 2>&1; then
   echo "Deleted incident is still readable"
