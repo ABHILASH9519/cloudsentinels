@@ -28,7 +28,7 @@ function tuple(...values) {
   return `(${values.map((value) => typeof value === "string" ? text(value) : String(value)).join(", ")})`;
 }
 
-function natFrom(result, operation) {
+function floatLiteral(value) {\n  return Number.isInteger(value) ? `${value}.0` : String(value);\n}\n\nfunction natFrom(result, operation) {
   const match = result.match(/\(\s*(\d+)\s*:\s*nat\s*\)/);
   if (!match) throw new Error(`Could not read the id returned by ${operation}: ${result}`);
   return Number(match[1]);
@@ -52,7 +52,7 @@ for (const incident of dataset.incidents) {
 for (const metric of dataset.metrics) {
   call(
     "addMetric",
-    tuple(metric.name, metric.value, metric.unit, `demo/${metric.source}`),
+    `(${text(metric.name)}, ${floatLiteral(metric.value)}, ${text(metric.unit)}, ${text(`demo/${metric.source}`)})`,
   );
 }
 
