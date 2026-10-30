@@ -31,8 +31,8 @@ icp canister settings update backend --identity "$ADMIN_IDENTITY" --add-environm
 SETTINGS="$(icp canister settings show backend --json --identity "$ADMIN_IDENTITY")"
 [[ "$SETTINGS" == *"CLOUDSENTINELS_ADMIN_TOKEN"* ]] || { echo "Admin token runtime setting was not applied"; exit 1; }
 icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessControlWithSecret "(\"$ADMIN_TOKEN\")"
-ADMIN_ROLE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getCallerUserRole '()')"
-[[ "$ADMIN_ROLE" == *admin* ]] || { echo "First authenticated caller was not made admin; role response: $ADMIN_ROLE"; exit 1; }
+ADMIN_STATUS="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
+[[ "$ADMIN_STATUS" == *true* ]] || { echo "First authenticated caller was not made admin; admin check: $ADMIN_STATUS"; exit 1; }
 
 # Profile CRUD.
 icp canister call --identity "$CURRENT_IDENTITY" backend saveCallerUserProfile '(record { name = "CI Admin" })'
@@ -75,8 +75,8 @@ icp canister call --identity "$CURRENT_IDENTITY" backend getDashboardSummary '()
 icp identity default "$USER_IDENTITY"
 CURRENT_IDENTITY="$USER_IDENTITY"
 icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessControlWithSecret '("")'
-USER_ROLE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getCallerUserRole '()')"
-[[ "$USER_ROLE" == *user* ]] || { echo "Regular caller did not receive user role"; exit 1; }
+USER_ADMIN_STATUS="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
+[[ "$USER_ADMIN_STATUS" == *false* ]] || { echo "Regular caller unexpectedly received admin role"; exit 1; }
 icp canister call --identity "$CURRENT_IDENTITY" backend createIncident '("CI user incident", "low", "ci", "user-created log")'
 if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1)' >"$TMP_DIR/unauthorized-delete.log" 2>&1; then
   echo "Regular user unexpectedly deleted an incident"
@@ -100,8 +100,8 @@ POST_UPGRADE_PROFILE="$(icp canister call --identity "$CURRENT_IDENTITY" backend
 
 icp identity default "$USER_IDENTITY"
 CURRENT_IDENTITY="$USER_IDENTITY"
-USER_ROLE_AFTER_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getCallerUserRole '()')"
-[[ "$USER_ROLE_AFTER_UPGRADE" == *user* ]] || { echo "User role did not survive canister upgrade"; exit 1; }
+USER_ADMIN_AFTER_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
+[[ "$USER_ADMIN_AFTER_UPGRADE" == *false* ]] || { echo "Regular caller gained admin role after canister upgrade"; exit 1; }
 if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1)' >"$TMP_DIR/post-upgrade-unauthorized-delete.log" 2>&1; then
   echo "Regular user unexpectedly gained admin permission after upgrade"
   exit 1
