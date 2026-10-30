@@ -289,7 +289,7 @@ actor {
   };
 
   // Comment management
-  public shared ({ caller }) func addComment(incidentId : IncidentId, author : Text, text : Text) : async CommentId {
+  public shared ({ caller }) func addComment(incidentId : IncidentId, _author : Text, text : Text) : async CommentId {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can add comments");
     };
