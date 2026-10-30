@@ -26,9 +26,11 @@ icp deploy backend
 # Configure a test-only canister runtime secret, then exercise the same
 # registration method called by the authenticated frontend actor.
 icp canister settings update backend --add-environment-variable "CLOUDSENTINELS_ADMIN_TOKEN=$ADMIN_TOKEN"
+SETTINGS="$(icp canister settings show backend --json)"
+[[ "$SETTINGS" == *"CLOUDSENTINELS_ADMIN_TOKEN"* ]] || { echo "Admin token runtime setting was not applied"; exit 1; }
 icp canister call backend _initializeAccessControlWithSecret "(\"$ADMIN_TOKEN\")"
 ADMIN_ROLE="$(icp canister call backend getCallerUserRole '()')"
-[[ "$ADMIN_ROLE" == *admin* ]] || { echo "First authenticated caller was not made admin"; exit 1; }
+[[ "$ADMIN_ROLE" == *admin* ]] || { echo "First authenticated caller was not made admin; role response: $ADMIN_ROLE"; exit 1; }
 
 # Profile CRUD.
 icp canister call backend saveCallerUserProfile '(record { name = "CI Admin" })'
