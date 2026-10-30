@@ -45,7 +45,14 @@ A safe, fictional demo dataset is provided at [`sample-data/demo-observability.j
 
 ### Sign-in and first-run role setup
 
-1. Deploy the backend with `CLOUDSENTINELS_ADMIN_TOKEN` configured as a strong secret in the canister/runtime environment. Never commit that value.
+1. Create a strong random token locally and save it to `src/backend/secrets/admin-token`. The `src/backend/secrets/` directory is ignored by Git. Configure the backend canister's runtime setting to read that file:
+   ```yaml
+   settings:
+     environment_variables:
+       CLOUDSENTINELS_ADMIN_TOKEN:
+         path: ./secrets/admin-token
+   ```
+   This setting belongs in `src/backend/canister.yaml`. The path is relative to that file. Deploy the backend with `icp deploy`; the canister reads the configured value at runtime. Never commit or share the token.
 2. Open the app and choose **Sign in with Internet Identity**.
 3. For the first administrator only, provide the bootstrap token in the URL hash fragment as `#cloudSentinelsAdminToken=YOUR_TOKEN` before authentication. The frontend extracts it and removes that parameter from the address bar. Do not use a normal query string.
 4. Subsequent users should sign in without the bootstrap token; they are assigned the regular user role. Keep the admin token out of screenshots, chat messages, shell history, and source control.
