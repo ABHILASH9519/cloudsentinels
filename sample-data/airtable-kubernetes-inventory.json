@@ -1,0 +1,2225 @@
+{
+  "dataset": "CloudSentinels Airtable Kubernetes inventory",
+  "generatedAt": "2026-10-31T03:29:37.678Z",
+  "disclaimer": "Synthetic/sample operational records sourced from Airtable. Not evidence of live infrastructure. Airtable record IDs retained only as sample relationship keys. Credential-bearing fields (Secure Onboarding Token, Kubeconfig attachments) intentionally excluded.",
+  "sourceBase": "Cloud-Sentinel",
+  "tables": {
+    "clusters": [
+      {
+        "sourceRecordId": "rec1dvusMjXKkh2kD",
+        "clusterName": "dev-cluster-03",
+        "environment": "Development",
+        "status": "Active",
+        "apiEndpoint": "https://api.dev03.k8s.company.com",
+        "nodeCount": 3,
+        "podCount": 40,
+        "cpuUsagePercent": 33,
+        "memoryUsageMB": 4096,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-03-25T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Kappa"
+        ],
+        "anomalyLinks": [
+          "10"
+        ],
+        "incidentLinks": [
+          "File Upload Failure"
+        ],
+        "deploymentLinks": [
+          "email-service"
+        ]
+      },
+      {
+        "sourceRecordId": "rec9cpDeUwYiujFLw",
+        "clusterName": "dev-cluster-02",
+        "environment": "Development",
+        "status": "Active",
+        "apiEndpoint": "https://api.dev02.k8s.company.com",
+        "nodeCount": 4,
+        "podCount": 60,
+        "cpuUsagePercent": 38,
+        "memoryUsageMB": 6144,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-03-18T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Zeta"
+        ],
+        "anomalyLinks": [
+          "6"
+        ],
+        "incidentLinks": [
+          "Server CPU Spike"
+        ],
+        "deploymentLinks": [
+          "notification-service"
+        ]
+      },
+      {
+        "sourceRecordId": "recGZn2teC0YHtHnT",
+        "clusterName": "qa-cluster-01",
+        "environment": "QA",
+        "status": "Active",
+        "apiEndpoint": "https://api.qa01.k8s.company.com",
+        "nodeCount": 6,
+        "podCount": 110,
+        "cpuUsagePercent": 49,
+        "memoryUsageMB": 10240,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-04-05T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Delta"
+        ],
+        "anomalyLinks": [
+          "4"
+        ],
+        "incidentLinks": [
+          "Email Notifications Not Sent"
+        ],
+        "deploymentLinks": [
+          "auth-service"
+        ]
+      },
+      {
+        "sourceRecordId": "recKbmdOdOCVospV5",
+        "clusterName": "prod-cluster-02",
+        "environment": "Production",
+        "status": "Active",
+        "apiEndpoint": "https://api.prod02.k8s.company.com",
+        "nodeCount": 15,
+        "podCount": 400,
+        "cpuUsagePercent": 72,
+        "memoryUsageMB": 32768,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-01-25T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Epsilon"
+        ],
+        "anomalyLinks": [
+          "5"
+        ],
+        "incidentLinks": [
+          "Payment Processing Error"
+        ],
+        "deploymentLinks": [
+          "payment-gateway"
+        ]
+      },
+      {
+        "sourceRecordId": "recKiVCASxwjPGRra",
+        "clusterName": "prod-cluster-03",
+        "environment": "Production",
+        "status": "Degraded",
+        "apiEndpoint": "https://api.prod03.k8s.company.com",
+        "nodeCount": 10,
+        "podCount": 250,
+        "cpuUsagePercent": 85,
+        "memoryUsageMB": 20480,
+        "healthStatus": "Warning",
+        "onboardingDate": "2023-01-30T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "Node 3 reporting high CPU usage.",
+        "nodeLinks": [
+          "Node-Iota"
+        ],
+        "anomalyLinks": [
+          "9"
+        ],
+        "incidentLinks": [
+          "Mobile App Crash"
+        ],
+        "deploymentLinks": [
+          "user-profile"
+        ]
+      },
+      {
+        "sourceRecordId": "recQ0bNatixHxoabW",
+        "clusterName": "staging-cluster-03",
+        "environment": "Staging",
+        "status": "Active",
+        "apiEndpoint": "https://api.stg03.k8s.company.com",
+        "nodeCount": 6,
+        "podCount": 120,
+        "cpuUsagePercent": 50,
+        "memoryUsageMB": 10240,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-03-01T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Lambda"
+        ],
+        "anomalyLinks": [
+          "11"
+        ],
+        "incidentLinks": [
+          "Search Function Slowdown"
+        ],
+        "deploymentLinks": [
+          "media-processor"
+        ]
+      },
+      {
+        "sourceRecordId": "recVJMjnLbF7GkHXP",
+        "clusterName": "prod-cluster-01",
+        "environment": "Production",
+        "status": "Active",
+        "apiEndpoint": "https://api.prod01.k8s.company.com",
+        "nodeCount": 12,
+        "podCount": 320,
+        "cpuUsagePercent": 68,
+        "memoryUsageMB": 24576,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-01-15T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Alpha"
+        ],
+        "anomalyLinks": [
+          "1"
+        ],
+        "incidentLinks": [
+          "Database Connection Timeout"
+        ],
+        "deploymentLinks": [
+          "web-frontend"
+        ]
+      },
+      {
+        "sourceRecordId": "recYDQLdIV3YXmOmR",
+        "clusterName": "staging-cluster-04",
+        "environment": "Staging",
+        "status": "Active",
+        "apiEndpoint": "https://api.stg04.k8s.company.com",
+        "nodeCount": 9,
+        "podCount": 160,
+        "cpuUsagePercent": 60,
+        "memoryUsageMB": 13312,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-03-05T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Omicron"
+        ],
+        "anomalyLinks": [
+          "15"
+        ],
+        "incidentLinks": [
+          "Analytics Dashboard Error"
+        ],
+        "deploymentLinks": [
+          "session-manager"
+        ]
+      },
+      {
+        "sourceRecordId": "recg5S5B54qvIVnrW",
+        "clusterName": "staging-cluster-01",
+        "environment": "Staging",
+        "status": "Active",
+        "apiEndpoint": "https://api.stg01.k8s.company.com",
+        "nodeCount": 8,
+        "podCount": 150,
+        "cpuUsagePercent": 52,
+        "memoryUsageMB": 12288,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-02-20T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Gamma"
+        ],
+        "anomalyLinks": [
+          "3"
+        ],
+        "incidentLinks": [
+          "Login Service Outage"
+        ],
+        "deploymentLinks": [
+          "worker-service"
+        ]
+      },
+      {
+        "sourceRecordId": "reck6fLImmuab6p3c",
+        "clusterName": "dev-cluster-01",
+        "environment": "Development",
+        "status": "Active",
+        "apiEndpoint": "https://api.dev01.k8s.company.com",
+        "nodeCount": 5,
+        "podCount": 80,
+        "cpuUsagePercent": 45,
+        "memoryUsageMB": 8192,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-03-10T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Beta"
+        ],
+        "anomalyLinks": [
+          "2"
+        ],
+        "incidentLinks": [
+          "API Response Delay"
+        ],
+        "deploymentLinks": [
+          "api-backend"
+        ]
+      },
+      {
+        "sourceRecordId": "recnlfm8cVU3LVd7V",
+        "clusterName": "qa-cluster-02",
+        "environment": "QA",
+        "status": "Active",
+        "apiEndpoint": "https://api.qa02.k8s.company.com",
+        "nodeCount": 5,
+        "podCount": 90,
+        "cpuUsagePercent": 47,
+        "memoryUsageMB": 9216,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-04-12T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Theta"
+        ],
+        "anomalyLinks": [
+          "8"
+        ],
+        "incidentLinks": [
+          "User Profile Corruption"
+        ],
+        "deploymentLinks": [
+          "search-service"
+        ]
+      },
+      {
+        "sourceRecordId": "recpwizAEVGnzuHPN",
+        "clusterName": "CloudSentinels Showcase K3s (planned)",
+        "environment": "Development",
+        "status": "Provisioning",
+        "nodeCount": 0,
+        "podCount": 0,
+        "healthStatus": "Unknown",
+        "initialHealthCheckResults": "Planning record only. AWS EC2/K3s cluster has not been provisioned or connected. Live metrics, nodes, pods, API endpoint and kubeconfig will be populated only after verified deployment and telemetry onboarding."
+      },
+      {
+        "sourceRecordId": "recrgoV1Dpv07tX5r",
+        "clusterName": "dev-cluster-04",
+        "environment": "Development",
+        "status": "Inactive",
+        "apiEndpoint": "https://api.dev04.k8s.company.com",
+        "nodeCount": 2,
+        "podCount": 20,
+        "cpuUsagePercent": 0,
+        "memoryUsageMB": 0,
+        "healthStatus": "Offline",
+        "onboardingDate": "2023-04-01T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer"
+        ],
+        "initialHealthCheckResults": "Cluster is currently offline.",
+        "nodeLinks": [
+          "Node-Xi"
+        ],
+        "anomalyLinks": [
+          "14"
+        ],
+        "incidentLinks": [
+          "Unauthorized Access Attempt"
+        ],
+        "deploymentLinks": [
+          "order-service"
+        ]
+      },
+      {
+        "sourceRecordId": "rectZbIys1KSDuMEB",
+        "clusterName": "qa-cluster-03",
+        "environment": "QA",
+        "status": "Degraded",
+        "apiEndpoint": "https://api.qa03.k8s.company.com",
+        "nodeCount": 4,
+        "podCount": 70,
+        "cpuUsagePercent": 78,
+        "memoryUsageMB": 7168,
+        "healthStatus": "Warning",
+        "onboardingDate": "2023-04-20T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "Pod evictions detected.",
+        "nodeLinks": [
+          "Node-Mu"
+        ],
+        "anomalyLinks": [
+          "12"
+        ],
+        "incidentLinks": [
+          "Session Expiry Issue"
+        ],
+        "deploymentLinks": [
+          "recommendation-engine"
+        ]
+      },
+      {
+        "sourceRecordId": "recvP8YTqhsMJzgkI",
+        "clusterName": "staging-cluster-02",
+        "environment": "Staging",
+        "status": "Active",
+        "apiEndpoint": "https://api.stg02.k8s.company.com",
+        "nodeCount": 7,
+        "podCount": 130,
+        "cpuUsagePercent": 55,
+        "memoryUsageMB": 11264,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-02-28T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Eta"
+        ],
+        "anomalyLinks": [
+          "7"
+        ],
+        "incidentLinks": [
+          "Data Sync Failure"
+        ],
+        "deploymentLinks": [
+          "analytics-engine"
+        ]
+      },
+      {
+        "sourceRecordId": "recyBV9xPf28s0Vt5",
+        "clusterName": "prod-cluster-04",
+        "environment": "Production",
+        "status": "Active",
+        "apiEndpoint": "https://api.prod04.k8s.company.com",
+        "nodeCount": 14,
+        "podCount": 370,
+        "cpuUsagePercent": 65,
+        "memoryUsageMB": 28672,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2023-02-10T00:00:00.000Z",
+        "rbacPermissions": [
+          "admin",
+          "developer",
+          "viewer"
+        ],
+        "initialHealthCheckResults": "All checks passed.",
+        "nodeLinks": [
+          "Node-Nu"
+        ],
+        "anomalyLinks": [
+          "13"
+        ],
+        "incidentLinks": [
+          "Broken Image Links"
+        ],
+        "deploymentLinks": [
+          "inventory-service"
+        ]
+      }
+    ],
+    "nodes": [
+      {
+        "sourceRecordId": "rec1FYRTNB5Fcu612",
+        "nodeName": "Node-Delta",
+        "clusterLinks": [
+          "qa-cluster-01"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 67,
+        "memoryUsageMB": 16384,
+        "diskUsageGB": 500,
+        "labels": [
+          "api",
+          "backend"
+        ],
+        "nodeHealthStatus": "Warning",
+        "lastSeen": "2024-06-10T14:20:00.000Z",
+        "podLinks": [
+          "cache-redis-1"
+        ],
+        "anomalyLinks": [
+          "4"
+        ]
+      },
+      {
+        "sourceRecordId": "rec9KkwhIVor07w9S",
+        "nodeName": "Node-Epsilon",
+        "clusterLinks": [
+          "prod-cluster-02"
+        ],
+        "status": "Maintenance",
+        "cpuUsagePercent": 12,
+        "memoryUsageMB": 2048,
+        "diskUsageGB": 80,
+        "labels": [
+          "web",
+          "maintenance"
+        ],
+        "nodeHealthStatus": "Degraded",
+        "lastSeen": "2024-06-10T13:00:00.000Z",
+        "podLinks": [
+          "worker-queue-1"
+        ],
+        "anomalyLinks": [
+          "5"
+        ]
+      },
+      {
+        "sourceRecordId": "recFPGj9wihXCMA0S",
+        "nodeName": "Node-Nu",
+        "clusterLinks": [
+          "prod-cluster-04"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 51,
+        "memoryUsageMB": 8192,
+        "diskUsageGB": 220,
+        "labels": [
+          "api",
+          "backend"
+        ],
+        "nodeHealthStatus": "Healthy",
+        "lastSeen": "2024-06-10T14:24:00.000Z",
+        "podLinks": [
+          "web-frontend-3"
+        ],
+        "anomalyLinks": [
+          "13"
+        ]
+      },
+      {
+        "sourceRecordId": "recHMQy6TX5h9FDC5",
+        "nodeName": "Node-Kappa",
+        "clusterLinks": [
+          "dev-cluster-03"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 78,
+        "memoryUsageMB": 24576,
+        "diskUsageGB": 600,
+        "labels": [
+          "db",
+          "primary"
+        ],
+        "nodeHealthStatus": "Warning",
+        "lastSeen": "2024-06-10T14:21:00.000Z",
+        "podLinks": [
+          "ingress-nginx"
+        ],
+        "anomalyLinks": [
+          "10"
+        ]
+      },
+      {
+        "sourceRecordId": "recNuEuSyMNd3d4gu",
+        "nodeName": "Node-Omicron",
+        "clusterLinks": [
+          "staging-cluster-04"
+        ],
+        "status": "Inactive",
+        "cpuUsagePercent": 0,
+        "memoryUsageMB": 0,
+        "diskUsageGB": 0,
+        "labels": [
+          "db",
+          "replica"
+        ],
+        "nodeHealthStatus": "Unreachable",
+        "lastSeen": "2024-06-07T16:00:00.000Z",
+        "podLinks": [
+          "log-collector"
+        ],
+        "anomalyLinks": [
+          "15"
+        ]
+      },
+      {
+        "sourceRecordId": "recOpGotdGIW3UCzY",
+        "nodeName": "Node-Xi",
+        "clusterLinks": [
+          "dev-cluster-04"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 39,
+        "memoryUsageMB": 6144,
+        "diskUsageGB": 180,
+        "labels": [
+          "web",
+          "frontend"
+        ],
+        "nodeHealthStatus": "Healthy",
+        "lastSeen": "2024-06-10T14:29:00.000Z",
+        "podLinks": [
+          "api-backend-3"
+        ],
+        "anomalyLinks": [
+          "14"
+        ]
+      },
+      {
+        "sourceRecordId": "recP03vHd9UsNf7I6",
+        "nodeName": "Node-Beta",
+        "clusterLinks": [
+          "dev-cluster-01"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 45,
+        "memoryUsageMB": 8192,
+        "diskUsageGB": 250,
+        "labels": [
+          "db",
+          "backend"
+        ],
+        "nodeHealthStatus": "Healthy",
+        "lastSeen": "2024-06-10T14:25:00.000Z",
+        "podLinks": [
+          "api-backend-2"
+        ],
+        "anomalyLinks": [
+          "2"
+        ]
+      },
+      {
+        "sourceRecordId": "recRNHBzQNkIZcEZv",
+        "nodeName": "Node-Mu",
+        "clusterLinks": [
+          "qa-cluster-03"
+        ],
+        "status": "Maintenance",
+        "cpuUsagePercent": 8,
+        "memoryUsageMB": 1024,
+        "diskUsageGB": 60,
+        "labels": [
+          "maintenance"
+        ],
+        "nodeHealthStatus": "Degraded",
+        "lastSeen": "2024-06-10T12:30:00.000Z",
+        "podLinks": [
+          "cache-redis-2"
+        ],
+        "anomalyLinks": [
+          "12"
+        ]
+      },
+      {
+        "sourceRecordId": "recU65WD1QQetXzpS",
+        "nodeName": "Node-Gamma",
+        "clusterLinks": [
+          "staging-cluster-01"
+        ],
+        "status": "Inactive",
+        "cpuUsagePercent": 0,
+        "memoryUsageMB": 0,
+        "diskUsageGB": 0,
+        "labels": [
+          "cache"
+        ],
+        "nodeHealthStatus": "Unreachable",
+        "lastSeen": "2024-06-09T22:10:00.000Z",
+        "podLinks": [
+          "db-replica-1"
+        ],
+        "anomalyLinks": [
+          "3"
+        ]
+      },
+      {
+        "sourceRecordId": "recUWRs8W4k9Tqwx5",
+        "nodeName": "Node-Iota",
+        "clusterLinks": [
+          "prod-cluster-03"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 29,
+        "memoryUsageMB": 4096,
+        "diskUsageGB": 110,
+        "labels": [
+          "web",
+          "frontend"
+        ],
+        "nodeHealthStatus": "Healthy",
+        "lastSeen": "2024-06-10T14:28:00.000Z",
+        "podLinks": [
+          "metrics-server"
+        ],
+        "anomalyLinks": [
+          "9"
+        ]
+      },
+      {
+        "sourceRecordId": "recoXG2jHEpQ401oK",
+        "nodeName": "Node-Theta",
+        "clusterLinks": [
+          "qa-cluster-02"
+        ],
+        "status": "Inactive",
+        "cpuUsagePercent": 0,
+        "memoryUsageMB": 0,
+        "diskUsageGB": 0,
+        "labels": [
+          "worker"
+        ],
+        "nodeHealthStatus": "Unreachable",
+        "lastSeen": "2024-06-08T19:45:00.000Z",
+        "podLinks": [
+          "db-primary"
+        ],
+        "anomalyLinks": [
+          "8"
+        ]
+      },
+      {
+        "sourceRecordId": "recsyAKu06KmRbYMV",
+        "nodeName": "Node-Eta",
+        "clusterLinks": [
+          "staging-cluster-02"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 56,
+        "memoryUsageMB": 12288,
+        "diskUsageGB": 350,
+        "labels": [
+          "api",
+          "frontend"
+        ],
+        "nodeHealthStatus": "Healthy",
+        "lastSeen": "2024-06-10T14:22:00.000Z",
+        "podLinks": [
+          "api-backend-1"
+        ],
+        "anomalyLinks": [
+          "7"
+        ]
+      },
+      {
+        "sourceRecordId": "recv1vFM7VfDkvTwI",
+        "nodeName": "Node-Alpha",
+        "clusterLinks": [
+          "prod-cluster-01"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 23,
+        "memoryUsageMB": 4096,
+        "diskUsageGB": 120,
+        "labels": [
+          "web",
+          "frontend"
+        ],
+        "nodeHealthStatus": "Healthy",
+        "lastSeen": "2024-06-10T14:23:00.000Z",
+        "podLinks": [
+          "web-frontend-1"
+        ],
+        "anomalyLinks": [
+          "1"
+        ]
+      },
+      {
+        "sourceRecordId": "recwDAPMZP2YXqEf9",
+        "nodeName": "Node-Zeta",
+        "clusterLinks": [
+          "dev-cluster-02"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 34,
+        "memoryUsageMB": 6144,
+        "diskUsageGB": 200,
+        "labels": [
+          "db",
+          "replica"
+        ],
+        "nodeHealthStatus": "Healthy",
+        "lastSeen": "2024-06-10T14:27:00.000Z",
+        "podLinks": [
+          "web-frontend-2"
+        ],
+        "anomalyLinks": [
+          "6"
+        ]
+      },
+      {
+        "sourceRecordId": "recxnnt32ugJarQkS",
+        "nodeName": "Node-Lambda",
+        "clusterLinks": [
+          "staging-cluster-03"
+        ],
+        "status": "Active",
+        "cpuUsagePercent": 15,
+        "memoryUsageMB": 2048,
+        "diskUsageGB": 90,
+        "labels": [
+          "cache",
+          "worker"
+        ],
+        "nodeHealthStatus": "Healthy",
+        "lastSeen": "2024-06-10T14:26:00.000Z",
+        "podLinks": [
+          "worker-queue-2"
+        ],
+        "anomalyLinks": [
+          "11"
+        ]
+      }
+    ],
+    "pods": [
+      {
+        "sourceRecordId": "rec1bUkYsVh18lrJB",
+        "podName": "api-backend-3",
+        "nodeLinks": [
+          "Node-Xi"
+        ],
+        "namespace": "production",
+        "status": "Running",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 245,
+        "memoryUsageMB": 500,
+        "containerCount": 3,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-10T08:05:00.000Z",
+        "anomalyLinks": [
+          "14"
+        ]
+      },
+      {
+        "sourceRecordId": "rec1nMRcA2N2SOnTK",
+        "podName": "worker-queue-2",
+        "nodeLinks": [
+          "Node-Lambda"
+        ],
+        "namespace": "jobs",
+        "status": "Running",
+        "restartCount": 1,
+        "cpuUsageMilliCores": 95,
+        "memoryUsageMB": 210,
+        "containerCount": 1,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-09T23:00:00.000Z",
+        "anomalyLinks": [
+          "11"
+        ]
+      },
+      {
+        "sourceRecordId": "rec7VXO5WtLSCXMls",
+        "podName": "db-replica-1",
+        "nodeLinks": [
+          "Node-Gamma"
+        ],
+        "namespace": "database",
+        "status": "Pending",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 0,
+        "memoryUsageMB": 0,
+        "containerCount": 1,
+        "podHealthStatus": "Unknown",
+        "anomalyLinks": [
+          "3"
+        ]
+      },
+      {
+        "sourceRecordId": "rec86kbEw1ZWGKciI",
+        "podName": "cache-redis-1",
+        "nodeLinks": [
+          "Node-Delta"
+        ],
+        "namespace": "caching",
+        "status": "Running",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 80,
+        "memoryUsageMB": 128,
+        "containerCount": 1,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-10T07:50:00.000Z",
+        "anomalyLinks": [
+          "4"
+        ]
+      },
+      {
+        "sourceRecordId": "rec8YabcIFoRTVp90",
+        "podName": "db-primary",
+        "nodeLinks": [
+          "Node-Theta"
+        ],
+        "namespace": "database",
+        "status": "Running",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 300,
+        "memoryUsageMB": 1024,
+        "containerCount": 2,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-10T08:00:00.000Z",
+        "anomalyLinks": [
+          "8"
+        ]
+      },
+      {
+        "sourceRecordId": "rec9QNEbx32eVjma4",
+        "podName": "ingress-nginx",
+        "nodeLinks": [
+          "Node-Kappa"
+        ],
+        "namespace": "networking",
+        "status": "Running",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 70,
+        "memoryUsageMB": 150,
+        "containerCount": 1,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-10T07:55:00.000Z",
+        "anomalyLinks": [
+          "10"
+        ]
+      },
+      {
+        "sourceRecordId": "recMFMq2wKMXwmFJI",
+        "podName": "web-frontend-3",
+        "nodeLinks": [
+          "Node-Nu"
+        ],
+        "namespace": "production",
+        "status": "Pending",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 0,
+        "memoryUsageMB": 0,
+        "containerCount": 2,
+        "podHealthStatus": "Unknown",
+        "anomalyLinks": [
+          "13"
+        ]
+      },
+      {
+        "sourceRecordId": "recWIYM55lWYwB4zh",
+        "podName": "log-collector",
+        "nodeLinks": [
+          "Node-Omicron"
+        ],
+        "namespace": "monitoring",
+        "status": "Running",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 60,
+        "memoryUsageMB": 120,
+        "containerCount": 1,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-10T07:40:00.000Z",
+        "anomalyLinks": [
+          "15"
+        ]
+      },
+      {
+        "sourceRecordId": "recZmsRZsgF9tEcxI",
+        "podName": "web-frontend-1",
+        "nodeLinks": [
+          "Node-Alpha"
+        ],
+        "namespace": "production",
+        "status": "Running",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 120,
+        "memoryUsageMB": 256,
+        "containerCount": 2,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-10T08:15:00.000Z",
+        "anomalyLinks": [
+          "1"
+        ]
+      },
+      {
+        "sourceRecordId": "reciwWMIC3Qtt7NkK",
+        "podName": "worker-queue-1",
+        "nodeLinks": [
+          "Node-Epsilon"
+        ],
+        "namespace": "jobs",
+        "status": "CrashLoopBackOff",
+        "restartCount": 5,
+        "cpuUsageMilliCores": 90,
+        "memoryUsageMB": 200,
+        "containerCount": 1,
+        "podHealthStatus": "Unhealthy",
+        "lastRestartTime": "2024-06-10T06:10:00.000Z",
+        "anomalyLinks": [
+          "5"
+        ]
+      },
+      {
+        "sourceRecordId": "recmre9bnU3c1UtMU",
+        "podName": "cache-redis-2",
+        "nodeLinks": [
+          "Node-Mu"
+        ],
+        "namespace": "caching",
+        "status": "CrashLoopBackOff",
+        "restartCount": 3,
+        "cpuUsageMilliCores": 85,
+        "memoryUsageMB": 130,
+        "containerCount": 1,
+        "podHealthStatus": "Unhealthy",
+        "lastRestartTime": "2024-06-10T05:30:00.000Z",
+        "anomalyLinks": [
+          "12"
+        ]
+      },
+      {
+        "sourceRecordId": "recp9n5gCJVOORf9t",
+        "podName": "web-frontend-2",
+        "nodeLinks": [
+          "Node-Zeta"
+        ],
+        "namespace": "production",
+        "status": "Running",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 110,
+        "memoryUsageMB": 240,
+        "containerCount": 2,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-10T08:10:00.000Z",
+        "anomalyLinks": [
+          "6"
+        ]
+      },
+      {
+        "sourceRecordId": "recqVTJGFWsdasKxI",
+        "podName": "api-backend-1",
+        "nodeLinks": [
+          "Node-Eta"
+        ],
+        "namespace": "production",
+        "status": "Running",
+        "restartCount": 2,
+        "cpuUsageMilliCores": 260,
+        "memoryUsageMB": 520,
+        "containerCount": 3,
+        "podHealthStatus": "Warning",
+        "lastRestartTime": "2024-06-09T20:00:00.000Z",
+        "anomalyLinks": [
+          "7"
+        ]
+      },
+      {
+        "sourceRecordId": "recw9BMuOWdk1HsCV",
+        "podName": "metrics-server",
+        "nodeLinks": [
+          "Node-Iota"
+        ],
+        "namespace": "monitoring",
+        "status": "Running",
+        "restartCount": 0,
+        "cpuUsageMilliCores": 50,
+        "memoryUsageMB": 100,
+        "containerCount": 1,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-10T07:45:00.000Z",
+        "anomalyLinks": [
+          "9"
+        ]
+      },
+      {
+        "sourceRecordId": "recwgSPXCeFzDYvDi",
+        "podName": "api-backend-2",
+        "nodeLinks": [
+          "Node-Beta"
+        ],
+        "namespace": "production",
+        "status": "Running",
+        "restartCount": 1,
+        "cpuUsageMilliCores": 250,
+        "memoryUsageMB": 512,
+        "containerCount": 3,
+        "podHealthStatus": "Healthy",
+        "lastRestartTime": "2024-06-09T22:30:00.000Z",
+        "anomalyLinks": [
+          "2"
+        ]
+      }
+    ],
+    "anomalies": [
+      {
+        "sourceRecordId": "rec42TbQXHOgFo92c",
+        "severity": "High",
+        "detectedTimestamp": "2024-06-07T19:55:00.000Z",
+        "affectedResource": "Finance-Server",
+        "aiConfidencePercent": 93,
+        "status": "Open",
+        "description": "Unauthorized access to sensitive financial records detected.",
+        "clusterLinks": [
+          "dev-cluster-03"
+        ],
+        "nodeLinks": [
+          "Node-Kappa"
+        ],
+        "podLinks": [
+          "ingress-nginx"
+        ],
+        "incidentLinks": [
+          "File Upload Failure"
+        ],
+        "anomalyType": "Unauthorized Access"
+      },
+      {
+        "sourceRecordId": "recFGGzTPt88q8tLJ",
+        "severity": "Medium",
+        "detectedTimestamp": "2024-06-07T16:30:00.000Z",
+        "affectedResource": "App-Server-07",
+        "aiConfidencePercent": 80,
+        "status": "Closed",
+        "description": "Application server experienced a short burst of failed login attempts.",
+        "clusterLinks": [
+          "prod-cluster-02"
+        ],
+        "nodeLinks": [
+          "Node-Epsilon"
+        ],
+        "podLinks": [
+          "worker-queue-1"
+        ],
+        "incidentLinks": [
+          "Payment Processing Error"
+        ],
+        "anomalyType": "Brute Force Attempt"
+      },
+      {
+        "sourceRecordId": "recGOjzphMYiv5GHn",
+        "severity": "Medium",
+        "detectedTimestamp": "2024-06-09T09:15:00.000Z",
+        "affectedResource": "Database-03",
+        "aiConfidencePercent": 87,
+        "status": "Investigating",
+        "description": "Unexpected spike in database queries, could be a sign of SQL injection attempt.",
+        "clusterLinks": [
+          "dev-cluster-01"
+        ],
+        "nodeLinks": [
+          "Node-Beta"
+        ],
+        "podLinks": [
+          "api-backend-2"
+        ],
+        "incidentLinks": [
+          "API Response Delay"
+        ],
+        "anomalyType": "Suspicious Activity"
+      },
+      {
+        "sourceRecordId": "recLelrdZ2mafUHsE",
+        "severity": "Low",
+        "detectedTimestamp": "2024-06-06T08:50:00.000Z",
+        "affectedResource": "Printer-05",
+        "aiConfidencePercent": 60,
+        "status": "Closed",
+        "description": "Printer attempted to connect to an external IP, likely misconfiguration.",
+        "clusterLinks": [
+          "staging-cluster-02"
+        ],
+        "nodeLinks": [
+          "Node-Eta"
+        ],
+        "podLinks": [
+          "api-backend-1"
+        ],
+        "incidentLinks": [
+          "Data Sync Failure"
+        ],
+        "anomalyType": "Unusual Connection"
+      },
+      {
+        "sourceRecordId": "recMN0ePDqLIgsjYd",
+        "severity": "High",
+        "detectedTimestamp": "2024-06-10T11:05:00.000Z",
+        "affectedResource": "Cloud-Storage-02",
+        "aiConfidencePercent": 92,
+        "status": "Open",
+        "description": "Large volume of files deleted in a short period, potential ransomware activity.",
+        "clusterLinks": [
+          "dev-cluster-02"
+        ],
+        "nodeLinks": [
+          "Node-Zeta"
+        ],
+        "podLinks": [
+          "web-frontend-2"
+        ],
+        "incidentLinks": [
+          "Server CPU Spike"
+        ],
+        "anomalyType": "Data Deletion"
+      },
+      {
+        "sourceRecordId": "recOXQj5GGOjNmkx0",
+        "severity": "Medium",
+        "detectedTimestamp": "2024-06-09T15:10:00.000Z",
+        "affectedResource": "VPN-Gateway",
+        "aiConfidencePercent": 82,
+        "status": "Investigating",
+        "description": "Unusual VPN connection from a new geographic location.",
+        "clusterLinks": [
+          "qa-cluster-03"
+        ],
+        "nodeLinks": [
+          "Node-Mu"
+        ],
+        "podLinks": [
+          "cache-redis-2"
+        ],
+        "incidentLinks": [
+          "Session Expiry Issue"
+        ],
+        "anomalyType": "Suspicious Login"
+      },
+      {
+        "sourceRecordId": "recRRch5mXnClYLd4",
+        "severity": "Low",
+        "detectedTimestamp": "2024-06-05T07:30:00.000Z",
+        "affectedResource": "IoT-Sensor-14",
+        "aiConfidencePercent": 58,
+        "status": "Closed",
+        "description": "Sensor reported abnormal temperature readings, likely hardware issue.",
+        "clusterLinks": [
+          "staging-cluster-03"
+        ],
+        "nodeLinks": [
+          "Node-Lambda"
+        ],
+        "podLinks": [
+          "worker-queue-2"
+        ],
+        "incidentLinks": [
+          "Search Function Slowdown"
+        ],
+        "anomalyType": "Sensor Malfunction"
+      },
+      {
+        "sourceRecordId": "recRslBrmpfQYUCDu",
+        "severity": "High",
+        "detectedTimestamp": "2024-06-08T18:25:00.000Z",
+        "affectedResource": "Dev-Workstation-09",
+        "aiConfidencePercent": 90,
+        "status": "Closed",
+        "description": "Malware signature detected during routine scan.",
+        "clusterLinks": [
+          "dev-cluster-04"
+        ],
+        "nodeLinks": [
+          "Node-Xi"
+        ],
+        "podLinks": [
+          "api-backend-3"
+        ],
+        "incidentLinks": [
+          "Unauthorized Access Attempt"
+        ],
+        "anomalyType": "Malware Detection"
+      },
+      {
+        "sourceRecordId": "recWx1FUh2HfHB3wM",
+        "severity": "Critical",
+        "detectedTimestamp": "2024-06-10T03:12:00.000Z",
+        "affectedResource": "Firewall-01",
+        "aiConfidencePercent": 99,
+        "status": "Open",
+        "description": "Firewall rules were altered without authorization, immediate review required.",
+        "clusterLinks": [
+          "qa-cluster-01"
+        ],
+        "nodeLinks": [
+          "Node-Delta"
+        ],
+        "podLinks": [
+          "cache-redis-1"
+        ],
+        "incidentLinks": [
+          "Email Notifications Not Sent"
+        ],
+        "anomalyType": "Configuration Change"
+      },
+      {
+        "sourceRecordId": "recdKmRp0Cm5LVgLo",
+        "severity": "High",
+        "detectedTimestamp": "2024-06-10T14:23:00.000Z",
+        "affectedResource": "Server-12",
+        "aiConfidencePercent": 98,
+        "status": "Open",
+        "description": "Unusual outbound traffic detected from Server-12, possibly indicating data exfiltration.",
+        "clusterLinks": [
+          "prod-cluster-01"
+        ],
+        "nodeLinks": [
+          "Node-Alpha"
+        ],
+        "podLinks": [
+          "web-frontend-1"
+        ],
+        "incidentLinks": [
+          "Database Connection Timeout"
+        ],
+        "anomalyType": "Network Intrusion"
+      },
+      {
+        "sourceRecordId": "rece3EEoHOEHovtZW",
+        "severity": "Critical",
+        "detectedTimestamp": "2024-06-09T23:40:00.000Z",
+        "affectedResource": "HR-Portal",
+        "aiConfidencePercent": 97,
+        "status": "Open",
+        "description": "Multiple failed login attempts from foreign IP addresses detected.",
+        "clusterLinks": [
+          "qa-cluster-02"
+        ],
+        "nodeLinks": [
+          "Node-Theta"
+        ],
+        "podLinks": [
+          "db-primary"
+        ],
+        "incidentLinks": [
+          "User Profile Corruption"
+        ],
+        "anomalyType": "Account Compromise"
+      },
+      {
+        "sourceRecordId": "recgFHDKZZt4zvZPV",
+        "severity": "Low",
+        "detectedTimestamp": "2024-06-08T22:45:00.000Z",
+        "affectedResource": "Workstation-21",
+        "aiConfidencePercent": 65,
+        "status": "Closed",
+        "description": "Minor deviation in user login times, likely due to user working late.",
+        "clusterLinks": [
+          "staging-cluster-01"
+        ],
+        "nodeLinks": [
+          "Node-Gamma"
+        ],
+        "podLinks": [
+          "db-replica-1"
+        ],
+        "incidentLinks": [
+          "Login Service Outage"
+        ],
+        "anomalyType": "Behavioral Anomaly"
+      },
+      {
+        "sourceRecordId": "rechXj6EIIxrVIqWA",
+        "severity": "Medium",
+        "detectedTimestamp": "2024-06-07T12:00:00.000Z",
+        "affectedResource": "Web-Server-02",
+        "aiConfidencePercent": 78,
+        "status": "Closed",
+        "description": "Unexpected increase in HTTP 500 errors, could indicate web shell activity.",
+        "clusterLinks": [
+          "staging-cluster-04"
+        ],
+        "nodeLinks": [
+          "Node-Omicron"
+        ],
+        "podLinks": [
+          "log-collector"
+        ],
+        "incidentLinks": [
+          "Analytics Dashboard Error"
+        ],
+        "anomalyType": "Web Shell Detected"
+      },
+      {
+        "sourceRecordId": "recrYvf5Ib4uz6cHA",
+        "severity": "Critical",
+        "detectedTimestamp": "2024-06-10T05:45:00.000Z",
+        "affectedResource": "Core-Router",
+        "aiConfidencePercent": 99,
+        "status": "Open",
+        "description": "Core router experienced a sudden reboot, possible DoS attack.",
+        "clusterLinks": [
+          "prod-cluster-04"
+        ],
+        "nodeLinks": [
+          "Node-Nu"
+        ],
+        "podLinks": [
+          "web-frontend-3"
+        ],
+        "incidentLinks": [
+          "Broken Image Links"
+        ],
+        "anomalyType": "Denial of Service"
+      },
+      {
+        "sourceRecordId": "recsYLVHBpnlGztbf",
+        "severity": "Medium",
+        "detectedTimestamp": "2024-06-08T13:20:00.000Z",
+        "affectedResource": "Email-Gateway",
+        "aiConfidencePercent": 85,
+        "status": "Investigating",
+        "description": "Phishing email campaign detected targeting multiple users.",
+        "clusterLinks": [
+          "prod-cluster-03"
+        ],
+        "nodeLinks": [
+          "Node-Iota"
+        ],
+        "podLinks": [
+          "metrics-server"
+        ],
+        "incidentLinks": [
+          "Mobile App Crash"
+        ],
+        "anomalyType": "Phishing Attempt"
+      }
+    ],
+    "incidents": [
+      {
+        "sourceRecordId": "rec02QwUbyDTL4oEh",
+        "title": "User Profile Corruption",
+        "severity": "Medium",
+        "status": "Resolved",
+        "clusterLinks": [
+          "qa-cluster-02"
+        ],
+        "createdTimestamp": "2024-06-13T11:00:00.000Z",
+        "resolvedTimestamp": "2024-06-13T12:30:00.000Z",
+        "assignee": "Henry Adams",
+        "description": "Several user profiles were corrupted after update deployment.",
+        "anomalyLinks": [
+          "8"
+        ],
+        "rootCause": "Bug in migration script.",
+        "postmortemNotes": "Script corrected and affected profiles restored.",
+        "notificationLinks": [
+          "8"
+        ]
+      },
+      {
+        "sourceRecordId": "rec0uji57DfcKhnab",
+        "title": "Search Function Slowdown",
+        "severity": "Medium",
+        "status": "Resolved",
+        "clusterLinks": [
+          "staging-cluster-03"
+        ],
+        "createdTimestamp": "2024-06-16T10:10:00.000Z",
+        "resolvedTimestamp": "2024-06-16T11:00:00.000Z",
+        "assignee": "Karen White",
+        "description": "Search queries took much longer than usual to return results.",
+        "anomalyLinks": [
+          "11"
+        ],
+        "rootCause": "Database index was missing.",
+        "postmortemNotes": "Index rebuilt and performance restored.",
+        "notificationLinks": [
+          "11"
+        ]
+      },
+      {
+        "sourceRecordId": "rec2wQrhY4dHm2T7e",
+        "title": "Broken Image Links",
+        "severity": "Low",
+        "status": "Resolved",
+        "clusterLinks": [
+          "prod-cluster-04"
+        ],
+        "createdTimestamp": "2024-06-18T13:45:00.000Z",
+        "resolvedTimestamp": "2024-06-18T14:20:00.000Z",
+        "assignee": "Mona Patel",
+        "description": "Images failed to load on several pages.",
+        "anomalyLinks": [
+          "13"
+        ],
+        "rootCause": "CDN cache invalidation failed.",
+        "postmortemNotes": "Cache purged and images restored.",
+        "notificationLinks": [
+          "13"
+        ]
+      },
+      {
+        "sourceRecordId": "rec4Kzu4GyQ2GrG7p",
+        "title": "Mobile App Crash",
+        "severity": "High",
+        "status": "Resolved",
+        "clusterLinks": [
+          "prod-cluster-03"
+        ],
+        "createdTimestamp": "2024-06-14T08:20:00.000Z",
+        "resolvedTimestamp": "2024-06-14T09:10:00.000Z",
+        "assignee": "Irene Lopez",
+        "description": "Mobile app crashed on launch for Android users.",
+        "anomalyLinks": [
+          "9"
+        ],
+        "rootCause": "Incompatible library update pushed to production.",
+        "postmortemNotes": "Rolled back update and tested compatibility.",
+        "notificationLinks": [
+          "9"
+        ]
+      },
+      {
+        "sourceRecordId": "rec4bw7e3SkJDvfVP",
+        "title": "Database Connection Timeout",
+        "severity": "High",
+        "status": "Resolved",
+        "clusterLinks": [
+          "prod-cluster-01"
+        ],
+        "createdTimestamp": "2024-06-01T09:15:00.000Z",
+        "resolvedTimestamp": "2024-06-01T11:30:00.000Z",
+        "assignee": "Alice Johnson",
+        "description": "Production database was unreachable for 2 hours, affecting all users.",
+        "anomalyLinks": [
+          "1"
+        ],
+        "rootCause": "Network latency caused by misconfigured firewall rules.",
+        "postmortemNotes": "Firewall rules updated; monitoring ongoing.",
+        "notificationLinks": [
+          "1"
+        ]
+      },
+      {
+        "sourceRecordId": "rec6omfXZQj6qc1yD",
+        "title": "File Upload Failure",
+        "severity": "Low",
+        "status": "Resolved",
+        "clusterLinks": [
+          "dev-cluster-03"
+        ],
+        "createdTimestamp": "2024-06-15T15:00:00.000Z",
+        "resolvedTimestamp": "2024-06-15T15:40:00.000Z",
+        "assignee": "Jack Turner",
+        "description": "Users unable to upload files for 40 minutes.",
+        "anomalyLinks": [
+          "10"
+        ],
+        "rootCause": "Disk space on server was full.",
+        "postmortemNotes": "Disk cleaned up and monitoring added.",
+        "notificationLinks": [
+          "10"
+        ]
+      },
+      {
+        "sourceRecordId": "rec74tfZIRnyWpTD2",
+        "title": "Email Notifications Not Sent",
+        "severity": "Low",
+        "status": "Resolved",
+        "clusterLinks": [
+          "qa-cluster-01"
+        ],
+        "createdTimestamp": "2024-06-07T10:30:00.000Z",
+        "resolvedTimestamp": "2024-06-07T12:00:00.000Z",
+        "assignee": "David Kim",
+        "description": "Automated email notifications failed to send for 90 minutes.",
+        "anomalyLinks": [
+          "4"
+        ],
+        "rootCause": "SMTP credentials expired.",
+        "postmortemNotes": "Credentials updated and alert set for expiration.",
+        "notificationLinks": [
+          "4"
+        ]
+      },
+      {
+        "sourceRecordId": "rec7sQ2DKipv5gZin",
+        "title": "Unauthorized Access Attempt",
+        "severity": "High",
+        "status": "Resolved",
+        "clusterLinks": [
+          "dev-cluster-04"
+        ],
+        "createdTimestamp": "2024-06-19T02:00:00.000Z",
+        "resolvedTimestamp": "2024-06-19T02:30:00.000Z",
+        "assignee": "Nina Zhang",
+        "description": "Multiple unauthorized login attempts detected.",
+        "anomalyLinks": [
+          "14"
+        ],
+        "rootCause": "Brute-force attack from known IP range.",
+        "postmortemNotes": "IPs blocked and 2FA enforced.",
+        "notificationLinks": [
+          "14"
+        ]
+      },
+      {
+        "sourceRecordId": "rec8SbAIMVzh4R2dS",
+        "title": "Payment Processing Error",
+        "severity": "High",
+        "status": "Resolved",
+        "clusterLinks": [
+          "prod-cluster-02"
+        ],
+        "createdTimestamp": "2024-06-09T16:45:00.000Z",
+        "resolvedTimestamp": "2024-06-09T18:00:00.000Z",
+        "assignee": "Emily Chen",
+        "description": "Payment gateway returned errors for multiple transactions.",
+        "anomalyLinks": [
+          "5"
+        ],
+        "rootCause": "API key was revoked by payment provider.",
+        "postmortemNotes": "API key rotated and provider notified.",
+        "notificationLinks": [
+          "5"
+        ]
+      },
+      {
+        "sourceRecordId": "recD8fiyMXmhPMmjW",
+        "title": "Session Expiry Issue",
+        "severity": "Low",
+        "status": "Resolved",
+        "clusterLinks": [
+          "qa-cluster-03"
+        ],
+        "createdTimestamp": "2024-06-17T09:30:00.000Z",
+        "resolvedTimestamp": "2024-06-17T10:00:00.000Z",
+        "assignee": "Leo Brown",
+        "description": "User sessions expired prematurely, causing logouts.",
+        "anomalyLinks": [
+          "12"
+        ],
+        "rootCause": "Session timeout misconfigured in settings.",
+        "postmortemNotes": "Configuration corrected and tested.",
+        "notificationLinks": [
+          "12"
+        ]
+      },
+      {
+        "sourceRecordId": "recLMwKebgnyobQbg",
+        "title": "API Response Delay",
+        "severity": "Medium",
+        "status": "Resolved",
+        "clusterLinks": [
+          "dev-cluster-01"
+        ],
+        "createdTimestamp": "2024-06-03T14:20:00.000Z",
+        "resolvedTimestamp": "2024-06-03T15:10:00.000Z",
+        "assignee": "Brian Lee",
+        "description": "External API calls experienced significant delays, impacting user experience.",
+        "anomalyLinks": [
+          "2"
+        ],
+        "rootCause": "Third-party API provider outage.",
+        "postmortemNotes": "Switched to backup API provider.",
+        "notificationLinks": [
+          "2"
+        ]
+      },
+      {
+        "sourceRecordId": "recMOz1hVn95fTdF0",
+        "title": "Server CPU Spike",
+        "severity": "Medium",
+        "status": "Resolved",
+        "clusterLinks": [
+          "dev-cluster-02"
+        ],
+        "createdTimestamp": "2024-06-10T13:10:00.000Z",
+        "resolvedTimestamp": "2024-06-10T13:50:00.000Z",
+        "assignee": "Frank Miller",
+        "description": "Unexpected CPU spike on main server, causing slow response times.",
+        "anomalyLinks": [
+          "6"
+        ],
+        "rootCause": "Background job running in infinite loop.",
+        "postmortemNotes": "Job fixed and code reviewed.",
+        "notificationLinks": [
+          "6"
+        ]
+      },
+      {
+        "sourceRecordId": "recmujnFUSyLQkT90",
+        "title": "Data Sync Failure",
+        "severity": "High",
+        "status": "Resolved",
+        "clusterLinks": [
+          "staging-cluster-02"
+        ],
+        "createdTimestamp": "2024-06-12T05:30:00.000Z",
+        "resolvedTimestamp": "2024-06-12T07:00:00.000Z",
+        "assignee": "Grace Park",
+        "description": "Data between two systems failed to sync overnight.",
+        "anomalyLinks": [
+          "7"
+        ],
+        "rootCause": "Scheduled sync job failed due to missing dependency.",
+        "postmortemNotes": "Dependency restored and job rescheduled.",
+        "notificationLinks": [
+          "7"
+        ]
+      },
+      {
+        "sourceRecordId": "recnmST5sjxvysQQs",
+        "title": "Analytics Dashboard Error",
+        "severity": "Medium",
+        "status": "Resolved",
+        "clusterLinks": [
+          "staging-cluster-04"
+        ],
+        "createdTimestamp": "2024-06-20T17:00:00.000Z",
+        "resolvedTimestamp": "2024-06-20T17:40:00.000Z",
+        "assignee": "Oscar Rivera",
+        "description": "Analytics dashboard failed to load for all users.",
+        "anomalyLinks": [
+          "15"
+        ],
+        "rootCause": "Service dependency was down for maintenance.",
+        "postmortemNotes": "Dependency status monitoring improved.",
+        "notificationLinks": [
+          "15"
+        ]
+      },
+      {
+        "sourceRecordId": "reczu8ENZRQj6ApPB",
+        "title": "Login Service Outage",
+        "severity": "Critical",
+        "status": "Resolved",
+        "clusterLinks": [
+          "staging-cluster-01"
+        ],
+        "createdTimestamp": "2024-06-05T07:00:00.000Z",
+        "resolvedTimestamp": "2024-06-05T08:45:00.000Z",
+        "assignee": "Carla Smith",
+        "description": "Users unable to log in to the platform for nearly 2 hours.",
+        "anomalyLinks": [
+          "3"
+        ],
+        "rootCause": "Authentication server crashed due to memory leak.",
+        "postmortemNotes": "Patched authentication service and added monitoring.",
+        "notificationLinks": [
+          "3"
+        ]
+      }
+    ],
+    "notifications": [
+      {
+        "sourceRecordId": "rec5LcbEbu4KKkx8k",
+        "notificationNumber": 3,
+        "incidentLinks": [
+          "Login Service Outage"
+        ],
+        "channel": "Push",
+        "status": "Sent",
+        "sentTimestamp": "2024-06-09T18:45:00.000Z",
+        "recipient": "user_1023",
+        "content": "You have a new message from John.",
+        "retryCount": 0
+      },
+      {
+        "sourceRecordId": "rec9lLarEepLL143z",
+        "notificationNumber": 5,
+        "incidentLinks": [
+          "Payment Processing Error"
+        ],
+        "channel": "SMS",
+        "status": "Sent",
+        "sentTimestamp": "2024-06-08T14:20:00.000Z",
+        "recipient": "+15557654321",
+        "content": "Your appointment is confirmed for June 12.",
+        "retryCount": 1
+      },
+      {
+        "sourceRecordId": "recDkMbL16YBYWGKb",
+        "notificationNumber": 6,
+        "incidentLinks": [
+          "Server CPU Spike"
+        ],
+        "channel": "Push",
+        "status": "Failed",
+        "sentTimestamp": "2024-06-07T16:10:00.000Z",
+        "recipient": "user_2045",
+        "content": "Failed to deliver notification.",
+        "retryCount": 3
+      },
+      {
+        "sourceRecordId": "recFDLLQgSFxUxRXo",
+        "notificationNumber": 4,
+        "incidentLinks": [
+          "Email Notifications Not Sent"
+        ],
+        "channel": "Email",
+        "status": "Pending",
+        "sentTimestamp": "2024-06-10T11:30:00.000Z",
+        "recipient": "bob@example.com",
+        "content": "Reminder: Your subscription expires tomorrow.",
+        "retryCount": 0
+      },
+      {
+        "sourceRecordId": "recHRGPQsVedSFv4Z",
+        "notificationNumber": 1,
+        "incidentLinks": [
+          "Database Connection Timeout"
+        ],
+        "channel": "Email",
+        "status": "Sent",
+        "sentTimestamp": "2024-06-10T09:15:00.000Z",
+        "recipient": "alice@example.com",
+        "content": "Your password was changed successfully.",
+        "retryCount": 0
+      },
+      {
+        "sourceRecordId": "recJ9uoThhhPRnHLA",
+        "notificationNumber": 13,
+        "incidentLinks": [
+          "Broken Image Links"
+        ],
+        "channel": "Email",
+        "status": "Pending",
+        "sentTimestamp": "2024-06-10T13:15:00.000Z",
+        "recipient": "eve@example.com",
+        "content": "Please verify your email address.",
+        "retryCount": 0
+      },
+      {
+        "sourceRecordId": "recQUkV3qcqG43QTN",
+        "notificationNumber": 7,
+        "incidentLinks": [
+          "Data Sync Failure"
+        ],
+        "channel": "Email",
+        "status": "Sent",
+        "sentTimestamp": "2024-06-06T08:00:00.000Z",
+        "recipient": "carol@example.com",
+        "content": "Welcome to our platform!",
+        "retryCount": 0
+      },
+      {
+        "sourceRecordId": "recUz3CuemS5haMoH",
+        "notificationNumber": 14,
+        "incidentLinks": [
+          "Unauthorized Access Attempt"
+        ],
+        "channel": "SMS",
+        "status": "Failed",
+        "sentTimestamp": "2024-06-01T15:10:00.000Z",
+        "recipient": "+15551239876",
+        "content": "Unable to deliver your notification.",
+        "retryCount": 2
+      },
+      {
+        "sourceRecordId": "recXcuhvrQzWLr1cD",
+        "notificationNumber": 10,
+        "incidentLinks": [
+          "File Upload Failure"
+        ],
+        "channel": "Email",
+        "status": "Failed",
+        "sentTimestamp": "2024-06-04T21:40:00.000Z",
+        "recipient": "dave@example.com",
+        "content": "We couldn't process your request.",
+        "retryCount": 1
+      },
+      {
+        "sourceRecordId": "reca6YyFNHfkzTzXe",
+        "notificationNumber": 15,
+        "incidentLinks": [
+          "Analytics Dashboard Error"
+        ],
+        "channel": "Push",
+        "status": "Sent",
+        "sentTimestamp": "2024-06-10T14:00:00.000Z",
+        "recipient": "user_5234",
+        "content": "Your weekly summary is ready.",
+        "retryCount": 0
+      },
+      {
+        "sourceRecordId": "reciahLu4La8BiSTW",
+        "notificationNumber": 2,
+        "incidentLinks": [
+          "API Response Delay"
+        ],
+        "channel": "SMS",
+        "status": "Failed",
+        "sentTimestamp": "2024-06-10T10:00:00.000Z",
+        "recipient": "+15551234567",
+        "content": "Your verification code is 482193.",
+        "retryCount": 2
+      },
+      {
+        "sourceRecordId": "recl0iNGQGkr3oB8U",
+        "notificationNumber": 11,
+        "incidentLinks": [
+          "Search Function Slowdown"
+        ],
+        "channel": "SMS",
+        "status": "Sent",
+        "sentTimestamp": "2024-06-03T13:55:00.000Z",
+        "recipient": "+15553456789",
+        "content": "Your order has shipped.",
+        "retryCount": 0
+      },
+      {
+        "sourceRecordId": "recnfoCGigbF73cJL",
+        "notificationNumber": 8,
+        "incidentLinks": [
+          "User Profile Corruption"
+        ],
+        "channel": "SMS",
+        "status": "Sent",
+        "sentTimestamp": "2024-06-05T19:25:00.000Z",
+        "recipient": "+15559876543",
+        "content": "Payment received. Thank you!",
+        "retryCount": 0
+      },
+      {
+        "sourceRecordId": "recuyYj8o3iZmpU0G",
+        "notificationNumber": 12,
+        "incidentLinks": [
+          "Session Expiry Issue"
+        ],
+        "channel": "Push",
+        "status": "Sent",
+        "sentTimestamp": "2024-06-02T17:30:00.000Z",
+        "recipient": "user_4120",
+        "content": "Security alert: New login detected.",
+        "retryCount": 0
+      },
+      {
+        "sourceRecordId": "recvP26ZWAOCRSI0L",
+        "notificationNumber": 9,
+        "incidentLinks": [
+          "Mobile App Crash"
+        ],
+        "channel": "Push",
+        "status": "Pending",
+        "sentTimestamp": "2024-06-10T12:05:00.000Z",
+        "recipient": "user_3098",
+        "content": "You have a new friend request.",
+        "retryCount": 0
+      }
+    ],
+    "deployments": [
+      {
+        "sourceRecordId": "rec02uHci1XT7ExJ9",
+        "deploymentName": "recommendation-engine",
+        "clusterLinks": [
+          "qa-cluster-03"
+        ],
+        "namespace": "staging",
+        "replicas": 2,
+        "status": "Pending",
+        "deploymentTool": "ArgoCD",
+        "deploymentTimestamp": "2024-05-30T10:35:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/recommendation-engine",
+        "deployedCommitSha": "b3c4d5e6f7g8h9i0j1a2",
+        "deployedBy": "leo"
+      },
+      {
+        "sourceRecordId": "rec2WAYFd0ZhR2omF",
+        "deploymentName": "worker-service",
+        "clusterLinks": [
+          "staging-cluster-01"
+        ],
+        "namespace": "production",
+        "replicas": 3,
+        "status": "Running",
+        "deploymentTool": "Kubectl",
+        "deploymentTimestamp": "2024-06-08T18:45:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/worker-service",
+        "deployedCommitSha": "c3d4e5f6g7h8i9j0a1b2",
+        "deployedBy": "carol"
+      },
+      {
+        "sourceRecordId": "rec9ust1eRpVMvWso",
+        "deploymentName": "search-service",
+        "clusterLinks": [
+          "qa-cluster-02"
+        ],
+        "namespace": "dev",
+        "replicas": 2,
+        "status": "Running",
+        "deploymentTool": "Kubectl",
+        "deploymentTimestamp": "2024-06-03T08:55:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/search-service",
+        "deployedCommitSha": "h8i9j0a1b2c3d4e5f6g7",
+        "deployedBy": "henry"
+      },
+      {
+        "sourceRecordId": "recB8D574cNv72r0u",
+        "deploymentName": "media-processor",
+        "clusterLinks": [
+          "staging-cluster-03"
+        ],
+        "namespace": "production",
+        "replicas": 4,
+        "status": "Running",
+        "deploymentTool": "Kubectl",
+        "deploymentTimestamp": "2024-05-31T15:50:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/media-processor",
+        "deployedCommitSha": "a2b3c4d5e6f7g8h9i0j1",
+        "deployedBy": "kate"
+      },
+      {
+        "sourceRecordId": "recNeeNIeDKrVwacl",
+        "deploymentName": "auth-service",
+        "clusterLinks": [
+          "qa-cluster-01"
+        ],
+        "namespace": "dev",
+        "replicas": 1,
+        "status": "Failed",
+        "deploymentTool": "Helm",
+        "deploymentTimestamp": "2024-06-07T11:30:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/auth-service",
+        "deployedCommitSha": "d4e5f6g7h8i9j0a1b2c3",
+        "deployedBy": "dan"
+      },
+      {
+        "sourceRecordId": "recWzDFY0FxV9Xwe5",
+        "deploymentName": "web-frontend",
+        "clusterLinks": [
+          "prod-cluster-01"
+        ],
+        "namespace": "production",
+        "replicas": 4,
+        "status": "Running",
+        "deploymentTool": "ArgoCD",
+        "deploymentTimestamp": "2024-06-10T14:23:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/web-frontend",
+        "deployedCommitSha": "a1b2c3d4e5f6g7h8i9j0",
+        "deployedBy": "alice"
+      },
+      {
+        "sourceRecordId": "recYfmCWxFBB3vbS9",
+        "deploymentName": "email-service",
+        "clusterLinks": [
+          "dev-cluster-03"
+        ],
+        "namespace": "staging",
+        "replicas": 1,
+        "status": "Running",
+        "deploymentTool": "Helm",
+        "deploymentTimestamp": "2024-06-01T12:05:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/email-service",
+        "deployedCommitSha": "j0a1b2c3d4e5f6g7h8i9",
+        "deployedBy": "jack"
+      },
+      {
+        "sourceRecordId": "recZBwVDXDOdUt2AP",
+        "deploymentName": "analytics-engine",
+        "clusterLinks": [
+          "staging-cluster-02"
+        ],
+        "namespace": "production",
+        "replicas": 5,
+        "status": "Running",
+        "deploymentTool": "Helm",
+        "deploymentTimestamp": "2024-06-04T20:40:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/analytics-engine",
+        "deployedCommitSha": "g7h8i9j0a1b2c3d4e5f6",
+        "deployedBy": "grace"
+      },
+      {
+        "sourceRecordId": "recdpdWotDt7sXsRw",
+        "deploymentName": "payment-gateway",
+        "clusterLinks": [
+          "prod-cluster-02"
+        ],
+        "namespace": "production",
+        "replicas": 2,
+        "status": "Running",
+        "deploymentTool": "ArgoCD",
+        "deploymentTimestamp": "2024-06-06T16:10:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/payment-gateway",
+        "deployedCommitSha": "e5f6g7h8i9j0a1b2c3d4",
+        "deployedBy": "eve"
+      },
+      {
+        "sourceRecordId": "recelDq7llAGEeBTI",
+        "deploymentName": "order-service",
+        "clusterLinks": [
+          "dev-cluster-04"
+        ],
+        "namespace": "production",
+        "replicas": 3,
+        "status": "Running",
+        "deploymentTool": "Kubectl",
+        "deploymentTimestamp": "2024-05-28T07:15:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/order-service",
+        "deployedCommitSha": "d5e6f7g8h9i0j1a2b3c4",
+        "deployedBy": "nate"
+      },
+      {
+        "sourceRecordId": "rech72MSf2CDcwJfE",
+        "deploymentName": "api-backend",
+        "clusterLinks": [
+          "dev-cluster-01"
+        ],
+        "namespace": "staging",
+        "replicas": 2,
+        "status": "Running",
+        "deploymentTool": "Helm",
+        "deploymentTimestamp": "2024-06-09T09:15:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/api-backend",
+        "deployedCommitSha": "b2c3d4e5f6g7h8i9j0a1",
+        "deployedBy": "bob"
+      },
+      {
+        "sourceRecordId": "reclekQ9OkzlI0LVo",
+        "deploymentName": "user-profile",
+        "clusterLinks": [
+          "prod-cluster-03"
+        ],
+        "namespace": "production",
+        "replicas": 3,
+        "status": "Failed",
+        "deploymentTool": "ArgoCD",
+        "deploymentTimestamp": "2024-06-02T17:20:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/user-profile",
+        "deployedCommitSha": "i9j0a1b2c3d4e5f6g7h8",
+        "deployedBy": "irene"
+      },
+      {
+        "sourceRecordId": "recs9IvaiBtoltXYu",
+        "deploymentName": "session-manager",
+        "clusterLinks": [
+          "staging-cluster-04"
+        ],
+        "namespace": "staging",
+        "replicas": 2,
+        "status": "Failed",
+        "deploymentTool": "ArgoCD",
+        "deploymentTimestamp": "2024-05-27T21:05:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/session-manager",
+        "deployedCommitSha": "e6f7g8h9i0j1a2b3c4d5",
+        "deployedBy": "olivia"
+      },
+      {
+        "sourceRecordId": "recuWaB8KRLPt4SW6",
+        "deploymentName": "notification-service",
+        "clusterLinks": [
+          "dev-cluster-02"
+        ],
+        "namespace": "staging",
+        "replicas": 1,
+        "status": "Pending",
+        "deploymentTool": "Kubectl",
+        "deploymentTimestamp": "2024-06-05T13:00:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/notification-service",
+        "deployedCommitSha": "f6g7h8i9j0a1b2c3d4e5",
+        "deployedBy": "frank"
+      },
+      {
+        "sourceRecordId": "recyb9X4METssXLuB",
+        "deploymentName": "inventory-service",
+        "clusterLinks": [
+          "prod-cluster-04"
+        ],
+        "namespace": "dev",
+        "replicas": 1,
+        "status": "Running",
+        "deploymentTool": "Helm",
+        "deploymentTimestamp": "2024-05-29T19:25:00.000Z",
+        "gitRepositoryUrl": "https://github.com/example/inventory-service",
+        "deployedCommitSha": "c4d5e6f7g8h9i0j1a2b3",
+        "deployedBy": "mia"
+      }
+    ]
+  },
+  "counts": {
+    "clusters": 16,
+    "nodes": 15,
+    "pods": 15,
+    "anomalies": 15,
+    "incidents": 15,
+    "notifications": 15,
+    "deployments": 15
+  },
+  "awsShowcaseBlueprint": {
+    "disclaimer": "Planning-only sample AWS resource model. Does not provision resources and must not be interpreted as a deployed EKS cluster.",
+    "region": "ap-south-1",
+    "eksClusters": [
+      {
+        "name": "cloudsentinels-showcase-eks",
+        "version": "1.31 (confirm currently supported version before provisioning)",
+        "source": "Derived showcase target; not present in Airtable as an AWS resource",
+        "managedControlPlane": true
+      }
+    ],
+    "ec2WorkerNodes": [
+      {
+        "name": "showcase-worker-a",
+        "instanceType": "t3.medium",
+        "sourceNode": "Node-Delta",
+        "availabilityZone": "ap-south-1a",
+        "role": "worker",
+        "note": "One illustrative worker; not a live EC2 instance."
+      },
+      {
+        "name": "showcase-worker-b",
+        "instanceType": "t3.medium",
+        "sourceNode": "Node-Epsilon",
+        "availabilityZone": "ap-south-1b",
+        "role": "worker",
+        "note": "Illustrative second worker for topology; omit for lowest-cost single-worker demo."
+      }
+    ],
+    "ebsVolumes": [
+      {
+        "name": "showcase-worker-a-root",
+        "volumeType": "gp3",
+        "sizeGiB": 20,
+        "attachedTo": "showcase-worker-a",
+        "note": "Illustrative EBS volume, not provisioned."
+      },
+      {
+        "name": "showcase-worker-b-root",
+        "volumeType": "gp3",
+        "sizeGiB": 20,
+        "attachedTo": "showcase-worker-b",
+        "note": "Illustrative EBS volume, not provisioned."
+      }
+    ],
+    "mappings": {
+      "airtableClusterRecords": "Logical cluster inventory; do not create one EKS cluster per Airtable row.",
+      "airtableNodeRecords": "Sample node inventory; use selected records to seed EC2/Kubernetes display, not to launch one EC2 per row.",
+      "airtablePodRecords": "Synthetic Kubernetes workload inventory for CloudSentinels sample mode.",
+      "airtableAnomalyAndIncidentRecords": "Seed anomaly/incident examples; retain source as Airtable sample."
+    }
+  }
+}
