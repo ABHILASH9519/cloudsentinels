@@ -62,12 +62,20 @@ function AuthenticatedWorkspace({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-xl">
-          <h1 className="text-lg font-semibold text-foreground">Backend connection unavailable</h1>
+          <h1 className="text-lg font-semibold text-foreground">
+            Backend connection unavailable
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your Internet Identity session is active, but the application backend could not be initialized.
+            Your Internet Identity session is active, but the application
+            backend could not be initialized.
           </p>
-          <div role="alert" className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words">
-            {error instanceof Error ? error.message : "The backend actor could not be created."}
+          <div
+            role="alert"
+            className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words"
+          >
+            {error instanceof Error
+              ? error.message
+              : "The backend actor could not be created."}
           </div>
           <button
             type="button"
