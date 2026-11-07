@@ -79,7 +79,7 @@ icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessContro
 USER_ADMIN_STATUS="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
 [[ "$USER_ADMIN_STATUS" == *false* ]] || { echo "Regular caller unexpectedly received admin role"; exit 1; }
 # Replaying the bootstrap token after registration must not elevate an existing user.
-icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessControlWithSecret "(\\"$ADMIN_TOKEN\\")"
+icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessControlWithSecret "(\"$ADMIN_TOKEN\")"
 USER_ADMIN_AFTER_REPLAY="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
 [[ "$USER_ADMIN_AFTER_REPLAY" == *false* ]] || { echo "Existing regular user escalated to admin by replaying the bootstrap token"; exit 1; }
 icp canister call --identity "$CURRENT_IDENTITY" backend createIncident '("CI user incident", "low", "ci", "user-created log")'
