@@ -22,7 +22,7 @@ interface JsonConfig {
 
 interface Config {
   backend_host: string;
-  backend_canister_id: string;
+  backend_canister_id?: string;
   storage_gateway_url: string;
   bucket_name: string;
   project_id: string;
@@ -53,13 +53,9 @@ export async function loadConfig(): Promise<Config> {
     fileConfig.backend_canister_id &&
     fileConfig.backend_canister_id !== "undefined"
       ? fileConfig.backend_canister_id
-      : backendCanisterId;
-
-  if (!configuredCanisterId || configuredCanisterId === "undefined") {
-    throw new Error(
-      "CloudSentinels is not connected to a backend canister. Configure CANISTER_ID_BACKEND in the frontend build environment, then rebuild and redeploy.",
-    );
-  }
+      : backendCanisterId && backendCanisterId !== "undefined"
+        ? backendCanisterId
+        : undefined;
 
   const configuredHost =
     fileConfig.backend_host && fileConfig.backend_host !== "undefined"
@@ -123,6 +119,11 @@ export async function createActorWithConfig(
   if (mock) return mock;
 
   const config = await loadConfig();
+  if (!config.backend_canister_id) {
+    throw new Error(
+      "Internet Identity sign-in succeeded, but CloudSentinels has no backend canister configured. Set CANISTER_ID_BACKEND in the frontend build environment and redeploy.",
+    );
+  }
   const resolvedOptions = options ?? {};
   const agent = new HttpAgent({
     ...resolvedOptions.agentOptions,
