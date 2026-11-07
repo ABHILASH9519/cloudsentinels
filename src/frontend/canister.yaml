@@ -8,12 +8,13 @@ build:
         - pnpm install --frozen-lockfile --prefer-offline --child-concurrency 2 --network-concurrency 6
         - node ../../scripts/resize-images.js
         - |
+          BACKEND_HOST="${BACKEND_HOST:-https://icp-api.io}"
           cat > env.json <<EOF
           {
-            "backend_host": "http://localhost:8081",
+            "backend_host": "$BACKEND_HOST",
             "backend_canister_id": "$BACKEND_CANISTER_ID",
             "project_id": "undefined",
-            "ii_derivation_origin": "undefined"
+            "ii_derivation_origin": "${II_DERIVATION_ORIGIN:-undefined}"
           }
           EOF
         - pnpm --filter '@cloudsentinels/frontend' build:skip-bindings
