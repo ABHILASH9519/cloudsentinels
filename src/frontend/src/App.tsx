@@ -8,6 +8,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { Layout } from "./components/Layout";
+import { useActor } from "./hooks/useActor";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { AIInsightsPage } from "./pages/AIInsightsPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -38,6 +39,46 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!identity) {
     return <LoginPage />;
+  }
+
+  return <AuthenticatedWorkspace>{children}</AuthenticatedWorkspace>;
+}
+
+function AuthenticatedWorkspace({ children }: { children: React.ReactNode }) {
+  const { actor, isFetching, error } = useActor();
+
+  if (isFetching) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Connecting to CloudSentinels…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!actor) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-xl">
+          <h1 className="text-lg font-semibold text-foreground">Backend connection unavailable</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your Internet Identity session is active, but the application backend could not be initialized.
+          </p>
+          <div role="alert" className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words">
+            {error instanceof Error ? error.message : "The backend actor could not be created."}
+          </div>
+          <button
+            type="button"
+            className="mt-5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            onClick={() => window.location.reload()}
+          >
+            Retry connection
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return <>{children}</>;
