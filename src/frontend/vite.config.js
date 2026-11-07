@@ -3,10 +3,12 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import environment from "vite-plugin-environment";
 
+// The ICP CLI's local network exposes Internet Identity on port 8000.
+// Keep this aligned with deploy.sh; 8081 is the local HTTP gateway.
 const ii_url =
   process.env.DFX_NETWORK === "local"
-    ? `http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:8081/`
-    : `https://identity.internetcomputer.org/`;
+    ? "http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:8000/"
+    : "https://identity.internetcomputer.org/";
 
 process.env.II_URL = process.env.II_URL || ii_url;
 process.env.STORAGE_GATEWAY_URL =
