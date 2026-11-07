@@ -17,6 +17,7 @@ icp network start -d
 icp canister create --environment local frontend
 icp canister create --environment local backend
 export BACKEND_CANISTER_ID=$(icp canister settings show --environment local --id-only backend)
+export BACKEND_HOST=http://localhost:8081
 export STORAGE_GATEWAY_URL=http://localhost:6188
 export II_URL=http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:8000
 
