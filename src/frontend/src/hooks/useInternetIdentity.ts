@@ -113,14 +113,18 @@ export function InternetIdentityProvider({
 
   const handleLoginError = useCallback(
     (maybeError?: string) => {
-      setErrorMessage(maybeError ?? "Internet Identity sign-in was cancelled or failed.");
+      setErrorMessage(
+        maybeError ?? "Internet Identity sign-in was cancelled or failed.",
+      );
     },
     [setErrorMessage],
   );
 
   const login = useCallback(() => {
     if (!authClient) {
-      setErrorMessage("Authentication is still initializing. Please try again.");
+      setErrorMessage(
+        "Authentication is still initializing. Please try again.",
+      );
       return;
     }
 
@@ -145,9 +149,7 @@ export function InternetIdentityProvider({
     setError(undefined);
     setStatus("logging-in");
     void authClient.login(options).catch((error: unknown) => {
-      handleLoginError(
-        error instanceof Error ? error.message : String(error),
-      );
+      handleLoginError(error instanceof Error ? error.message : String(error));
     });
   }, [authClient, handleLoginError, handleLoginSuccess, setErrorMessage]);
 
