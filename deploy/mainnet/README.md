@@ -26,12 +26,7 @@ icp identity principal
 
 Write down the principal (it is a public identifier). Store the seed phrase offline in a secure password manager or hardware-backed recovery method. Do not paste it into ChatGPT, GitHub, issue trackers, or terminal logs.
 
-Verify the active identity before any transaction:
-
-```sh
-icp identity whoami
-icp identity principal
-```
+Before any transaction, confirm the selected identity name with `icp identity list` and confirm its public principal with `icp identity principal`.
 
 ## 2. Acquire ICP and convert only the planned amount
 
@@ -63,7 +58,15 @@ chmod 600 src/backend/secrets/admin-token
 
 The `src/backend/secrets/` directory is ignored by Git. Do not put the token in `icp.yaml`, `canister.yaml`, GitHub Actions logs, a commit, or this chat.
 
-Before deployment, configure the backend canister's `CLOUDSENTINELS_ADMIN_TOKEN` runtime environment variable using the supported ICP canister-settings mechanism from a trusted local terminal. The CLI settings interface supports environment-variable settings; never enable shell tracing (`set -x`) or paste the secret into a command literal. Confirm the configured value without printing it. The first principal that registers with the exact token becomes the initial administrator; later users register as regular users. Keep the token only until the first-admin bootstrap has been completed, then rotate/remove it from the canister settings.
+After the backend canister has been created by deployment—but before anyone signs in for the first time—configure its `CLOUDSENTINELS_ADMIN_TOKEN` runtime environment variable from a trusted local terminal. Example for a private machine:
+
+```sh
+ADMIN_TOKEN="$(cat src/backend/secrets/admin-token)"
+icp canister settings update backend --add-environment-variable "CLOUDSENTINELS_ADMIN_TOKEN=${ADMIN_TOKEN}" -e production
+unset ADMIN_TOKEN
+```
+
+Do not enable shell tracing (`set -x`), run this on a shared machine, or paste the secret into a command literal. The secret is passed to the local CLI process to update the canister setting; do not capture verbose logs that could expose arguments. The first principal that registers with the exact token becomes the initial administrator; later users register as regular users. Keep the token only until first-admin bootstrap has been completed, then remove/rotate it from canister settings.
 
 ## 4. Build and deploy only after funding and secret configuration
 
@@ -80,6 +83,8 @@ Review the build output and verify that the frontend build receives the backend 
 ```sh
 icp deploy -e production
 ```
+
+Immediately after deployment, set `CLOUDSENTINELS_ADMIN_TOKEN` as described in step 3 and before the first browser login.
 
 This creates the canisters if they do not exist, so it spends cycles. Do not run it until the active identity, cycles balance, and deployment target have been checked.
 
