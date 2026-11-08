@@ -29,7 +29,9 @@ const ALLOWED_METHODS: Record<string, number> = {
   updateIncidentStatus: 2,
 };
 
-let jwksCache: { expiresAt: number; keys: JsonWebKey[] } | undefined;
+type ClerkJwk = { kid?: string; kty?: string; [key: string]: any };
+
+let jwksCache: { expiresAt: number; keys: ClerkJwk[] } | undefined;
 
 function fail(status: number, message: string): never {
   const error = new Error(message) as Error & { statusCode: number };
@@ -51,14 +53,14 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-async function getJwks(issuer: string): Promise<JsonWebKey[]> {
+async function getJwks(issuer: string): Promise<ClerkJwk[]> {
   if (jwksCache && jwksCache.expiresAt > Date.now()) return jwksCache.keys;
   const response = await fetch(`${issuer}/.well-known/jwks.json`, {
     headers: { accept: "application/json" },
     signal: AbortSignal.timeout(5000),
   });
   if (!response.ok) fail(503, "Clerk signing keys are temporarily unavailable.");
-  const body = (await response.json()) as { keys?: JsonWebKey[] };
+  const body = (await response.json()) as { keys?: ClerkJwk[] };
   if (!Array.isArray(body.keys) || body.keys.length === 0) {
     fail(503, "Clerk did not return a valid signing-key set.");
   }
@@ -94,10 +96,10 @@ async function verifyClerkSession(request: any): Promise<{ userId: string }> {
   }
 
   const keys = await getJwks(issuer);
-  const jwk = keys.find((key) => (key as JsonWebKey & { kid?: string }).kid === header.kid);
+  const jwk = keys.find((key) => key.kid === header.kid);
   if (!jwk || jwk.kty !== "RSA") fail(401, "Clerk signing key was not recognized.");
 
-  const publicKey = createPublicKey({ key: jwk, format: "jwk" });
+  const publicKey = createPublicKey({ key: jwk as any, format: "jwk" });
   const signingInput = Buffer.from(`${segments[0]}.${segments[1]}`);
   const signature = parseBase64Url(segments[2]);
   if (!verifySignature("RSA-SHA256", signingInput, publicKey, signature)) {
