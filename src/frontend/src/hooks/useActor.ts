@@ -68,11 +68,12 @@ function createGatewayActor(
 
 export function useActor() {
   const { user, isLoaded, isSignedIn, getToken, error } = useClerkAuth();
+  const userId = user?.id;
 
   const actor = useMemo(
     () =>
-      isLoaded && isSignedIn && user ? createGatewayActor(getToken) : null,
-    [getToken, isLoaded, isSignedIn, user?.id],
+      isLoaded && isSignedIn && userId ? createGatewayActor(getToken) : null,
+    [getToken, isLoaded, isSignedIn, userId],
   );
 
   return {
