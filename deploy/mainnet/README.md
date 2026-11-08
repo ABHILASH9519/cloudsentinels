@@ -64,7 +64,7 @@ After the backend canister has been created by deployment—but before anyone si
 
 ```sh
 ADMIN_TOKEN="$(cat src/backend/secrets/admin-token)"
-icp canister settings update backend --add-environment-variable "CLOUDSENTINELS_ADMIN_TOKEN=${ADMIN_TOKEN}" -e production
+icp canister settings update backend --add-environment-variable "CLOUDSENTINELS_ADMIN_TOKEN=${ADMIN_TOKEN}" -e ic
 unset ADMIN_TOKEN
 ```
 
@@ -72,7 +72,7 @@ Do not enable shell tracing (`set -x`), run this on a shared machine, or paste t
 
 ## 4. Build and deploy only after funding and secret configuration
 
-The repository defines an explicit `production` environment in `icp.yaml`, targeting ICP mainnet with 90-day freezing thresholds and controller-only log visibility. Status visibility is left at the ICP CLI's controller-only default for compatibility with the repository's pinned CLI version.
+The project uses the ICP CLI's implicit `ic` environment for mainnet. After deployment, explicitly apply a 90-day freezing threshold and controller-only log visibility to both canisters; status visibility remains at the controller-only default.
 
 Run a clean build first:
 
@@ -80,10 +80,17 @@ Run a clean build first:
 icp build
 ```
 
-Review the build output and verify that the frontend build receives the backend canister ID. Then deploy:
+Review the build output and verify that the frontend build receives the backend canister ID. Then deploy to the implicit mainnet environment:
 
 ```sh
-icp deploy -e production
+icp deploy -e ic
+```
+
+Apply production resource and log settings to both canisters:
+
+```sh
+icp canister settings update backend --freezing-threshold 90d --log-visibility controllers -e ic
+icp canister settings update frontend --freezing-threshold 90d --log-visibility controllers -e ic
 ```
 
 Immediately after deployment, set `CLOUDSENTINELS_ADMIN_TOKEN` as described in step 3 and before the first browser login.
@@ -93,8 +100,8 @@ This creates the canisters if they do not exist, so it spends cycles. Do not run
 After deployment, inspect both canisters:
 
 ```sh
-icp canister status backend -e production
-icp canister status frontend -e production
+icp canister status backend -e ic
+icp canister status frontend -e ic
 ```
 
 Record the actual IDs from the CLI output and generated `.icp/data/mappings/production.ids.json`. Canister IDs are public configuration, not secrets. Never replace them with guessed values.
@@ -125,8 +132,8 @@ The existing local-replica tests for Internet Computer principal-based registrat
 
 ## Current status
 
-- [x] Explicit ICP mainnet `production` environment prepared in `icp.yaml`.
-- [x] 90-day freezing thresholds and controller-only log visibility configured for both canisters; status visibility remains controller-only by default.
+- [x] ICP CLI implicit `ic` mainnet environment selected; no custom environment syntax required.
+- [ ] Apply 90-day freezing thresholds and controller-only log visibility to both canisters after deployment; status visibility remains controller-only by default.
 - [ ] Owner creates and backs up a dedicated ICP identity.
 - [ ] Owner acquires ICP and mints cycles.
 - [ ] Admin runtime secret is configured securely.
