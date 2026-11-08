@@ -48,11 +48,13 @@ icp cycles balance -n ic
 
 Do not run the example until you have independently reviewed the amount. The ICP/XDR conversion rate changes; the CLI/CMC determines the actual cycles minted at conversion time.
 
-## 3. Authentication secrets (Clerk migration pending)
+## 3. Authentication secrets (Clerk gateway)
 
-Do **not** configure the legacy `CLOUDSENTINELS_ADMIN_TOKEN` as the production authentication mechanism for this migration. The current Motoko backend still uses Internet Computer principal-based access control; the Clerk gateway and its trusted canister authorization path have not yet been implemented.
+The Clerk migration now uses a server-side Vercel Function and deterministic per-user ICP identities. Do **not** configure the legacy `CLOUDSENTINELS_ADMIN_TOKEN` as the production authentication mechanism.
 
-When the gateway is implemented, its Clerk secret key and dedicated ICP signing identity must be stored only in the gateway's server-side secret manager. Never place either value in a `VITE_*` variable, frontend bundle, `icp.yaml`, GitHub commit, CI log, or this chat. The public Clerk publishable key is not a secret.
+The gateway requires `CLERK_SECRET_KEY`, `CLERK_ISSUER`, `CLERK_AUTHORIZED_PARTIES`, `ICP_BACKEND_CANISTER_ID`, and `ICP_GATEWAY_IDENTITY_SECRET`. Store secret values only in the Vercel server-side environment/secret manager. Never place them in a `VITE_*` variable, frontend bundle, `icp.yaml`, GitHub commit, CI log, or this chat. The public Clerk publishable key is not a secret.
+
+The identity secret deterministically derives each Clerk user's ICP signing identity. Back it up securely and do not rotate it without a planned identity and data migration. Production rollout remains blocked until owner maps and other canister state are upgrade-safe and the full browser security tests pass.
 
 
 ## 4. Build and deploy only after funding and secret configuration
@@ -78,7 +80,7 @@ icp canister settings update backend --freezing-threshold 90d --log-visibility c
 icp canister settings update frontend --freezing-threshold 90d --log-visibility controllers -e ic
 ```
 
-Immediately after deployment, set `CLOUDSENTINELS_ADMIN_TOKEN` as described in step 3 and before the first browser login.
+Do not set the legacy `CLOUDSENTINELS_ADMIN_TOKEN`. Configure the Clerk gateway secrets in Vercel before enabling authenticated API access.
 
 This creates the canisters if they do not exist, so it spends cycles. Do not run it until the active identity, cycles balance, and deployment target have been checked.
 
@@ -99,9 +101,9 @@ Do not consider authentication production-ready until all of the following pass 
 2. The gateway verifies Clerk JWT signature, issuer, authorized party/origin, expiry, and session status server-side.
 3. Missing, malformed, expired, revoked, wrong-issuer, and wrong-origin tokens are rejected.
 4. The gateway uses its dedicated ICP identity; browser users never receive its signing key.
-5. The Motoko backend accepts gateway-only entry points exclusively from the configured gateway principal.
-6. Two distinct Clerk users cannot read or mutate each other's records.
-7. A regular user cannot perform an administrator-only operation; administrator roles are sourced from trusted backend policy, not user-editable frontend metadata.
+5. The Motoko backend receives calls from the deterministic ICP principal derived for that verified Clerk user; the gateway identity secret never leaves the server.
+6. Two distinct Clerk users cannot read or mutate each other's records; ownership is enforced inside Motoko.
+7. Users cannot assign roles. All Clerk accounts currently receive the regular-user role; administrator provisioning must be implemented and tested before admin operations are enabled.
 8. Direct anonymous and direct browser calls to protected canister methods are rejected.
 9. Session refresh, sign-out, gateway failure, and canister upgrade behavior are tested.
 
