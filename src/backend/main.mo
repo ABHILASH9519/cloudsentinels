@@ -266,7 +266,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can update AI fields");
     };
 
-    checkIncidentExists(id);
+    checkIncidentExists(id, caller);
 
     switch (incidents.get(id)) {
       case (null) { Runtime.trap("Incident with id: " # id.toText() # " does not exist") };
@@ -295,7 +295,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can delete incidents");
     };
 
-    checkIncidentExists(id);
+    checkIncidentExists(id, caller);
 
     incidents.remove(id);
     incidentOwners.remove(id);
@@ -474,6 +474,7 @@ actor {
     // Count incidents by severity
     let severityMap = Map.empty<Text, Nat>();
     for (incident in incidents.values()) {
+      if (incidentOwners.get(incident.id) == ?caller) {
       let currentCount = switch (severityMap.get(incident.severity)) {
         case (null) { 0 };
         case (?count) { count };
@@ -486,7 +487,7 @@ actor {
     let activeAlertsCount = alerts.values().toArray().filter(func(a) { a.status == "active" and alertOwners.get(a.id) == ?caller }).size();
 
     // Get latest metrics (last 10)
-    let allMetrics = metrics.values().toArray();
+    let allMetrics = metrics.values().toArray().filter(func(m) { metricOwners.get(m.id) == ?caller });
     let sorted = allMetrics.sort(MetricPoint.compareByTimestamp);
     let sortedList = List.fromArray<MetricPoint>(sorted);
     let latestMetrics = sortedList.reverse().values().take(10).toArray();
