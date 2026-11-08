@@ -63,39 +63,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 function AuthenticatedWorkspace({
-  children: _children,
+  children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, signOut } = useClerkAuth();
-
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-xl rounded-xl border border-border bg-card p-6 shadow-xl">
-        <h1 className="text-lg font-semibold text-foreground">
-          Clerk sign-in successful
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {user?.primaryEmailAddress?.emailAddress ?? user?.id} is signed in.
-          CloudSentinels backend access is temporarily fail-closed while the
-          server-side Clerk token verifier and trusted ICP canister identity
-          bridge are being implemented.
-        </p>
-        <p className="mt-3 text-xs text-muted-foreground">
-          The application will not send unverified browser identity claims to
-          the canister or grant access through the legacy Internet Identity
-          authorization path.
-        </p>
-        <button
-          type="button"
-          onClick={() => void signOut()}
-          className="mt-5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-        >
-          Sign out
-        </button>
-      </div>
-    </div>
-  );
+  return <>{children}</>;
 }
 
 function RootLayout() {
