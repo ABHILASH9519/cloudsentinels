@@ -1,4 +1,5 @@
 import {
+  type PropsWithChildren,
   createContext,
   createElement,
   useCallback,
@@ -6,7 +7,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type PropsWithChildren,
 } from "react";
 
 type ClerkUser = {
@@ -27,8 +27,16 @@ type ClerkInstance = {
   user: ClerkUser | null | undefined;
   session: ClerkSession | null | undefined;
   load: (options?: Record<string, unknown>) => Promise<void>;
-  addListener: (listener: (state: { user?: ClerkUser | null; session?: ClerkSession | null }) => void) => () => void;
-  mountSignIn: (node: HTMLDivElement, props?: Record<string, unknown>) => void;
+  addListener: (
+    listener: (state: {
+      user?: ClerkUser | null;
+      session?: ClerkSession | null;
+    }) => void,
+  ) => () => void;
+  mountSignIn: (
+    node: HTMLDivElement,
+    props?: Record<string, unknown>,
+  ) => void;
   unmountSignIn: (node: HTMLDivElement) => void;
   signOut: () => Promise<void>;
 };
@@ -55,11 +63,14 @@ let clerkInitialization: Promise<ClerkInstance> | null = null;
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`);
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${src}"]`,
+    );
     if (existing?.dataset.loaded === "true") {
       resolve();
       return;
     }
+
     const script = existing ?? document.createElement("script");
     script.src = src;
     script.async = true;
@@ -68,17 +79,21 @@ function loadScript(src: string): Promise<void> {
       script.dataset.loaded = "true";
       resolve();
     };
-    script.onerror = () => reject(new Error("Clerk authentication scripts could not be loaded."));
+    script.onerror = () =>
+      reject(new Error("Clerk authentication scripts could not be loaded."));
     if (!existing) document.head.appendChild(script);
   });
 }
 
 async function initializeClerk(): Promise<ClerkInstance> {
   if (clerkInitialization) return clerkInitialization;
+
   clerkInitialization = (async () => {
     const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
     if (!publishableKey || !publishableKey.startsWith("pk_")) {
-      throw new Error("Set VITE_CLERK_PUBLISHABLE_KEY in the frontend environment.");
+      throw new Error(
+        "Set VITE_CLERK_PUBLISHABLE_KEY in the frontend environment.",
+      );
     }
 
     let frontendApi: string;
@@ -91,17 +106,26 @@ async function initializeClerk(): Promise<ClerkInstance> {
       throw new Error("The configured Clerk Frontend API domain is invalid.");
     }
 
-    await loadScript(`https://${frontendApi}/npm/@clerk/ui@1/dist/ui.browser.js`);
-    await loadScript(`https://${frontendApi}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`);
-    if (!window.Clerk) throw new Error("ClerkJS loaded without exposing its browser SDK.");
+    await loadScript(
+      `https://${frontendApi}/npm/@clerk/ui@1/dist/ui.browser.js`,
+    );
+    await loadScript(
+      `https://${frontendApi}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`,
+    );
+    if (!window.Clerk) {
+      throw new Error("ClerkJS loaded without exposing its browser SDK.");
+    }
 
     const clerk = new window.Clerk(publishableKey);
-    await clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
+    await clerk.load({
+      ui: { ClerkUI: window.__internal_ClerkUICtor },
+    });
     return clerk;
   })().catch((error: unknown) => {
     clerkInitialization = null;
     throw error;
   });
+
   return clerkInitialization;
 }
 
@@ -115,26 +139,39 @@ export function ClerkAuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let active = true;
     let unsubscribe: (() => void) | undefined;
+
     void initializeClerk()
       .then((instance) => {
         if (!active) return;
         setClerk(instance);
-        const sync = (state?: { user?: ClerkUser | null; session?: ClerkSession | null }) => {
-          const nextUser = state?.user === undefined ? instance.user : state.user;
-          const nextSession = state?.session === undefined ? instance.session : state.session;
+
+        const sync = (state?: {
+          user?: ClerkUser | null;
+          session?: ClerkSession | null;
+        }) => {
+          const nextUser =
+            state?.user === undefined ? instance.user : state.user;
+          const nextSession =
+            state?.session === undefined ? instance.session : state.session;
           setUser(nextUser ?? null);
           setIsSignedIn(Boolean(nextUser && nextSession));
           setIsLoaded(true);
         };
+
         unsubscribe = instance.addListener(sync);
         sync();
       })
       .catch((reason: unknown) => {
         if (active) {
-          setError(reason instanceof Error ? reason.message : "Clerk initialization failed.");
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Clerk initialization failed.",
+          );
           setIsLoaded(true);
         }
       });
+
     return () => {
       active = false;
       unsubscribe?.();
@@ -151,7 +188,15 @@ export function ClerkAuthProvider({ children }: PropsWithChildren) {
   }, [clerk]);
 
   const value = useMemo(
-    () => ({ clerk, isLoaded, isSignedIn, user, getToken, signOut, error }),
+    () => ({
+      clerk,
+      isLoaded,
+      isSignedIn,
+      user,
+      getToken,
+      signOut,
+      error,
+    }),
     [clerk, isLoaded, isSignedIn, user, getToken, signOut, error],
   );
 
@@ -160,6 +205,8 @@ export function ClerkAuthProvider({ children }: PropsWithChildren) {
 
 export function useClerkAuth(): ClerkAuthValue {
   const context = useContext(ClerkAuthContext);
-  if (!context) throw new Error("ClerkAuthProvider is missing from the component tree.");
+  if (!context) {
+    throw new Error("ClerkAuthProvider is missing from the component tree.");
+  }
   return context;
 }
