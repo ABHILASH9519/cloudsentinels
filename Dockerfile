@@ -63,9 +63,11 @@ ENV PATH="$PNPM_HOME:$PATH"
 # GitHub release assets occasionally return transient 502 responses; retry the
 # complete installer so the toolchain image is not lost to a one-off download.
 RUN <<EOF
-set -euo pipefail
+set -eu
 for attempt in 1 2 3 4 5; do
-    if curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh | sh; then
+    if curl --fail --location --silent --show-error --retry 2 --retry-all-errors \
+        https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh \
+        -o /tmp/icp-cli-installer.sh && sh /tmp/icp-cli-installer.sh; then
         break
     fi
     if [ "$attempt" -eq 5 ]; then
