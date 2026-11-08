@@ -72,7 +72,7 @@ Do not enable shell tracing (`set -x`), run this on a shared machine, or paste t
 
 ## 4. Build and deploy only after funding and secret configuration
 
-The repository now defines an explicit `production` environment in `icp.yaml`, targeting ICP mainnet and applying 90-day freezing thresholds with controller-only logs/status.
+The repository defines an explicit `production` environment in `icp.yaml`, targeting ICP mainnet with 90-day freezing thresholds and controller-only log visibility. Status visibility is left at the ICP CLI's controller-only default for compatibility with the repository's pinned CLI version.
 
 Run a clean build first:
 
@@ -126,7 +126,7 @@ The existing local-replica tests for Internet Computer principal-based registrat
 ## Current status
 
 - [x] Explicit ICP mainnet `production` environment prepared in `icp.yaml`.
-- [x] 90-day freezing thresholds and controller-only log/status visibility configured for both canisters.
+- [x] 90-day freezing thresholds and controller-only log visibility configured for both canisters; status visibility remains controller-only by default.
 - [ ] Owner creates and backs up a dedicated ICP identity.
 - [ ] Owner acquires ICP and mints cycles.
 - [ ] Admin runtime secret is configured securely.
