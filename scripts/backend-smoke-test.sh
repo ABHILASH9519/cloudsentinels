@@ -22,7 +22,18 @@ icp identity new "$USER_IDENTITY" --storage plaintext >/dev/null 2>&1
 icp identity default "$ADMIN_IDENTITY"
 CURRENT_IDENTITY="$ADMIN_IDENTITY"
 
-icp network start -d
+# The network launcher is fetched from GitHub releases. Retry transient 5xx
+# responses instead of failing the entire smoke test on a single download error.
+for attempt in 1 2 3; do
+  if icp network start -d; then
+    break
+  fi
+  if [[ "$attempt" -eq 3 ]]; then
+    echo "Unable to start the local ICP network after $attempt attempts"
+    exit 1
+  fi
+  sleep "$((attempt * 5))"
+done
 icp deploy backend
 
 # Configure a test-only canister runtime secret, then exercise the same
@@ -83,13 +94,29 @@ icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessContro
 USER_ADMIN_AFTER_REPLAY="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
 [[ "$USER_ADMIN_AFTER_REPLAY" == *false* ]] || { echo "Existing regular user escalated to admin by replaying the bootstrap token"; exit 1; }
 icp canister call --identity "$CURRENT_IDENTITY" backend createIncident '("CI user incident", "low", "ci", "user-created log")'
-if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1 : nat)' >"$TMP_DIR/unauthorized-delete.log" 2>&1; then
-  echo "Regular user unexpectedly deleted an incident"
+if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1 : nat)' >"$TMP_DIR/cross-user-incident.log" 2>&1; then
+  echo "Regular user unexpectedly read another user's incident"
   exit 1
 fi
-if ! grep -qi "Unauthorized" "$TMP_DIR/unauthorized-delete.log"; then
-  cat "$TMP_DIR/unauthorized-delete.log"
-  echo "Regular-user delete failed for a reason other than authorization"
+if ! grep -qi "Unauthorized" "$TMP_DIR/cross-user-incident.log"; then
+  cat "$TMP_DIR/cross-user-incident.log"
+  echo "Cross-user incident read failed for a reason other than authorization"
+  exit 1
+fi
+USER_INCIDENTS="$(icp canister call --identity "$CURRENT_IDENTITY" backend listIncidents '()')"
+[[ "$USER_INCIDENTS" == *"CI user incident"* && "$USER_INCIDENTS" != *"CI smoke incident"* ]] || { echo "Incident list is not scoped to the regular user"; exit 1; }
+USER_METRICS="$(icp canister call --identity "$CURRENT_IDENTITY" backend getMetricsByName '("cpu_usage")')"
+[[ "$USER_METRICS" != *"42.5"* ]] || { echo "Regular user read another user's metric"; exit 1; }
+USER_ALERTS="$(icp canister call --identity "$CURRENT_IDENTITY" backend getAlerts '()')"
+[[ "$USER_ALERTS" != *"CI test alert"* ]] || { echo "Regular user read another user's alert"; exit 1; }
+if icp canister call --identity "$CURRENT_IDENTITY" backend getCommentsByIncident '(1 : nat)' >"$TMP_DIR/cross-user-comments.log" 2>&1; then
+  echo "Regular user unexpectedly read another user's comments"
+  exit 1
+fi
+# The owner may delete their own incident.
+icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(2 : nat)'
+if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(2 : nat)' >"$TMP_DIR/owner-deleted-incident.log" 2>&1; then
+  echo "Owner-deleted incident is still readable"
   exit 1
 fi
 
@@ -121,7 +148,7 @@ if ! grep -qi "Unauthorized" "$TMP_DIR/post-upgrade-unauthorized-delete.log"; th
   exit 1
 fi
 
-# Admin-only deletion must work, while regular-user attempts were denied.
+# The incident owner (the admin identity in this fixture) may delete its own record.
 icp identity default "$ADMIN_IDENTITY"
 CURRENT_IDENTITY="$ADMIN_IDENTITY"
 icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1 : nat)'
@@ -130,4 +157,4 @@ if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1 : na
   exit 1
 fi
 
-echo "Backend runtime smoke tests passed: admin bootstrap, regular-user registration, profile, incident, comment identity, metrics, alerts, dashboard, permission denial, and admin deletion."
+echo "Backend runtime smoke tests passed: admin bootstrap, regular-user registration, per-user incident/comment/metric/alert isolation, owner deletion, profile, dashboard, upgrade persistence, and role checks."
