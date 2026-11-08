@@ -15,8 +15,6 @@ environments:
       backend:
         freezing_threshold: 90d
         log_visibility: controllers
-        status_visibility: controllers
       frontend:
         freezing_threshold: 90d
         log_visibility: controllers
-        status_visibility: controllers
