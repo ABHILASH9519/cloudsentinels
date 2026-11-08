@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useClerkAuth } from "../hooks/useClerkAuth";
 
 const navItems = [
   {
@@ -50,19 +50,18 @@ const navItems = [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { clear } = useInternetIdentity();
+  const { signOut, user } = useClerkAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
         <div className="w-8 h-8 rounded-md bg-primary/20 flex items-center justify-center glow-cyan">
           <Shield className="w-4 h-4 text-primary" />
         </div>
         <div>
-          <div className="font-display font-700 text-sm text-foreground tracking-wide">
+          <div className="font-display font-bold text-sm text-foreground tracking-wide">
             CloudSentinels
           </div>
           <div className="text-xs text-muted-foreground font-mono">
@@ -71,7 +70,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-2 py-4 space-y-0.5">
         {navItems.map((item) => {
           const active =
@@ -100,13 +98,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-2 pb-4 border-t border-sidebar-border pt-4">
+      <div className="px-3 pb-3 border-t border-sidebar-border pt-4">
+        <p className="truncate px-2 pb-3 text-xs text-muted-foreground">
+          {user?.primaryEmailAddress?.emailAddress ?? user?.id}
+        </p>
         <Button
           variant="ghost"
           size="sm"
           data-ocid="auth.logout.button"
-          onClick={clear}
+          onClick={() => void signOut()}
           className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
         >
           <LogOut className="w-4 h-4" />
@@ -118,12 +118,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Desktop sidebar */}
       <aside className="hidden md:flex w-56 shrink-0 border-r border-sidebar-border bg-sidebar flex-col">
         <SidebarContent />
       </aside>
-
-      {/* Mobile sidebar overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <button
@@ -137,10 +134,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </aside>
         </div>
       )}
-
-      {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Mobile header */}
         <header className="md:hidden flex items-center gap-3 px-4 h-14 border-b border-border bg-card">
           <Button
             variant="ghost"

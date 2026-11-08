@@ -22,7 +22,30 @@ icp identity new "$USER_IDENTITY" --storage plaintext >/dev/null 2>&1
 icp identity default "$ADMIN_IDENTITY"
 CURRENT_IDENTITY="$ADMIN_IDENTITY"
 
-icp network start -d
+# The network launcher is fetched from GitHub releases through the ICP CLI.
+# GitHub API/release endpoints can transiently return 5xx or time out. Use
+# bounded exponential backoff so a temporary upstream outage does not make
+# otherwise-valid backend tests fail immediately. CI can override the budget.
+ICP_NETWORK_START_ATTEMPTS="${ICP_NETWORK_START_ATTEMPTS:-6}"
+network_started=false
+for ((attempt = 1; attempt <= ICP_NETWORK_START_ATTEMPTS; attempt++)); do
+  echo "Starting local ICP network (attempt $attempt/$ICP_NETWORK_START_ATTEMPTS)..."
+  if icp network start -d; then
+    network_started=true
+    break
+  fi
+  icp network stop >/dev/null 2>&1 || true
+  if [[ "$attempt" -lt "$ICP_NETWORK_START_ATTEMPTS" ]]; then
+    delay=$((attempt * 10))
+    if [[ "$delay" -gt 60 ]]; then delay=60; fi
+    echo "ICP network startup failed; retrying in ${delay}s"
+    sleep "$delay"
+  fi
+done
+if [[ "$network_started" != true ]]; then
+  echo "Unable to start the local ICP network after $ICP_NETWORK_START_ATTEMPTS attempts" >&2
+  exit 1
+fi
 icp deploy backend
 
 # Configure a test-only canister runtime secret, then exercise the same
@@ -82,14 +105,32 @@ USER_ADMIN_STATUS="$(icp canister call --identity "$CURRENT_IDENTITY" backend is
 icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessControlWithSecret "(\"$ADMIN_TOKEN\")"
 USER_ADMIN_AFTER_REPLAY="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
 [[ "$USER_ADMIN_AFTER_REPLAY" == *false* ]] || { echo "Existing regular user escalated to admin by replaying the bootstrap token"; exit 1; }
-icp canister call --identity "$CURRENT_IDENTITY" backend createIncident '("CI user incident", "low", "ci", "user-created log")'
-if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1 : nat)' >"$TMP_DIR/unauthorized-delete.log" 2>&1; then
-  echo "Regular user unexpectedly deleted an incident"
+USER_INCIDENT_RESULT="$(icp canister call --identity "$CURRENT_IDENTITY" backend createIncident '("CI user incident", "low", "ci", "user-created log")')"
+USER_INCIDENT_ID="$(printf '%s\n' "$USER_INCIDENT_RESULT" | sed -E 's/[^0-9]*([0-9]+).*/\1/')"
+[[ "$USER_INCIDENT_ID" =~ ^[0-9]+$ ]] || { echo "Could not determine the regular user incident ID: $USER_INCIDENT_RESULT"; exit 1; }
+if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1 : nat)' >"$TMP_DIR/cross-user-incident.log" 2>&1; then
+  echo "Regular user unexpectedly read another user's incident"
   exit 1
 fi
-if ! grep -qi "Unauthorized" "$TMP_DIR/unauthorized-delete.log"; then
-  cat "$TMP_DIR/unauthorized-delete.log"
-  echo "Regular-user delete failed for a reason other than authorization"
+if ! grep -qi "Unauthorized" "$TMP_DIR/cross-user-incident.log"; then
+  cat "$TMP_DIR/cross-user-incident.log"
+  echo "Cross-user incident read failed for a reason other than authorization"
+  exit 1
+fi
+USER_INCIDENTS="$(icp canister call --identity "$CURRENT_IDENTITY" backend listIncidents '()')"
+[[ "$USER_INCIDENTS" == *"CI user incident"* && "$USER_INCIDENTS" != *"CI smoke incident"* ]] || { echo "Incident list is not scoped to the regular user"; exit 1; }
+USER_METRICS="$(icp canister call --identity "$CURRENT_IDENTITY" backend getMetricsByName '("cpu_usage")')"
+[[ "$USER_METRICS" != *"42.5"* ]] || { echo "Regular user read another user's metric"; exit 1; }
+USER_ALERTS="$(icp canister call --identity "$CURRENT_IDENTITY" backend getAlerts '()')"
+[[ "$USER_ALERTS" != *"CI test alert"* ]] || { echo "Regular user read another user's alert"; exit 1; }
+if icp canister call --identity "$CURRENT_IDENTITY" backend getCommentsByIncident '(1 : nat)' >"$TMP_DIR/cross-user-comments.log" 2>&1; then
+  echo "Regular user unexpectedly read another user's comments"
+  exit 1
+fi
+# The owner may delete their own incident.
+icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident "($USER_INCIDENT_ID : nat)"
+if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident "($USER_INCIDENT_ID : nat)" >"$TMP_DIR/owner-deleted-incident.log" 2>&1; then
+  echo "Owner-deleted incident is still readable"
   exit 1
 fi
 
@@ -111,6 +152,16 @@ icp identity default "$USER_IDENTITY"
 CURRENT_IDENTITY="$USER_IDENTITY"
 USER_ADMIN_AFTER_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
 [[ "$USER_ADMIN_AFTER_UPGRADE" == *false* ]] || { echo "Regular caller gained admin role after canister upgrade"; exit 1; }
+USER_INCIDENTS_POST_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend listIncidents '()')"
+[[ "$USER_INCIDENTS_POST_UPGRADE" != *"CI smoke incident"* ]] || { echo "Incident ownership was not preserved across upgrade"; exit 1; }
+USER_METRICS_POST_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getMetricsByName '("cpu_usage")')"
+[[ "$USER_METRICS_POST_UPGRADE" != *"42.5"* ]] || { echo "Metric ownership was not preserved across upgrade"; exit 1; }
+USER_ALERTS_POST_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getAlerts '()')"
+[[ "$USER_ALERTS_POST_UPGRADE" != *"CI test alert"* ]] || { echo "Alert ownership was not preserved across upgrade"; exit 1; }
+if icp canister call --identity "$CURRENT_IDENTITY" backend getCommentsByIncident '(1 : nat)' >"$TMP_DIR/post-upgrade-cross-user-comments.log" 2>&1; then
+  echo "Regular user read another user's comments after upgrade"
+  exit 1
+fi
 if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1 : nat)' >"$TMP_DIR/post-upgrade-unauthorized-delete.log" 2>&1; then
   echo "Regular user unexpectedly gained admin permission after upgrade"
   exit 1
@@ -121,7 +172,7 @@ if ! grep -qi "Unauthorized" "$TMP_DIR/post-upgrade-unauthorized-delete.log"; th
   exit 1
 fi
 
-# Admin-only deletion must work, while regular-user attempts were denied.
+# The incident owner (the admin identity in this fixture) may delete its own record.
 icp identity default "$ADMIN_IDENTITY"
 CURRENT_IDENTITY="$ADMIN_IDENTITY"
 icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1 : nat)'
@@ -130,4 +181,4 @@ if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1 : na
   exit 1
 fi
 
-echo "Backend runtime smoke tests passed: admin bootstrap, regular-user registration, profile, incident, comment identity, metrics, alerts, dashboard, permission denial, and admin deletion."
+echo "Backend runtime smoke tests passed: admin bootstrap, regular-user registration, per-user incident/comment/metric/alert isolation, owner deletion, profile, dashboard, upgrade persistence, and role checks."

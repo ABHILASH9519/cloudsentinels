@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-router";
 import { Layout } from "./components/Layout";
 import { useActor } from "./hooks/useActor";
-import { useInternetIdentity } from "./hooks/useInternetIdentity";
+import { useClerkAuth } from "./hooks/useClerkAuth";
 import { AIInsightsPage } from "./pages/AIInsightsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { IncidentDetailPage } from "./pages/IncidentDetailPage";
@@ -18,74 +18,110 @@ import { LoginPage } from "./pages/LoginPage";
 import { MonitoringPage } from "./pages/MonitoringPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 10000 } },
-});
+function LoadingScreen({ message }: { message: string }) {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        <p className="text-sm text-muted-foreground">{message}</p>
+      </div>
+    </div>
+  );
+}
 
-// Auth wrapper
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { identity, isInitializing } = useInternetIdentity();
+  const { isLoaded, isSignedIn, error } = useClerkAuth();
 
-  if (isInitializing) {
+  if (!isLoaded) {
+    return <LoadingScreen message="Connecting to secure sign-in…" />;
+  }
+
+  if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div
+          role="alert"
+          className="w-full max-w-lg rounded-xl border border-destructive/30 bg-card p-6"
+        >
+          <h1 className="text-lg font-semibold">Authentication unavailable</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+          <button
+            type="button"
+            className="mt-5 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+            onClick={() => window.location.reload()}
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
   }
 
-  if (!identity) {
+  if (!isSignedIn) {
     return <LoginPage />;
   }
 
   return <AuthenticatedWorkspace>{children}</AuthenticatedWorkspace>;
 }
 
-function AuthenticatedWorkspace({ children }: { children: React.ReactNode }) {
-  const { actor, isFetching, error } = useActor();
+function AuthenticatedWorkspace({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { actor, isFetching } = useActor();
+  const { user, signOut } = useClerkAuth();
+  const queryClient = useQueryClient();
+  const gatewayCheck = useQuery({
+    queryKey: ["gateway-auth", user?.id],
+    queryFn: () => {
+      if (!actor) throw new Error("Your authenticated gateway is unavailable.");
+      return actor.getCallerUserRole();
+    },
+    enabled: !!actor && !!user,
+    retry: false,
+    staleTime: 30_000,
+  });
 
-  if (isFetching) {
+  if (isFetching || gatewayCheck.isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-          <p className="text-sm text-muted-foreground">
-            Connecting to CloudSentinels…
-          </p>
-        </div>
-      </div>
+      <LoadingScreen message="Verifying your secure CloudSentinels session…" />
     );
   }
 
-  if (!actor) {
+  if (gatewayCheck.isError) {
+    const message =
+      gatewayCheck.error instanceof Error
+        ? gatewayCheck.error.message
+        : "The secure backend could not verify your session.";
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-xl">
-          <h1 className="text-lg font-semibold text-foreground">
-            Backend connection unavailable
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Your Internet Identity session is active, but the application
-            backend could not be initialized.
-          </p>
-          <div
-            role="alert"
-            className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive break-words"
-          >
-            {error instanceof Error
-              ? error.message
-              : "The backend actor could not be created."}
+        <div
+          role="alert"
+          className="w-full max-w-lg rounded-xl border border-destructive/30 bg-card p-6"
+        >
+          <h1 className="text-lg font-semibold">Secure backend unavailable</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+              onClick={() =>
+                void queryClient.invalidateQueries({
+                  queryKey: ["gateway-auth", user?.id],
+                })
+              }
+            >
+              Retry connection
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-border px-4 py-2 text-sm"
+              onClick={() => void signOut()}
+            >
+              Sign out
+            </button>
           </div>
-          <button
-            type="button"
-            className="mt-5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-            onClick={() => window.location.reload()}
-          >
-            Retry connection
-          </button>
         </div>
       </div>
     );
@@ -94,7 +130,6 @@ function AuthenticatedWorkspace({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Root with layout
 function RootLayout() {
   return (
     <AuthGate>
@@ -105,7 +140,6 @@ function RootLayout() {
   );
 }
 
-// Routes
 const rootRoute = createRootRoute({ component: RootLayout });
 
 const indexRoute = createRoute({
@@ -165,9 +199,5 @@ declare module "@tanstack/react-router" {
 }
 
 export default function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  );
+  return <RouterProvider router={router} />;
 }

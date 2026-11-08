@@ -1,5 +1,7 @@
 # CloudSentinels ICP Mainnet Deployment Preparation
 
+> **Deployment hold:** The Clerk migration is in progress on `feat/clerk-authentication`. Do not deploy this branch to mainnet or follow the legacy Internet Identity acceptance steps until the Clerk server-side token verifier, trusted ICP gateway identity, and Motoko authorization bridge are implemented and security-tested. The current frontend intentionally fails closed after Clerk sign-in.
+
 This runbook prepares a user-owned ICP mainnet deployment. It does not create canisters, spend ICP, mint cycles, or publish a live application by itself.
 
 ## Ownership and funding requirements
@@ -46,31 +48,18 @@ icp cycles balance -n ic
 
 Do not run the example until you have independently reviewed the amount. The ICP/XDR conversion rate changes; the CLI/CMC determines the actual cycles minted at conversion time.
 
-## 3. Configure the first-admin bootstrap secret locally
+## 3. Authentication secrets (Clerk gateway)
 
-Generate a high-entropy secret on your own machine and keep it out of source control:
+The Clerk migration now uses a server-side Vercel Function and deterministic per-user ICP identities. Do **not** configure the legacy `CLOUDSENTINELS_ADMIN_TOKEN` as the production authentication mechanism.
 
-```sh
-mkdir -p src/backend/secrets
-openssl rand -hex 32 > src/backend/secrets/admin-token
-chmod 600 src/backend/secrets/admin-token
-```
+The gateway requires `CLERK_SECRET_KEY`, `CLERK_ISSUER`, `CLERK_AUTHORIZED_PARTIES`, `ICP_BACKEND_CANISTER_ID`, and `ICP_GATEWAY_IDENTITY_SECRET`. Store secret values only in the Vercel server-side environment/secret manager. Never place them in a `VITE_*` variable, frontend bundle, `icp.yaml`, GitHub commit, CI log, or this chat. The public Clerk publishable key is not a secret.
 
-The `src/backend/secrets/` directory is ignored by Git. Do not put the token in `icp.yaml`, `canister.yaml`, GitHub Actions logs, a commit, or this chat.
+The identity secret deterministically derives each Clerk user's ICP signing identity. Back it up securely and do not rotate it without a planned identity and data migration. Production rollout remains blocked until owner maps and other canister state are upgrade-safe and the full browser security tests pass.
 
-After the backend canister has been created by deployment—but before anyone signs in for the first time—configure its `CLOUDSENTINELS_ADMIN_TOKEN` runtime environment variable from a trusted local terminal. Example for a private machine:
-
-```sh
-ADMIN_TOKEN="$(cat src/backend/secrets/admin-token)"
-icp canister settings update backend --add-environment-variable "CLOUDSENTINELS_ADMIN_TOKEN=${ADMIN_TOKEN}" -e production
-unset ADMIN_TOKEN
-```
-
-Do not enable shell tracing (`set -x`), run this on a shared machine, or paste the secret into a command literal. The secret is passed to the local CLI process to update the canister setting; do not capture verbose logs that could expose arguments. The first principal that registers with the exact token becomes the initial administrator; later users register as regular users. Keep the token only until first-admin bootstrap has been completed, then remove/rotate it from canister settings.
 
 ## 4. Build and deploy only after funding and secret configuration
 
-The repository now defines an explicit `production` environment in `icp.yaml`, targeting ICP mainnet and applying 90-day freezing thresholds with controller-only logs/status.
+The project uses the ICP CLI's implicit `ic` environment for mainnet. After deployment, explicitly apply a 90-day freezing threshold and controller-only log visibility to both canisters; status visibility remains at the controller-only default.
 
 Run a clean build first:
 
@@ -78,40 +67,47 @@ Run a clean build first:
 icp build
 ```
 
-Review the build output and verify that the frontend build receives the backend canister ID. Then deploy:
+Review the build output and verify that the frontend build receives the backend canister ID. Then deploy to the implicit mainnet environment:
 
 ```sh
-icp deploy -e production
+icp deploy -e ic
 ```
 
-Immediately after deployment, set `CLOUDSENTINELS_ADMIN_TOKEN` as described in step 3 and before the first browser login.
+Apply production resource and log settings to both canisters:
+
+```sh
+icp canister settings update backend --freezing-threshold 90d --log-visibility controllers -e ic
+icp canister settings update frontend --freezing-threshold 90d --log-visibility controllers -e ic
+```
+
+Do not set the legacy `CLOUDSENTINELS_ADMIN_TOKEN`. Configure the Clerk gateway secrets in Vercel before enabling authenticated API access.
 
 This creates the canisters if they do not exist, so it spends cycles. Do not run it until the active identity, cycles balance, and deployment target have been checked.
 
 After deployment, inspect both canisters:
 
 ```sh
-icp canister status backend -e production
-icp canister status frontend -e production
+icp canister status backend -e ic
+icp canister status frontend -e ic
 ```
 
-Record the actual IDs from the CLI output and generated `.icp/data/mappings/production.ids.json`. Canister IDs are public configuration, not secrets. Never replace them with guessed values.
+Record the actual IDs from the CLI output and generated `.icp/data/mappings/ic.ids.json`. Canister IDs are public configuration, not secrets. Never replace them with guessed values.
 
-## 5. Authentication acceptance tests
+## 5. Authentication acceptance tests (Clerk migration pending)
 
-A successful deployment is not sufficient by itself. Verify in a real browser:
+Do not consider authentication production-ready until all of the following pass in a real browser and through the deployed gateway:
 
-1. Open the deployed frontend canister URL and confirm Internet Identity opens.
-2. Sign in with a non-anonymous principal.
-3. Confirm the frontend creates an actor for the deployed backend canister and completes caller registration.
-4. Confirm the first administrator has the intended Admin role.
-5. Sign out, then sign in with a second independent principal and confirm it receives the regular User role.
-6. Refresh the browser and confirm the session is restored.
-7. Verify a regular user cannot perform an admin-only action.
-8. Sign out and confirm protected workspace access is removed.
-9. Repeat after a canister upgrade and verify roles and data remain intact.
+1. Clerk sign-up and sign-in complete on the verified production domain.
+2. The gateway verifies Clerk JWT signature, issuer, authorized party/origin, expiry, and session status server-side.
+3. Missing, malformed, expired, revoked, wrong-issuer, and wrong-origin tokens are rejected.
+4. The gateway uses its dedicated ICP identity; browser users never receive its signing key.
+5. The Motoko backend receives calls from the deterministic ICP principal derived for that verified Clerk user; the gateway identity secret never leaves the server.
+6. Two distinct Clerk users cannot read or mutate each other's records; ownership is enforced inside Motoko.
+7. Users cannot assign roles. All Clerk accounts currently receive the regular-user role; administrator provisioning must be implemented and tested before admin operations are enabled.
+8. Anonymous calls are rejected. A different signed ICP principal may register as a separate regular user, but cannot impersonate a Clerk-derived principal or access that user's records.
+9. Session refresh, sign-out, gateway failure, and canister upgrade behavior are tested.
 
-The existing local-replica CI tests cover backend registration and authorization, but do not replace these browser/mainnet acceptance tests.
+The existing local-replica tests for Internet Computer principal-based registration do not validate Clerk JWT verification or the new gateway trust boundary.
 
 ## 6. Operational safeguards
 
@@ -123,10 +119,11 @@ The existing local-replica CI tests cover backend registration and authorization
 
 ## Current status
 
-- [x] Explicit ICP mainnet `production` environment prepared in `icp.yaml`.
-- [x] 90-day freezing thresholds and controller-only log/status visibility configured for both canisters.
+- [x] ICP CLI implicit `ic` mainnet environment selected; no custom environment syntax required.
+- [ ] Apply 90-day freezing thresholds and controller-only log visibility to both canisters after deployment; status visibility remains controller-only by default.
 - [ ] Owner creates and backs up a dedicated ICP identity.
 - [ ] Owner acquires ICP and mints cycles.
-- [ ] Admin runtime secret is configured securely.
+- [ ] Gateway server-side Clerk and ICP secrets are configured securely.
 - [ ] Mainnet canisters are created and deployed.
-- [ ] Real browser Internet Identity acceptance tests pass.
+- [ ] Clerk server-side verifier and trusted ICP gateway are implemented and security-tested.
+- [ ] Real browser and gateway-based Clerk acceptance tests pass.

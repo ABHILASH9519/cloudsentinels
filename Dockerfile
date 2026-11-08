@@ -59,10 +59,23 @@ EOF
 ENV PNPM_HOME="/home/ubuntu/.local/share/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
-# Install icp-cli - installer puts binary in ~/.cargo/bin
+# Install icp-cli - installer puts binary in ~/.cargo/bin.
+# GitHub release assets occasionally return transient 502 responses; retry the
+# complete installer so the toolchain image is not lost to a one-off download.
 RUN <<EOF
-set -e
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh | sh
+set -eu
+for attempt in 1 2 3 4 5; do
+    if curl --fail --location --silent --show-error --retry 2 --retry-all-errors \
+        https://github.com/dfinity/icp-cli/releases/download/v0.1.0-beta.3/icp-cli-installer.sh \
+        -o /tmp/icp-cli-installer.sh && sh /tmp/icp-cli-installer.sh; then
+        break
+    fi
+    if [ "$attempt" -eq 5 ]; then
+        echo "Unable to install icp-cli after $attempt attempts" >&2
+        exit 1
+    fi
+    sleep "$((attempt * 5))"
+done
 # Verify installation
 ls -la /home/ubuntu/.cargo/bin/
 /home/ubuntu/.cargo/bin/icp --version
