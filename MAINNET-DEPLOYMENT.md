@@ -73,10 +73,11 @@ This is a planning estimate, not an authorization or a final quote. Confirm the 
 
 After all readiness gates pass and the user approves the exact amount:
 
-1. Create/deploy only the backend canister using the approved initial balance, for example:
+1. Create only the backend canister with the approved initial balance, then install its Wasm. The create command is the cycle-spending step; the following deploy installs code into that already-created canister:
 
    ```sh
-   icp deploy backend -e ic --cycles <USER-APPROVED-CYCLES>
+   icp canister create backend -e ic --cycles <USER-APPROVED-CYCLES>
+icp deploy backend -e ic
    ```
 
 2. Record the resulting backend canister ID and verify the canister status and cycle balance:
