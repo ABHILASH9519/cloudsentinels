@@ -84,7 +84,9 @@ function AuthenticatedWorkspace({
   });
 
   if (isFetching || gatewayCheck.isLoading) {
-    return <LoadingScreen message="Verifying your secure CloudSentinels session…" />;
+    return (
+      <LoadingScreen message="Verifying your secure CloudSentinels session…" />
+    );
   }
 
   if (gatewayCheck.isError) {
