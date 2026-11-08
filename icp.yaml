@@ -1,20 +1,5 @@
 # yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/heads/main/docs/schemas/icp-yaml-schema.json
+# The ICP CLI provides an implicit "ic" environment for ICP mainnet.
 canisters:
   - src/frontend
   - src/backend
-
-# Explicit mainnet target. Canister IDs are created by icp deploy and must
-# never be guessed or hard-coded before deployment.
-environments:
-  - name: production
-    network: ic
-    canisters:
-      - frontend
-      - backend
-    settings:
-      backend:
-        freezing_threshold: 90d
-        log_visibility: controllers
-      frontend:
-        freezing_threshold: 90d
-        log_visibility: controllers
