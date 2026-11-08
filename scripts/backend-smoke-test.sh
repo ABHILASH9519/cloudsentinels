@@ -138,6 +138,16 @@ icp identity default "$USER_IDENTITY"
 CURRENT_IDENTITY="$USER_IDENTITY"
 USER_ADMIN_AFTER_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
 [[ "$USER_ADMIN_AFTER_UPGRADE" == *false* ]] || { echo "Regular caller gained admin role after canister upgrade"; exit 1; }
+USER_INCIDENTS_POST_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend listIncidents '()')"
+[[ "$USER_INCIDENTS_POST_UPGRADE" != *"CI smoke incident"* ]] || { echo "Incident ownership was not preserved across upgrade"; exit 1; }
+USER_METRICS_POST_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getMetricsByName '("cpu_usage")')"
+[[ "$USER_METRICS_POST_UPGRADE" != *"42.5"* ]] || { echo "Metric ownership was not preserved across upgrade"; exit 1; }
+USER_ALERTS_POST_UPGRADE="$(icp canister call --identity "$CURRENT_IDENTITY" backend getAlerts '()')"
+[[ "$USER_ALERTS_POST_UPGRADE" != *"CI test alert"* ]] || { echo "Alert ownership was not preserved across upgrade"; exit 1; }
+if icp canister call --identity "$CURRENT_IDENTITY" backend getCommentsByIncident '(1 : nat)' >"$TMP_DIR/post-upgrade-cross-user-comments.log" 2>&1; then
+  echo "Regular user read another user's comments after upgrade"
+  exit 1
+fi
 if icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(1 : nat)' >"$TMP_DIR/post-upgrade-unauthorized-delete.log" 2>&1; then
   echo "Regular user unexpectedly gained admin permission after upgrade"
   exit 1
