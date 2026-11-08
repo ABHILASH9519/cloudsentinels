@@ -1,63 +1,93 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { backendInterface } from "../backend";
-import { createActorWithConfig } from "../config";
-import { clearSessionParameter, getSecretParameter } from "../utils/urlParams";
-import { useInternetIdentity } from "./useInternetIdentity";
+import { useClerkAuth } from "./useClerkAuth";
 
 const ACTOR_QUERY_KEY = "actor";
-export function useActor() {
-  const { identity } = useInternetIdentity();
-  const queryClient = useQueryClient();
-  const actorQuery = useQuery<backendInterface>({
-    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString()],
-    queryFn: async () => {
-      const isAuthenticated = !!identity;
 
-      if (!isAuthenticated) {
-        // Return anonymous actor if not authenticated
-        return await createActorWithConfig();
-      }
+function createGatewayActor(getToken: () => Promise<string | null>): backendInterface {
+  return new Proxy(
+    {},
+    {
+      get(_target, property) {
+        if (typeof property !== "string") return undefined;
+        return async (...args: unknown[]) => {
+          const token = await getToken();
+          if (!token) throw new Error("Your Clerk session has expired. Please sign in again.");
 
-      const actorOptions = {
-        agentOptions: {
-          identity,
-        },
-      };
+          const response = await fetch("/api/canister", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            cache: "no-store",
+            body: JSON.stringify(
+              { method: property, args },
+              (_key, value) =>
+                typeof value === "bigint"
+                  ? { __bigint: value.toString() }
+                  : value,
+            ),
+          });
 
-      const actor = await createActorWithConfig(actorOptions);
-      const adminToken = getSecretParameter("cloudSentinelsAdminToken") || "";
-      await actor._initializeAccessControlWithSecret(adminToken);
-      // The canister has accepted the bootstrap/registration call; do not keep
-      // the bootstrap credential in browser session storage longer than needed.
-      clearSessionParameter("cloudSentinelsAdminToken");
-      return actor;
+          const text = await response.text();
+          let payload: { result?: unknown; error?: string };
+          try {
+            payload = JSON.parse(text, (_key, value) => {
+              if (
+                value &&
+                typeof value === "object" &&
+                Object.keys(value).length === 1 &&
+                typeof value.__bigint === "string" &&
+                /^-?\\d+$/.test(value.__bigint)
+              ) {
+                return BigInt(value.__bigint);
+              }
+              return value;
+            });
+          } catch {
+            throw new Error("The authenticated gateway returned an invalid response.");
+          }
+
+          if (!response.ok) {
+            throw new Error(payload.error || `Canister request failed (${response.status}).`);
+          }
+          return payload.result;
+        };
+      },
     },
-    // Only refetch when identity changes
+  ) as backendInterface;
+}
+
+export function useActor() {
+  const { user, isLoaded, isSignedIn, getToken } = useClerkAuth();
+  const queryClient = useQueryClient();
+
+  const actorQuery = useQuery<backendInterface>({
+    queryKey: [ACTOR_QUERY_KEY, user?.id ?? null],
+    queryFn: async () => createGatewayActor(getToken),
+    enabled: isLoaded && isSignedIn && !!user,
     staleTime: Number.POSITIVE_INFINITY,
-    // This will cause the actor to be recreated when the identity changes
-    enabled: true,
+    retry: false,
   });
 
-  // When the actor changes, invalidate dependent queries
   useEffect(() => {
     if (actorQuery.data) {
       queryClient.invalidateQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
-      });
-      queryClient.refetchQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
       });
     }
   }, [actorQuery.data, queryClient]);
 
+  const actor = useMemo(
+    () => (isSignedIn ? actorQuery.data ?? null : null),
+    [isSignedIn, actorQuery.data],
+  );
+
   return {
-    actor: actorQuery.data || null,
-    isFetching: actorQuery.isFetching,
+    actor,
+    isFetching: !isLoaded || (isSignedIn && actorQuery.isFetching),
     error: actorQuery.error,
   };
 }
