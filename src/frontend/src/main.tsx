@@ -9,7 +9,9 @@ BigInt.prototype.toJSON = function () {
 };
 
 declare global {
-  interface BigInt { toJSON(): string; }
+  interface BigInt {
+    toJSON(): string;
+  }
 }
 
 const queryClient = new QueryClient();
