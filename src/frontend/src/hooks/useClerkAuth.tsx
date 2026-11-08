@@ -40,7 +40,7 @@ type ClerkInstance = {
 
 declare global {
   interface Window {
-    Clerk?: new (publishableKey: string) => ClerkInstance;
+    Clerk?: ClerkInstance;
     __internal_ClerkUICtor?: unknown;
   }
 }
@@ -58,7 +58,7 @@ type ClerkAuthValue = {
 const ClerkAuthContext = createContext<ClerkAuthValue | null>(null);
 let clerkInitialization: Promise<ClerkInstance> | null = null;
 
-function loadScript(src: string): Promise<void> {
+function loadScript(src: string, publishableKey?: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>(
       `script[src="${src}"]`,
@@ -72,6 +72,9 @@ function loadScript(src: string): Promise<void> {
     script.src = src;
     script.async = true;
     script.crossOrigin = "anonymous";
+    if (publishableKey) {
+      script.setAttribute("data-clerk-publishable-key", publishableKey);
+    }
     script.onload = () => {
       script.dataset.loaded = "true";
       resolve();
@@ -108,12 +111,13 @@ async function initializeClerk(): Promise<ClerkInstance> {
     );
     await loadScript(
       `https://${frontendApi}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`,
+      publishableKey,
     );
     if (!window.Clerk) {
       throw new Error("ClerkJS loaded without exposing its browser SDK.");
     }
 
-    const clerk = new window.Clerk(publishableKey);
+    const clerk = window.Clerk;
     await clerk.load({
       ui: { ClerkUI: window.__internal_ClerkUICtor },
     });
