@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -7,6 +8,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { Layout } from "./components/Layout";
+import { useActor } from "./hooks/useActor";
 import { useClerkAuth } from "./hooks/useClerkAuth";
 import { AIInsightsPage } from "./pages/AIInsightsPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -67,6 +69,62 @@ function AuthenticatedWorkspace({
 }: {
   children: React.ReactNode;
 }) {
+  const { actor, isFetching } = useActor();
+  const { user, signOut } = useClerkAuth();
+  const queryClient = useQueryClient();
+  const gatewayCheck = useQuery({
+    queryKey: ["gateway-auth", user?.id],
+    queryFn: () => {
+      if (!actor) throw new Error("Your authenticated gateway is unavailable.");
+      return actor.getCallerUserRole();
+    },
+    enabled: !!actor && !!user,
+    retry: false,
+    staleTime: 30_000,
+  });
+
+  if (isFetching || gatewayCheck.isLoading) {
+    return <LoadingScreen message="Verifying your secure CloudSentinels session…" />;
+  }
+
+  if (gatewayCheck.isError) {
+    const message =
+      gatewayCheck.error instanceof Error
+        ? gatewayCheck.error.message
+        : "The secure backend could not verify your session.";
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div
+          role="alert"
+          className="w-full max-w-lg rounded-xl border border-destructive/30 bg-card p-6"
+        >
+          <h1 className="text-lg font-semibold">Secure backend unavailable</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+              onClick={() =>
+                void queryClient.invalidateQueries({
+                  queryKey: ["gateway-auth", user?.id],
+                })
+              }
+            >
+              Retry connection
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-border px-4 py-2 text-sm"
+              onClick={() => void signOut()}
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return <>{children}</>;
 }
 
