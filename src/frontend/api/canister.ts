@@ -89,8 +89,14 @@ async function verifyClerkSession(request: any): Promise<{ userId: string }> {
   const segments = token.split(".");
   if (segments.length !== 3) fail(401, "Invalid Clerk session token.");
 
-  const header = parseJsonSegment(segments[0]);
-  const claims = parseJsonSegment(segments[1]);
+  let header: Record<string, unknown>;
+  let claims: Record<string, unknown>;
+  try {
+    header = parseJsonSegment(segments[0]);
+    claims = parseJsonSegment(segments[1]);
+  } catch {
+    fail(401, "Malformed Clerk session token.");
+  }
   if (header.alg !== "RS256" || typeof header.kid !== "string") {
     fail(401, "Unsupported Clerk session-token signature.");
   }
@@ -202,6 +208,8 @@ async function createUserActor(userId: string): Promise<any> {
   return actor;
 }
 
+export const config = { maxDuration: 30 };
+
 export default async function handler(request: any, response: any) {
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
@@ -210,6 +218,9 @@ export default async function handler(request: any, response: any) {
   }
 
   try {
+    const contentLength = Number(request.headers["content-length"] ?? 0);
+    if (contentLength > 256 * 1024) fail(413, "Request body is too large.");
+
     const { userId } = await verifyClerkSession(request);
     const body = request.body ?? {};
     const method = body.method;
@@ -217,7 +228,7 @@ export default async function handler(request: any, response: any) {
 
     if (
       typeof method !== "string" ||
-      !(method in ALLOWED_METHODS) ||
+      !Object.prototype.hasOwnProperty.call(ALLOWED_METHODS, method) ||
       !args ||
       args.length !== ALLOWED_METHODS[method]
     ) {
