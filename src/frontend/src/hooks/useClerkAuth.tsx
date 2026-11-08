@@ -33,10 +33,7 @@ type ClerkInstance = {
       session?: ClerkSession | null;
     }) => void,
   ) => () => void;
-  mountSignIn: (
-    node: HTMLDivElement,
-    props?: Record<string, unknown>,
-  ) => void;
+  mountSignIn: (node: HTMLDivElement, props?: Record<string, unknown>) => void;
   unmountSignIn: (node: HTMLDivElement) => void;
   signOut: () => Promise<void>;
 };
