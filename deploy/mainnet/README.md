@@ -1,5 +1,7 @@
 # CloudSentinels ICP Mainnet Deployment Preparation
 
+> **Deployment hold:** The Clerk migration is in progress on `feat/clerk-authentication`. Do not deploy this branch to mainnet or follow the legacy Internet Identity acceptance steps until the Clerk server-side token verifier, trusted ICP gateway identity, and Motoko authorization bridge are implemented and security-tested. The current frontend intentionally fails closed after Clerk sign-in.
+
 This runbook prepares a user-owned ICP mainnet deployment. It does not create canisters, spend ICP, mint cycles, or publish a live application by itself.
 
 ## Ownership and funding requirements
@@ -97,21 +99,21 @@ icp canister status frontend -e production
 
 Record the actual IDs from the CLI output and generated `.icp/data/mappings/production.ids.json`. Canister IDs are public configuration, not secrets. Never replace them with guessed values.
 
-## 5. Authentication acceptance tests
+## 5. Authentication acceptance tests (Clerk migration pending)
 
-A successful deployment is not sufficient by itself. Verify in a real browser:
+Do not consider authentication production-ready until all of the following pass in a real browser and through the deployed gateway:
 
-1. Open the deployed frontend canister URL and confirm Internet Identity opens.
-2. Sign in with a non-anonymous principal.
-3. Confirm the frontend creates an actor for the deployed backend canister and completes caller registration.
-4. Confirm the first administrator has the intended Admin role.
-5. Sign out, then sign in with a second independent principal and confirm it receives the regular User role.
-6. Refresh the browser and confirm the session is restored.
-7. Verify a regular user cannot perform an admin-only action.
-8. Sign out and confirm protected workspace access is removed.
-9. Repeat after a canister upgrade and verify roles and data remain intact.
+1. Clerk sign-up and sign-in complete on the verified production domain.
+2. The gateway verifies Clerk JWT signature, issuer, authorized party/origin, expiry, and session status server-side.
+3. Missing, malformed, expired, revoked, wrong-issuer, and wrong-origin tokens are rejected.
+4. The gateway uses its dedicated ICP identity; browser users never receive its signing key.
+5. The Motoko backend accepts gateway-only entry points exclusively from the configured gateway principal.
+6. Two distinct Clerk users cannot read or mutate each other's records.
+7. A regular user cannot perform an administrator-only operation; administrator roles are sourced from trusted backend policy, not user-editable frontend metadata.
+8. Direct anonymous and direct browser calls to protected canister methods are rejected.
+9. Session refresh, sign-out, gateway failure, and canister upgrade behavior are tested.
 
-The existing local-replica CI tests cover backend registration and authorization, but do not replace these browser/mainnet acceptance tests.
+The existing local-replica tests for Internet Computer principal-based registration do not validate Clerk JWT verification or the new gateway trust boundary.
 
 ## 6. Operational safeguards
 
@@ -129,4 +131,5 @@ The existing local-replica CI tests cover backend registration and authorization
 - [ ] Owner acquires ICP and mints cycles.
 - [ ] Admin runtime secret is configured securely.
 - [ ] Mainnet canisters are created and deployed.
-- [ ] Real browser Internet Identity acceptance tests pass.
+- [ ] Clerk server-side verifier and trusted ICP gateway are implemented and security-tested.
+- [ ] Real browser and gateway-based Clerk acceptance tests pass.
