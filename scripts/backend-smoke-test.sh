@@ -105,7 +105,9 @@ USER_ADMIN_STATUS="$(icp canister call --identity "$CURRENT_IDENTITY" backend is
 icp canister call --identity "$CURRENT_IDENTITY" backend _initializeAccessControlWithSecret "(\"$ADMIN_TOKEN\")"
 USER_ADMIN_AFTER_REPLAY="$(icp canister call --identity "$CURRENT_IDENTITY" backend isCallerAdmin '()')"
 [[ "$USER_ADMIN_AFTER_REPLAY" == *false* ]] || { echo "Existing regular user escalated to admin by replaying the bootstrap token"; exit 1; }
-icp canister call --identity "$CURRENT_IDENTITY" backend createIncident '("CI user incident", "low", "ci", "user-created log")'
+USER_INCIDENT_RESULT="$(icp canister call --identity "$CURRENT_IDENTITY" backend createIncident '("CI user incident", "low", "ci", "user-created log")')"
+USER_INCIDENT_ID="$(printf '%s\n' "$USER_INCIDENT_RESULT" | sed -E 's/[^0-9]*([0-9]+).*/\1/')"
+[[ "$USER_INCIDENT_ID" =~ ^[0-9]+$ ]] || { echo "Could not determine the regular user incident ID: $USER_INCIDENT_RESULT"; exit 1; }
 if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(1 : nat)' >"$TMP_DIR/cross-user-incident.log" 2>&1; then
   echo "Regular user unexpectedly read another user's incident"
   exit 1
@@ -126,8 +128,8 @@ if icp canister call --identity "$CURRENT_IDENTITY" backend getCommentsByInciden
   exit 1
 fi
 # The owner may delete their own incident.
-icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident '(2 : nat)'
-if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident '(2 : nat)' >"$TMP_DIR/owner-deleted-incident.log" 2>&1; then
+icp canister call --identity "$CURRENT_IDENTITY" backend deleteIncident "($USER_INCIDENT_ID : nat)"
+if icp canister call --identity "$CURRENT_IDENTITY" backend getIncident "($USER_INCIDENT_ID : nat)" >"$TMP_DIR/owner-deleted-incident.log" 2>&1; then
   echo "Owner-deleted incident is still readable"
   exit 1
 fi
