@@ -132,6 +132,11 @@ actor {
   let comments = Map.empty<CommentId, Comment>();
   let metrics = Map.empty<MetricPointId, MetricPoint>();
   let alerts = Map.empty<AlertId, Alert>();
+  // Tenant ownership is stored separately so public Candid record shapes remain stable.
+  let incidentOwners = Map.empty<IncidentId, Principal>();
+  let commentOwners = Map.empty<CommentId, Principal>();
+  let metricOwners = Map.empty<MetricPointId, Principal>();
+  let alertOwners = Map.empty<AlertId, Principal>();
 
   var nextIncidentId : IncidentId = 1;
   var nextCommentId : CommentId = 1;
@@ -159,9 +164,14 @@ actor {
   };
 
   // Helper functions
-  func checkIncidentExists(id : IncidentId) : () {
-    if (not incidents.containsKey(id)) {
-      Runtime.trap("Incident with id: " # id.toText() # " does not exist");
+  func checkIncidentExists(id : IncidentId, caller : Principal) : () {
+    switch (incidents.get(id)) {
+      case (null) { Runtime.trap("Incident with id: " # id.toText() # " does not exist") };
+      case (?_) {
+        if (incidentOwners.get(id) != ?caller) {
+          Runtime.trap("Unauthorized: Incident belongs to another user");
+        };
+      };
     };
   };
 
@@ -194,6 +204,7 @@ actor {
     };
 
     incidents.add(id, incident);
+    incidentOwners.add(id, caller);
     nextIncidentId += 1;
     id;
   };
@@ -203,6 +214,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can view incidents");
     };
 
+    checkIncidentExists(id, caller);
     switch (incidents.get(id)) {
       case (null) { Runtime.trap("Incident with id: " # id.toText() # " does not exist") };
       case (?incident) { incident };
@@ -214,7 +226,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can list incidents");
     };
 
-    incidents.values().toArray().sort();
+    incidents.values().toArray().filter(func(i) { incidentOwners.get(i.id) == ?caller }).sort();
   };
 
   public shared ({ caller }) func updateIncidentStatus(id : IncidentId, status : Text) : async () {
@@ -222,7 +234,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can update incidents");
     };
 
-    checkIncidentExists(id);
+    checkIncidentExists(id, caller);
     if (status != "open" and status != "in_progress" and status != "resolved") {
       Runtime.trap("Invalid incident status");
     };
@@ -279,13 +291,14 @@ actor {
   };
 
   public shared ({ caller }) func deleteIncident(id : IncidentId) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admin can delete incidents");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can delete incidents");
     };
 
     checkIncidentExists(id);
 
     incidents.remove(id);
+    incidentOwners.remove(id);
   };
 
   // Comment management
@@ -294,7 +307,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can add comments");
     };
 
-    checkIncidentExists(incidentId);
+    checkIncidentExists(incidentId, caller);
 
     requireLength(text, "Comment", 5000);
     let id = nextCommentId;
@@ -308,6 +321,7 @@ actor {
     };
 
     comments.add(id, comment);
+    commentOwners.add(id, caller);
     nextCommentId += 1;
     id;
   };
@@ -317,7 +331,8 @@ actor {
       Runtime.trap("Unauthorized: Only users can view comments");
     };
 
-    comments.values().toArray().filter(func(c) { c.incidentId == incidentId });
+    checkIncidentExists(incidentId, caller);
+    comments.values().toArray().filter(func(c) { c.incidentId == incidentId and commentOwners.get(c.id) == ?caller });
   };
 
   // Metric ingestion
@@ -340,6 +355,7 @@ actor {
     };
 
     metrics.add(id, metric);
+    metricOwners.add(id, caller);
     nextMetricId += 1;
     id;
   };
@@ -349,7 +365,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can view metrics");
     };
 
-    metrics.values().toArray().filter(func(m) { m.name == name });
+    metrics.values().toArray().filter(func(m) { m.name == name and metricOwners.get(m.id) == ?caller });
   };
 
   public query ({ caller }) func getRecentMetrics(count : Nat) : async [MetricPoint] {
@@ -357,7 +373,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can view metrics");
     };
 
-    let allMetrics = metrics.values().toArray();
+    let allMetrics = metrics.values().toArray().filter(func(m) { metricOwners.get(m.id) == ?caller });
     let sorted = allMetrics.sort(MetricPoint.compareByTimestamp);
 
     let sortedList = List.fromArray<MetricPoint>(sorted);
@@ -388,6 +404,7 @@ actor {
     };
 
     alerts.add(id, alert);
+    alertOwners.add(id, caller);
     nextAlertId += 1;
     id;
   };
@@ -397,7 +414,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can view alerts");
     };
 
-    alerts.values().toArray().sort();
+    alerts.values().toArray().filter(func(a) { alertOwners.get(a.id) == ?caller }).sort();
   };
 
   public shared ({ caller }) func updateAlertStatus(id : AlertId, status : Text) : async () {
@@ -411,6 +428,9 @@ actor {
     switch (alerts.get(id)) {
       case (null) { Runtime.trap("Alert with id: " # id.toText() # " does not exist") };
       case (?alert) {
+        if (alertOwners.get(id) != ?caller) {
+          Runtime.trap("Unauthorized: Alert belongs to another user");
+        };
         let updatedAlert : Alert = {
           id = alert.id;
           title = alert.title;
@@ -430,7 +450,7 @@ actor {
       Runtime.trap("Unauthorized: Only users can view alerts");
     };
 
-    alerts.values().toArray().filter(func(a) { a.status == "active" });
+    alerts.values().toArray().filter(func(a) { a.status == "active" and alertOwners.get(a.id) == ?caller });
   };
 
   // Dashboard summary
@@ -442,11 +462,13 @@ actor {
     // Count incidents by status
     let statusMap = Map.empty<Text, Nat>();
     for (incident in incidents.values()) {
+      if (incidentOwners.get(incident.id) == ?caller) {
       let currentCount = switch (statusMap.get(incident.status)) {
         case (null) { 0 };
         case (?count) { count };
       };
       statusMap.add(incident.status, currentCount + 1);
+      };
     };
 
     // Count incidents by severity
@@ -457,10 +479,11 @@ actor {
         case (?count) { count };
       };
       severityMap.add(incident.severity, currentCount + 1);
+      };
     };
 
     // Count active alerts
-    let activeAlertsCount = alerts.values().toArray().filter(func(a) { a.status == "active" }).size();
+    let activeAlertsCount = alerts.values().toArray().filter(func(a) { a.status == "active" and alertOwners.get(a.id) == ?caller }).size();
 
     // Get latest metrics (last 10)
     let allMetrics = metrics.values().toArray();
