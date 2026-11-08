@@ -48,27 +48,12 @@ icp cycles balance -n ic
 
 Do not run the example until you have independently reviewed the amount. The ICP/XDR conversion rate changes; the CLI/CMC determines the actual cycles minted at conversion time.
 
-## 3. Configure the first-admin bootstrap secret locally
+## 3. Authentication secrets (Clerk migration pending)
 
-Generate a high-entropy secret on your own machine and keep it out of source control:
+Do **not** configure the legacy `CLOUDSENTINELS_ADMIN_TOKEN` as the production authentication mechanism for this migration. The current Motoko backend still uses Internet Computer principal-based access control; the Clerk gateway and its trusted canister authorization path have not yet been implemented.
 
-```sh
-mkdir -p src/backend/secrets
-openssl rand -hex 32 > src/backend/secrets/admin-token
-chmod 600 src/backend/secrets/admin-token
-```
+When the gateway is implemented, its Clerk secret key and dedicated ICP signing identity must be stored only in the gateway's server-side secret manager. Never place either value in a `VITE_*` variable, frontend bundle, `icp.yaml`, GitHub commit, CI log, or this chat. The public Clerk publishable key is not a secret.
 
-The `src/backend/secrets/` directory is ignored by Git. Do not put the token in `icp.yaml`, `canister.yaml`, GitHub Actions logs, a commit, or this chat.
-
-After the backend canister has been created by deployment—but before anyone signs in for the first time—configure its `CLOUDSENTINELS_ADMIN_TOKEN` runtime environment variable from a trusted local terminal. Example for a private machine:
-
-```sh
-ADMIN_TOKEN="$(cat src/backend/secrets/admin-token)"
-icp canister settings update backend --add-environment-variable "CLOUDSENTINELS_ADMIN_TOKEN=${ADMIN_TOKEN}" -e ic
-unset ADMIN_TOKEN
-```
-
-Do not enable shell tracing (`set -x`), run this on a shared machine, or paste the secret into a command literal. The secret is passed to the local CLI process to update the canister setting; do not capture verbose logs that could expose arguments. The first principal that registers with the exact token becomes the initial administrator; later users register as regular users. Keep the token only until first-admin bootstrap has been completed, then remove/rotate it from canister settings.
 
 ## 4. Build and deploy only after funding and secret configuration
 
@@ -104,7 +89,7 @@ icp canister status backend -e ic
 icp canister status frontend -e ic
 ```
 
-Record the actual IDs from the CLI output and generated `.icp/data/mappings/production.ids.json`. Canister IDs are public configuration, not secrets. Never replace them with guessed values.
+Record the actual IDs from the CLI output and generated `.icp/data/mappings/ic.ids.json`. Canister IDs are public configuration, not secrets. Never replace them with guessed values.
 
 ## 5. Authentication acceptance tests (Clerk migration pending)
 
@@ -136,7 +121,7 @@ The existing local-replica tests for Internet Computer principal-based registrat
 - [ ] Apply 90-day freezing thresholds and controller-only log visibility to both canisters after deployment; status visibility remains controller-only by default.
 - [ ] Owner creates and backs up a dedicated ICP identity.
 - [ ] Owner acquires ICP and mints cycles.
-- [ ] Admin runtime secret is configured securely.
+- [ ] Gateway server-side Clerk and ICP secrets are configured securely.
 - [ ] Mainnet canisters are created and deployed.
 - [ ] Clerk server-side verifier and trusted ICP gateway are implemented and security-tested.
 - [ ] Real browser and gateway-based Clerk acceptance tests pass.
