@@ -30,37 +30,67 @@ function LoadingScreen({ message }: { message: string }) {
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn, error } = useClerkAuth();
 
-  if (!isLoaded) return <LoadingScreen message="Connecting to secure sign-in…" />;
+  if (!isLoaded) {
+    return <LoadingScreen message="Connecting to secure sign-in…" />;
+  }
+
   if (error) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div role="alert" className="w-full max-w-lg rounded-xl border border-destructive/30 bg-card p-6">
+        <div
+          role="alert"
+          className="w-full max-w-lg rounded-xl border border-destructive/30 bg-card p-6"
+        >
           <h1 className="text-lg font-semibold">Authentication unavailable</h1>
           <p className="mt-2 text-sm text-muted-foreground">{error}</p>
-          <button className="mt-5 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground" onClick={() => window.location.reload()}>
+          <button
+            type="button"
+            className="mt-5 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+            onClick={() => window.location.reload()}
+          >
             Retry
           </button>
         </div>
       </div>
     );
   }
-  if (!isSignedIn) return <LoginPage />;
+
+  if (!isSignedIn) {
+    return <LoginPage />;
+  }
+
   return <AuthenticatedWorkspace>{children}</AuthenticatedWorkspace>;
 }
 
-function AuthenticatedWorkspace({ children: _children }: { children: React.ReactNode }) {
+function AuthenticatedWorkspace({
+  children: _children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user, signOut } = useClerkAuth();
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <div className="w-full max-w-xl rounded-xl border border-border bg-card p-6 shadow-xl">
-        <h1 className="text-lg font-semibold text-foreground">Clerk sign-in successful</h1>
+        <h1 className="text-lg font-semibold text-foreground">
+          Clerk sign-in successful
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {user?.primaryEmailAddress?.emailAddress ?? user?.id} is signed in. CloudSentinels backend access is temporarily fail-closed while the server-side Clerk token verifier and trusted ICP canister identity bridge are being implemented.
+          {user?.primaryEmailAddress?.emailAddress ?? user?.id} is signed in.
+          CloudSentinels backend access is temporarily fail-closed while the
+          server-side Clerk token verifier and trusted ICP canister identity
+          bridge are being implemented.
         </p>
         <p className="mt-3 text-xs text-muted-foreground">
-          The application will not send unverified browser identity claims to the canister or grant access through the legacy Internet Identity authorization path.
+          The application will not send unverified browser identity claims to
+          the canister or grant access through the legacy Internet Identity
+          authorization path.
         </p>
-        <button type="button" onClick={() => void signOut()} className="mt-5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="mt-5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
           Sign out
         </button>
       </div>
@@ -71,23 +101,69 @@ function AuthenticatedWorkspace({ children: _children }: { children: React.React
 function RootLayout() {
   return (
     <AuthGate>
-      <Layout><Outlet /></Layout>
+      <Layout>
+        <Outlet />
+      </Layout>
     </AuthGate>
   );
 }
 
 const rootRoute = createRootRoute({ component: RootLayout });
-const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: DashboardPage });
-const incidentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/incidents", component: IncidentsPage });
-const incidentDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/incidents/$id", component: IncidentDetailPage });
-const monitoringRoute = createRoute({ getParentRoute: () => rootRoute, path: "/monitoring", component: MonitoringPage });
-const aiInsightsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/ai-insights", component: AIInsightsPage });
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsPage });
-const routeTree = rootRoute.addChildren([indexRoute, incidentsRoute, incidentDetailRoute, monitoringRoute, aiInsightsRoute, settingsRoute]);
-const router = createRouter({ routeTree, history: createHashHistory() });
+
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  component: DashboardPage,
+});
+
+const incidentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/incidents",
+  component: IncidentsPage,
+});
+
+const incidentDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/incidents/$id",
+  component: IncidentDetailPage,
+});
+
+const monitoringRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/monitoring",
+  component: MonitoringPage,
+});
+
+const aiInsightsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/ai-insights",
+  component: AIInsightsPage,
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  component: SettingsPage,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  incidentsRoute,
+  incidentDetailRoute,
+  monitoringRoute,
+  aiInsightsRoute,
+  settingsRoute,
+]);
+
+const router = createRouter({
+  routeTree,
+  history: createHashHistory(),
+});
 
 declare module "@tanstack/react-router" {
-  interface Register { router: typeof router; }
+  interface Register {
+    router: typeof router;
+  }
 }
 
 export default function App() {
