@@ -42,7 +42,7 @@ function createGatewayActor(
                 typeof value === "object" &&
                 Object.keys(value).length === 1 &&
                 typeof value.__bigint === "string" &&
-                /^-?\\d+$/.test(value.__bigint)
+                /^-?[0-9]+$/.test(value.__bigint)
               ) {
                 return BigInt(value.__bigint);
               }
