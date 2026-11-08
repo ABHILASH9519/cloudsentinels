@@ -9,7 +9,7 @@ export function LoginPage() {
   useEffect(() => {
     const node = signInRef.current;
     if (!node || !clerk || !isLoaded) return;
-    clerk.mountSignIn(node);
+    clerk.mountSignIn(node, { routing: "hash" });
     return () => clerk.unmountSignIn(node);
   }, [clerk, isLoaded]);
 
