@@ -22,18 +22,30 @@ icp identity new "$USER_IDENTITY" --storage plaintext >/dev/null 2>&1
 icp identity default "$ADMIN_IDENTITY"
 CURRENT_IDENTITY="$ADMIN_IDENTITY"
 
-# The network launcher is fetched from GitHub releases. Retry transient 5xx
-# responses instead of failing the entire smoke test on a single download error.
-for attempt in 1 2 3; do
+# The network launcher is fetched from GitHub releases through the ICP CLI.
+# GitHub API/release endpoints can transiently return 5xx or time out. Use
+# bounded exponential backoff so a temporary upstream outage does not make
+# otherwise-valid backend tests fail immediately. CI can override the budget.
+ICP_NETWORK_START_ATTEMPTS="${ICP_NETWORK_START_ATTEMPTS:-6}"
+network_started=false
+for ((attempt = 1; attempt <= ICP_NETWORK_START_ATTEMPTS; attempt++)); do
+  echo "Starting local ICP network (attempt $attempt/$ICP_NETWORK_START_ATTEMPTS)..."
   if icp network start -d; then
+    network_started=true
     break
   fi
-  if [[ "$attempt" -eq 3 ]]; then
-    echo "Unable to start the local ICP network after $attempt attempts"
-    exit 1
+  icp network stop >/dev/null 2>&1 || true
+  if [[ "$attempt" -lt "$ICP_NETWORK_START_ATTEMPTS" ]]; then
+    delay=$((attempt * 10))
+    if [[ "$delay" -gt 60 ]]; then delay=60; fi
+    echo "ICP network startup failed; retrying in ${delay}s"
+    sleep "$delay"
   fi
-  sleep "$((attempt * 5))"
 done
+if [[ "$network_started" != true ]]; then
+  echo "Unable to start the local ICP network after $ICP_NETWORK_START_ATTEMPTS attempts" >&2
+  exit 1
+fi
 icp deploy backend
 
 # Configure a test-only canister runtime secret, then exercise the same
