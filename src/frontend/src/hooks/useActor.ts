@@ -5,7 +5,9 @@ import { useClerkAuth } from "./useClerkAuth";
 
 const ACTOR_QUERY_KEY = "actor";
 
-function createGatewayActor(getToken: () => Promise<string | null>): backendInterface {
+function createGatewayActor(
+  getToken: () => Promise<string | null>,
+): backendInterface {
   return new Proxy(
     {},
     {
@@ -13,7 +15,10 @@ function createGatewayActor(getToken: () => Promise<string | null>): backendInte
         if (typeof property !== "string") return undefined;
         return async (...args: unknown[]) => {
           const token = await getToken();
-          if (!token) throw new Error("Your Clerk session has expired. Please sign in again.");
+          if (!token)
+            throw new Error(
+              "Your Clerk session has expired. Please sign in again.",
+            );
 
           const response = await fetch("/api/canister", {
             method: "POST",
@@ -22,12 +27,10 @@ function createGatewayActor(getToken: () => Promise<string | null>): backendInte
               "content-type": "application/json",
             },
             cache: "no-store",
-            body: JSON.stringify(
-              { method: property, args },
-              (_key, value) =>
-                typeof value === "bigint"
-                  ? { __bigint: value.toString() }
-                  : value,
+            body: JSON.stringify({ method: property, args }, (_key, value) =>
+              typeof value === "bigint"
+                ? { __bigint: value.toString() }
+                : value,
             ),
           });
 
@@ -47,11 +50,15 @@ function createGatewayActor(getToken: () => Promise<string | null>): backendInte
               return value;
             });
           } catch {
-            throw new Error("The authenticated gateway returned an invalid response.");
+            throw new Error(
+              "The authenticated gateway returned an invalid response.",
+            );
           }
 
           if (!response.ok) {
-            throw new Error(payload.error || `Canister request failed (${response.status}).`);
+            throw new Error(
+              payload.error || `Canister request failed (${response.status}).`,
+            );
           }
           return payload.result;
         };
@@ -81,7 +88,7 @@ export function useActor() {
   }, [actorQuery.data, queryClient]);
 
   const actor = useMemo(
-    () => (isSignedIn ? actorQuery.data ?? null : null),
+    () => (isSignedIn ? (actorQuery.data ?? null) : null),
     [isSignedIn, actorQuery.data],
   );
 
