@@ -104,7 +104,7 @@ Do not consider authentication production-ready until all of the following pass 
 5. The Motoko backend receives calls from the deterministic ICP principal derived for that verified Clerk user; the gateway identity secret never leaves the server.
 6. Two distinct Clerk users cannot read or mutate each other's records; ownership is enforced inside Motoko.
 7. Users cannot assign roles. All Clerk accounts currently receive the regular-user role; administrator provisioning must be implemented and tested before admin operations are enabled.
-8. Direct anonymous and direct browser calls to protected canister methods are rejected.
+8. Anonymous calls are rejected. A different signed ICP principal may register as a separate regular user, but cannot impersonate a Clerk-derived principal or access that user's records.
 9. Session refresh, sign-out, gateway failure, and canister upgrade behavior are tested.
 
 The existing local-replica tests for Internet Computer principal-based registration do not validate Clerk JWT verification or the new gateway trust boundary.
