@@ -9,7 +9,7 @@ export function LoginPage() {
   useEffect(() => {
     const node = signInRef.current;
     if (!node || !clerk || !isLoaded) return;
-    clerk.mountSignIn(node, { signUpUrl: "#/sign-up" });
+    clerk.mountSignIn(node);
     return () => clerk.unmountSignIn(node);
   }, [clerk, isLoaded]);
 
