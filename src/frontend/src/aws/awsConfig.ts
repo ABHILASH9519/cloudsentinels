@@ -1,15 +1,14 @@
+function normalizeBaseUrl(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed?.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
+}
+
 const rawConfig = {
   region: import.meta.env.VITE_AWS_REGION as string | undefined,
   userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID as string | undefined,
   clientId: import.meta.env.VITE_COGNITO_CLIENT_ID as string | undefined,
-  domain: (import.meta.env.VITE_COGNITO_DOMAIN as string | undefined)?.replace(
-    /\\/$/,
-    "",
-  ),
-  apiUrl: (import.meta.env.VITE_AWS_API_URL as string | undefined)?.replace(
-    /\\/$/,
-    "",
-  ),
+  domain: normalizeBaseUrl(import.meta.env.VITE_COGNITO_DOMAIN as string | undefined),
+  apiUrl: normalizeBaseUrl(import.meta.env.VITE_AWS_API_URL as string | undefined),
 };
 
 export const awsConfig = rawConfig;
