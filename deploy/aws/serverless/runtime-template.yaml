@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: CloudSentinels on-demand AWS runtime. Safe to delete after a working session.
+Description: CloudSentinels stable API and Lambda runtime; pause Lambda concurrency between sessions.
 
 Parameters:
   AppOrigin:
