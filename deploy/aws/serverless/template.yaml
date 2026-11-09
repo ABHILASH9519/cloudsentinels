@@ -122,6 +122,14 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoJwtAuthorizer
+        Profile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /profile
+            Method: ANY
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
         Incidents:
           Type: HttpApi
           Properties:
