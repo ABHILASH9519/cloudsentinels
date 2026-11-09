@@ -76,10 +76,18 @@ async function listItems(userId, prefix) {
 
 async function createItem(userId, type, body) {
   const now = new Date().toISOString();
-  const id = randomUUID();
+  const counter = await db.send(new UpdateCommand({
+    TableName: table,
+    Key: { PK: `USER#${userId}`, SK: `COUNTER#${type}` },
+    UpdateExpression: "ADD #nextId :one",
+    ExpressionAttributeNames: { "#nextId": "nextId" },
+    ExpressionAttributeValues: { ":one": 1 },
+    ReturnValues: "UPDATED_NEW",
+  }));
+  const id = String(counter.Attributes.nextId);
   const item = {
     PK: `USER#${userId}`,
-    SK: `${type}#${id}`,
+    SK: `${type}#${id.padStart(16, "0")}`,
     id,
     ownerId: userId,
     createdAt: now,
@@ -93,7 +101,7 @@ async function createItem(userId, type, body) {
 async function getItem(userId, type, id) {
   const result = await db.send(new GetCommand({
     TableName: table,
-    Key: { PK: `USER#${userId}`, SK: `${type}#${id}` },
+    Key: { PK: `USER#${userId}`, SK: `${type}#${String(id).padStart(16, "0")}` },
   }));
   return result.Item ?? null;
 }
@@ -115,7 +123,7 @@ async function updateItem(userId, type, id, body) {
   }
   await db.send(new UpdateCommand({
     TableName: table,
-    Key: { PK: `USER#${userId}`, SK: `${type}#${id}` },
+    Key: { PK: `USER#${userId}`, SK: `${type}#${String(id).padStart(16, "0")}` },
     UpdateExpression: `SET ${sets.join(", ")}`,
     ExpressionAttributeNames: names,
     ExpressionAttributeValues: values,
@@ -148,6 +156,37 @@ export async function handler(event) {
     const id = segments[2];
     const now = new Date().toISOString();
 
+
+    if (resource === "profile" && segments.length === 2) {
+      if (method === "GET") {
+        const profile = await getItem(userId, "PROFILE", "SELF");
+        return response(200, profile ? { name: profile.name } : null);
+      }
+      if (method === "PUT") {
+        const profile = {
+          PK: `USER#${userId}`,
+          SK: "PROFILE#SELF",
+          id: "SELF",
+          ownerId: userId,
+          name: cleanText(body.name, "name", 120, true),
+          updatedAt: now,
+        };
+        await db.send(new PutCommand({ TableName: table, Item: profile }));
+        return response(200, { name: profile.name });
+      }
+    }
+    if (resource === "profile" && segments.length === 2) {
+      if (method === "GET") {
+        const profile = await db.send(new GetCommand({ TableName: table, Key: { PK: `USER#${userId}`, SK: "PROFILE#SELF" } }));
+        return response(200, profile.Item ? { name: profile.Item.name } : null);
+      }
+      if (method === "PUT") {
+        const profile = { PK: `USER#${userId}`, SK: "PROFILE#SELF", id: "SELF", ownerId: userId, name: cleanText(body.name, "name", 120, true), updatedAt: now };
+        await db.send(new PutCommand({ TableName: table, Item: profile }));
+        return response(200, { name: profile.name });
+      }
+    }
+
     if (resource === "incidents" && segments.length === 2) {
       if (method === "GET") return response(200, await listItems(userId, "INCIDENT#"));
       if (method === "POST") {
@@ -178,7 +217,7 @@ export async function handler(event) {
       if (method === "DELETE") {
         const current = await getItem(userId, "INCIDENT", id);
         if (!current) return response(404, { error: "Incident not found." });
-        await db.send(new DeleteCommand({ TableName: table, Key: { PK: `USER#${userId}`, SK: `INCIDENT#${id}` } }));
+        await db.send(new DeleteCommand({ TableName: table, Key: { PK: `USER#${userId}`, SK: `INCIDENT#${String(id).padStart(16, "0")}` } }));
         return response(200, { deleted: true });
       }
     }
