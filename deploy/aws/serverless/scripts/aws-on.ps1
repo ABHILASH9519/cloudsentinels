@@ -11,7 +11,8 @@ $ErrorActionPreference = "Stop"
 foreach ($tool in @("aws", "sam")) {
   if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "$tool CLI is required. Install/configure AWS CLI and AWS SAM CLI first." }
 }
-Push-Location $PSScriptRoot
+$TemplateDir = Split-Path -Parent $PSScriptRoot
+Push-Location $TemplateDir
 try {
   aws sts get-caller-identity --region $Region | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "AWS credentials are not configured or access is denied." }
@@ -30,21 +31,28 @@ try {
   $domain = OutputValue "CognitoHostedUi"
   if (-not $table -or -not $issuer -or -not $client -or -not $pool -or -not $domain) { throw "One or more core stack outputs are missing." }
 
-  Write-Host "Starting temporary API + Lambda runtime..."
+  Write-Host "Deploying/updating the stable API + Lambda runtime..."
   sam deploy --template-file runtime-template.yaml --stack-name $RuntimeStackName --resolve-s3 --capabilities CAPABILITY_IAM --region $Region --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides "AppOrigin=$AppOrigin" "LocalDevOrigin=$LocalDevOrigin" "ApplicationTableName=$table" "CognitoIssuer=$issuer" "UserPoolClientId=$client"
   if ($LASTEXITCODE -ne 0) { throw "Runtime deployment failed. Persistent core resources were left intact." }
 
   $runtime = aws cloudformation describe-stacks --stack-name $RuntimeStackName --region $Region --query "Stacks[0].Outputs" --output json | ConvertFrom-Json
   $api = ($runtime | Where-Object { $_.OutputKey -eq "ApiBaseUrl" } | Select-Object -First 1).OutputValue
+  $functionName = ($runtime | Where-Object { $_.OutputKey -eq "OperationsFunctionName" } | Select-Object -First 1).OutputValue
+  if (-not $api -or -not $functionName) { throw "Runtime API/function outputs are missing." }
+
+  Write-Host "Resuming Lambda execution..."
+  aws lambda delete-function-concurrency --function-name $functionName --region $Region 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "Could not resume Lambda. Check function permissions and stack status." }
+
   Write-Host ""
   Write-Host "CloudSentinels AWS runtime is ON." -ForegroundColor Green
-  Write-Host "Set these Vercel/local frontend variables, then redeploy/restart the frontend:"
+  Write-Host "API URL remains stable across pause/resume. Configure these Vercel/local frontend values once:"
   Write-Host "VITE_AWS_REGION=$Region"
   Write-Host "VITE_COGNITO_USER_POOL_ID=$pool"
   Write-Host "VITE_COGNITO_CLIENT_ID=$client"
   Write-Host "VITE_COGNITO_DOMAIN=$domain"
   Write-Host "VITE_AWS_API_URL=$api"
   Write-Host ""
-  Write-Host "To stop the temporary runtime, run: .\aws-off.ps1 -Region $Region"
-  Write-Host "The Cognito user pool and DynamoDB data table stay available."
+  Write-Host "When finished: .\scripts\aws-off.ps1 -Region $Region"
+  Write-Host "This pauses Lambda; it does not delete your users, data, API URL, or stack."
 } finally { Pop-Location }
