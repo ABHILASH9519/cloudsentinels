@@ -170,7 +170,7 @@ export async function handler(event) {
       }
     }
 
-    if (resource === "incidents" && segments.length === 2) {
+    if (resource === "incidents" && segments.length === 1) {
       if (method === "GET") return response(200, await listItems(userId, "INCIDENT#"));
       if (method === "POST") {
         const item = await createItem(userId, "INCIDENT", {
@@ -188,7 +188,7 @@ export async function handler(event) {
       }
     }
 
-    if (resource === "incidents" && id && segments.length === 3) {
+    if (resource === "incidents" && id && segments.length === 2) {
       if (method === "GET") {
         const item = await getItem(userId, "INCIDENT", id);
         return item ? response(200, item) : response(404, { error: "Incident not found." });
@@ -220,7 +220,7 @@ export async function handler(event) {
       }
     }
 
-    if (resource === "alerts" && segments.length === 2) {
+    if (resource === "alerts" && segments.length === 1) {
       if (method === "GET") return response(200, await listItems(userId, "ALERT#"));
       if (method === "POST") {
         const alert = await createItem(userId, "ALERT", {
@@ -242,7 +242,7 @@ export async function handler(event) {
       }
     }
 
-    if (resource === "metrics" && segments.length === 2) {
+    if (resource === "metrics" && segments.length === 1) {
       if (method === "GET") return response(200, await listItems(userId, "METRIC#"));
       if (method === "POST") {
         if (typeof body.value !== "number" || !Number.isFinite(body.value)) {
