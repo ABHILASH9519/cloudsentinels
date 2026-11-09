@@ -1,11 +1,12 @@
 name: AWS architecture checks
 on:
   push:
-    branches: [feat/aws-native-architecture]
+    branches: [feat/aws-native-architecture, feat/n8n-event-automation]
   pull_request:
     branches: [main]
     paths:
       - "deploy/aws/serverless/**"
+      - "deploy/automation/**"
       - "src/frontend/src/aws/**"
       - "src/frontend/src/App.tsx"
       - "src/frontend/src/main.tsx"
