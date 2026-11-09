@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useAwsAuth } from "../aws/AwsAuth";
 
 const navItems = [
   {
@@ -50,7 +50,7 @@ const navItems = [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { clear } = useInternetIdentity();
+  const { signOut } = useAwsAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -106,7 +106,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           variant="ghost"
           size="sm"
           data-ocid="auth.logout.button"
-          onClick={clear}
+          onClick={() => void signOut()}
           className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
         >
           <LogOut className="w-4 h-4" />
