@@ -87,6 +87,10 @@ The start command is safe to repeat. It updates the stacks when the templates ch
 
 The core stack is intentionally retained. Do not delete it as a normal stop action. Deleting or replacing the persistent foundation is a separate data/identity migration operation and is not automated by these scripts.
 
+## Optional workflow automation
+
+See [n8n / Zapier automation](../../automation/README.md) for the EventBridge → SQS → n8n integration, local start/stop commands, event contracts and safety guidance. The automation services are separate from the API runtime and can be run only when needed.
+
 ## Current API
 
 - `GET /health` — unauthenticated health probe.
