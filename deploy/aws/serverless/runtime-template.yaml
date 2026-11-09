@@ -44,6 +44,13 @@ Resources:
       MessageRetentionPeriod: 1209600
       SqsManagedSseEnabled: true
 
+  AutomationDeliveryDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-automation-delivery-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
   AutomationEventsQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -72,6 +79,23 @@ Resources:
               ArnEquals:
                 aws:SourceArn: !GetAtt AutomationEventRule.Arn
 
+  AutomationDeliveryDlqPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref AutomationDeliveryDeadLetterQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt AutomationDeliveryDeadLetterQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt AutomationEventRule.Arn
+
   AutomationEventRule:
     Type: AWS::Events::Rule
     Properties:
@@ -89,7 +113,7 @@ Resources:
         - Id: AutomationEventsQueueTarget
           Arn: !GetAtt AutomationEventsQueue.Arn
           DeadLetterConfig:
-            Arn: !GetAtt AutomationDeadLetterQueue.Arn
+            Arn: !GetAtt AutomationDeliveryDeadLetterQueue.Arn
 
   OperationsFunction:
     Type: AWS::Serverless::Function
@@ -204,3 +228,5 @@ Outputs:
     Value: !GetAtt AutomationEventsQueue.Arn
   AutomationDeadLetterQueueUrl:
     Value: !Ref AutomationDeadLetterQueue
+  AutomationDeliveryDeadLetterQueueUrl:
+    Value: !Ref AutomationDeliveryDeadLetterQueue
