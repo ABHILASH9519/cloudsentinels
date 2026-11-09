@@ -104,6 +104,7 @@ Resources:
       EventPattern:
         source:
           - cloudsentinels.api
+          - cloudsentinels.cluster-agent
         detail-type:
           - IncidentCreated
           - IncidentUpdated
@@ -111,6 +112,12 @@ Resources:
           - AlertCreated
           - AlertUpdated
           - MetricRecorded
+          - PodCrashLoopBackOff
+          - NodeNotReady
+          - CpuThresholdExceeded
+          - MemoryPressure
+          - DeploymentUnhealthy
+          - ApiLatencyHigh
       Targets:
         - Id: AutomationEventsQueueTarget
           Arn: !GetAtt AutomationEventsQueue.Arn
@@ -199,6 +206,32 @@ Resources:
             Auth:
               Authorizer: CognitoJwtAuthorizer
 
+  AutomationProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: automation/
+      Handler: index.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApplicationTableName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+              Resource: !GetAtt AutomationEventsQueue.Arn
+      Events:
+        AutomationQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AutomationEventsQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 5
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -232,3 +265,5 @@ Outputs:
     Value: !Ref AutomationDeadLetterQueue
   AutomationDeliveryDeadLetterQueueUrl:
     Value: !Ref AutomationDeliveryDeadLetterQueue
+  AutomationProcessorFunctionName:
+    Value: !Ref AutomationProcessor

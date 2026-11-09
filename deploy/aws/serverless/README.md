@@ -21,11 +21,12 @@ The pause does not delete data, user accounts, API Gateway, Lambda code, or Clou
 - **API:** API Gateway HTTP API JWT authorizer validates Cognito issuer and client audience.
 - **Application backend:** Node.js Lambda reads the verified Cognito `sub` claim from API Gateway context; it does not trust a user ID supplied by the browser.
 - **Data:** DynamoDB single table with per-user partition keys `PK=USER#<sub>`; table uses on-demand billing and server-side encryption.
+- **Automation:** EventBridge routes API and cluster-agent events to SQS. An SQS-triggered Lambda records idempotent automation runs and classifies supported Kubernetes signals. It is deliberately non-destructive until a cluster target, Kubernetes adapter, scoped RBAC, and approval policy are configured.
 - **Safety:** The core Cognito User Pool and DynamoDB table have CloudFormation `Retain` policies. The runtime can be paused without deleting either.
 
 ## Requirements
 
-Windows PowerShell 7 (or Windows PowerShell 5.1), AWS CLI v2, AWS SAM CLI, and an AWS account configured with `aws configure` or an AWS SSO profile. Docker is recommended for SAM builds. Use an IAM identity permitted to manage CloudFormation, Cognito, DynamoDB, Lambda, API Gateway, IAM roles/policies, and the SAM deployment artifact bucket.
+Windows PowerShell 7 (or Windows PowerShell 5.1), AWS CLI v2, and an AWS account configured with `aws configure` or an AWS SSO profile. AWS SAM CLI and Docker are not required: the start script packages Lambda code with `aws cloudformation package`. The caller needs permission to upload artifacts to the private S3 bucket and pass the scoped `CloudSentinelsDeploymentRole`; CloudFormation assumes that role to provision the stacks.
 
 ## First start
 
@@ -73,7 +74,7 @@ Check status:
 .\deploy\aws\serverless\scripts\aws-status.ps1 -Region ap-south-1
 ```
 
-The start command is safe to repeat. It updates the stacks when the templates change and then resumes Lambda. The stop command sets Lambda reserved concurrency to zero; it does not delete the runtime stack or change the API URL.
+The start command is safe to repeat. It updates the stacks when the templates change and deploys the automation processor along with the API runtime. The stop command sets Lambda reserved concurrency to zero; it does not delete the runtime stack or change the API URL.
 
 ## Costs and data safety
 
