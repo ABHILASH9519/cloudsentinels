@@ -88,7 +88,7 @@ The event contains identifiers and minimal metadata, not raw logs, access tokens
 ## Reliability and safety
 
 - DynamoDB remains the source of truth. Event publishing is best-effort and does not roll back successful API writes.
-- EventBridge routes matching events to SQS. SQS retries delivery to n8n; messages that exceed the configured receive count are moved to the DLQ.
+- EventBridge has a dedicated delivery DLQ for messages it cannot deliver to the primary queue. SQS separately retries processing by n8n; messages that exceed the configured receive count are moved to the processing DLQ.
 - Configure an n8n error workflow and alert on DLQ depth. Use idempotency keyed by EventBridge event ID before creating tickets or sending non-repeatable notifications.
 - Do not let a workflow automatically delete incidents, disable accounts, or perform destructive remediation without an approval gate.
 - Protect n8n with strong owner credentials, encryption key, restricted network access and backups. The local Compose file binds port 5678 to 127.0.0.1 only.
