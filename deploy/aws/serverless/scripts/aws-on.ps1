@@ -31,8 +31,12 @@ try {
   $domain = OutputValue "CognitoHostedUi"
   if (-not $table -or -not $issuer -or -not $client -or -not $pool -or -not $domain) { throw "One or more core stack outputs are missing." }
 
+  Write-Host "Building the stable API + Lambda runtime..."
+  sam build --template-file runtime-template.yaml
+  if ($LASTEXITCODE -ne 0) { throw "SAM build failed." }
+
   Write-Host "Deploying/updating the stable API + Lambda runtime..."
-  sam deploy --template-file runtime-template.yaml --stack-name $RuntimeStackName --resolve-s3 --capabilities CAPABILITY_IAM --region $Region --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides "AppOrigin=$AppOrigin" "LocalDevOrigin=$LocalDevOrigin" "ApplicationTableName=$table" "CognitoIssuer=$issuer" "UserPoolClientId=$client"
+  sam deploy --template-file .aws-sam/build/template.yaml --stack-name $RuntimeStackName --resolve-s3 --capabilities CAPABILITY_IAM --region $Region --no-confirm-changeset --no-fail-on-empty-changeset --parameter-overrides "AppOrigin=$AppOrigin" "LocalDevOrigin=$LocalDevOrigin" "ApplicationTableName=$table" "CognitoIssuer=$issuer" "UserPoolClientId=$client"
   if ($LASTEXITCODE -ne 0) { throw "Runtime deployment failed. Persistent core resources were left intact." }
 
   $runtime = aws cloudformation describe-stacks --stack-name $RuntimeStackName --region $Region --query "Stacks[0].Outputs" --output json | ConvertFrom-Json
