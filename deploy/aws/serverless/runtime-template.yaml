@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CloudSentinels on-demand AWS runtime. Safe to delete after a working session.
+
+Parameters:
+  AppOrigin:
+    Type: String
+    AllowedPattern: "^https://[A-Za-z0-9.-]+(:[0-9]+)?$"
+  LocalDevOrigin:
+    Type: String
+    Default: http://localhost:5173
+    AllowedPattern: "^http://localhost(:[0-9]+)?$"
+  ApplicationTableName:
+    Type: String
+  CognitoIssuer:
+    Type: String
+  UserPoolClientId:
+    Type: String
+  StageName:
+    Type: String
+    Default: v1
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref ApplicationTableName
+        STAGE_NAME: !Ref StageName
+
+Resources:
+  OperationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: function/
+      Handler: index.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApplicationTableName
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /health
+            Method: GET
+        Me:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /me
+            Method: GET
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+        Profile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /profile
+            Method: ANY
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+        Incidents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /incidents
+            Method: ANY
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+        Incident:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /incidents/{id}
+            Method: ANY
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+        Alerts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /alerts
+            Method: ANY
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+        Alert:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /alerts/{id}
+            Method: ANY
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+        Metrics:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /metrics
+            Method: ANY
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+        Comments:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /incidents/{id}/comments
+            Method: ANY
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+      CorsConfiguration:
+        AllowOrigins: [!Ref AppOrigin, !Ref LocalDevOrigin]
+        AllowHeaders: [authorization, content-type]
+        AllowMethods: [GET, POST, PATCH, PUT, DELETE, OPTIONS]
+        MaxAge: 600
+      Auth:
+        Authorizers:
+          CognitoJwtAuthorizer:
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              issuer: !Ref CognitoIssuer
+              audience:
+                - !Ref UserPoolClientId
+
+Outputs:
+  ApiBaseUrl:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
+  OperationsFunctionName:
+    Value: !Ref OperationsFunction
