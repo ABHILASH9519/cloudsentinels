@@ -158,7 +158,7 @@ export async function handler(event) {
     const now = new Date().toISOString();
 
 
-    if (resource === "profile" && segments.length === 2) {
+    if (resource === "profile" && segments.length === 1) {
       if (method === "GET") {
         const profile = await db.send(new GetCommand({ TableName: table, Key: { PK: `USER#${userId}`, SK: "PROFILE#SELF" } }));
         return response(200, profile.Item ? { name: profile.Item.name } : null);
