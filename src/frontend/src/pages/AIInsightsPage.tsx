@@ -13,7 +13,7 @@ export function AIInsightsPage() {
   );
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="mission-page p-6 space-y-6">
       <div>
         <h1 className="font-display text-2xl font-700 text-foreground">
           AI Insights
