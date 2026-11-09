@@ -1,7 +1,7 @@
 name: Format AWS frontend changes
 on:
-  push:
-    branches: [feat/aws-native-architecture]
+  pull_request:
+    branches: [main]
 permissions:
   contents: write
 jobs:
@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event.pull_request.head.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -28,5 +28,5 @@ jobs:
           git add src/frontend/src
           if ! git diff --cached --quiet; then
             git commit -m "style(aws): format frontend integration"
-            git push origin HEAD:${GITHUB_REF_NAME}
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
           fi
