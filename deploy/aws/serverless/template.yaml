@@ -8,6 +8,11 @@ Parameters:
     Description: Exact HTTPS frontend origin, e.g. https://cloudsentinels.vercel.app
     AllowedPattern: "^https://[A-Za-z0-9.-]+(:[0-9]+)?$"
     ConstraintDescription: Supply an HTTPS origin only, without a path.
+  LocalDevOrigin:
+    Type: String
+    Default: http://localhost:5173
+    Description: Optional local Vite origin for development.
+    AllowedPattern: "^http://localhost(:[0-9]+)?$"
   CognitoDomainPrefix:
     Type: String
     Description: Globally unique Cognito hosted UI domain prefix (lowercase, 1-63 chars).
@@ -67,8 +72,10 @@ Resources:
       SupportedIdentityProviders: [COGNITO]
       CallbackURLs:
         - !Sub "${AppOrigin}/"
+        - !Sub "${LocalDevOrigin}/"
       LogoutURLs:
         - !Sub "${AppOrigin}/"
+        - !Sub "${LocalDevOrigin}/"
 
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
