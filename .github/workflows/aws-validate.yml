@@ -1,0 +1,29 @@
+name: AWS architecture checks
+on:
+  push:
+    branches: [feat/aws-native-architecture]
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/aws/serverless/**"
+      - "src/frontend/src/aws/**"
+      - "src/frontend/src/App.tsx"
+      - "src/frontend/src/main.tsx"
+      - "src/frontend/src/hooks/useActor.ts"
+      - "src/frontend/src/pages/LoginPage.tsx"
+      - "src/frontend/src/components/Layout.tsx"
+permissions:
+  contents: read
+jobs:
+  aws-template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/setup-sam@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate SAM template
+        run: sam validate --lint --template-file deploy/aws/serverless/template.yaml
+      - name: Check Lambda syntax
+        run: node --check deploy/aws/serverless/function/index.js
