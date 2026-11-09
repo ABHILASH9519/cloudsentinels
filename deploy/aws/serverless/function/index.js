@@ -213,17 +213,18 @@ export async function handler(event) {
     if (resource === "incidents" && id && segments.length === 2) {
       if (method === "GET") {
         const item = await getItem(userId, "INCIDENT", id);
-        if (item) await publishDomainEvent("IncidentUpdated", userId, { id: item.id, status: item.status, severity: item.severity });
         return item ? response(200, item) : response(404, { error: "Incident not found." });
       }
       if (method === "PATCH" || method === "PUT") {
         const item = await updateItem(userId, "INCIDENT", id, body);
+        if (item) await publishDomainEvent("IncidentUpdated", userId, { id: item.id, status: item.status, severity: item.severity });
         return item ? response(200, item) : response(404, { error: "Incident not found." });
       }
       if (method === "DELETE") {
         const current = await getItem(userId, "INCIDENT", id);
         if (!current) return response(404, { error: "Incident not found." });
         await db.send(new DeleteCommand({ TableName: table, Key: { PK: `USER#${userId}`, SK: `INCIDENT#${String(id).padStart(16, "0")}` } }));
+        await publishDomainEvent("IncidentDeleted", userId, { id: current.id, severity: current.severity });
         return response(200, { deleted: true });
       }
     }
@@ -262,6 +263,7 @@ export async function handler(event) {
     if (resource === "alerts" && id) {
       if (method === "PATCH" || method === "PUT") {
         const item = await updateItem(userId, "ALERT", id, body);
+        if (item) await publishDomainEvent("AlertUpdated", userId, { id: item.id, status: item.status, severity: item.severity });
         return item ? response(200, item) : response(404, { error: "Alert not found." });
       }
     }
