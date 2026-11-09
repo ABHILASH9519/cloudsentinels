@@ -1,0 +1,101 @@
+# CloudSentinels — switchable AWS + ICP architectures
+
+This branch contains **Option 1: AWS-native**. The existing ICP implementation remains on `main`; the separate Clerk + ICP experiment remains on its own branch. Nothing here deletes or rewrites those architectures. See [architecture switching](../../../docs/architecture-switching.md) for switching the source branch between ICP and AWS.
+
+## On-demand operating model
+
+AWS is split into two CloudFormation stacks so that you can use the app when needed without recreating your identity or data every session:
+
+| Layer | Stack | Lifecycle | Resources |
+|---|---|---|---|
+| Persistent foundation | `cloudsentinels-core` | Deploy once; keep | Cognito User Pool/client/domain and DynamoDB table |
+| Runtime | `cloudsentinels-runtime` | Deploy once; pause/resume | API Gateway HTTP API and Lambda |
+
+**Important:** Lambda is serverless; it has no continuously running VM. When paused, this setup sets reserved concurrency to `0`, blocking Lambda execution. Resuming removes that concurrency override. This keeps the API URL stable, so you do not need to rebuild the frontend or change Vercel environment variables every time you switch the runtime on and off.
+
+The pause does not delete data, user accounts, API Gateway, Lambda code, or CloudFormation stacks. API Gateway requests can still incur request charges while paused, so close the app/browser and stop external polling while it is off.
+
+## Architecture
+
+- **Authentication:** Cognito User Pool, email sign-in, verified email, OAuth authorization-code flow with PKCE (public browser client; no client secret).
+- **API:** API Gateway HTTP API JWT authorizer validates Cognito issuer and client audience.
+- **Application backend:** Node.js Lambda reads the verified Cognito `sub` claim from API Gateway context; it does not trust a user ID supplied by the browser.
+- **Data:** DynamoDB single table with per-user partition keys `PK=USER#<sub>`; table uses on-demand billing and server-side encryption.
+- **Safety:** The core Cognito User Pool and DynamoDB table have CloudFormation `Retain` policies. The runtime can be paused without deleting either.
+
+## Requirements
+
+Windows PowerShell 7 (or Windows PowerShell 5.1), AWS CLI v2, AWS SAM CLI, and an AWS account configured with `aws configure` or an AWS SSO profile. Docker is recommended for SAM builds. Use an IAM identity permitted to manage CloudFormation, Cognito, DynamoDB, Lambda, API Gateway, IAM roles/policies, and the SAM deployment artifact bucket.
+
+## First start
+
+From the repository root, open PowerShell:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\deploy\aws\serverless\scripts\aws-on.ps1 -Region ap-south-1 -AppOrigin "https://YOUR-VERCEL-DOMAIN" -CognitoDomainPrefix "a-globally-unique-lowercase-prefix"
+```
+
+Use the exact deployed Vercel origin, with no path or trailing slash, and choose a globally unique Cognito prefix. The script:
+1. Verifies AWS credentials.
+2. Creates/updates the persistent Cognito + DynamoDB foundation.
+3. Creates/updates the API Gateway + Lambda runtime.
+4. Resumes Lambda execution.
+5. Prints the frontend configuration values.
+
+After the first successful start, configure these public values in Vercel Project → Settings → Environment Variables (and locally in `src/frontend/.env.local` if required), then redeploy/restart the frontend:
+
+- `VITE_AWS_REGION`
+- `VITE_COGNITO_USER_POOL_ID`
+- `VITE_COGNITO_CLIENT_ID`
+- `VITE_COGNITO_DOMAIN`
+- `VITE_AWS_API_URL`
+
+These are public browser configuration values, not secrets. Never put AWS access keys or other credentials in `VITE_*` variables.
+
+## Daily start / stop
+
+Start or resume:
+
+```powershell
+.\deploy\aws\serverless\scripts\aws-on.ps1 -Region ap-south-1 -AppOrigin "https://YOUR-VERCEL-DOMAIN" -CognitoDomainPrefix "YOUR-COGNITO-PREFIX"
+```
+
+Pause after use:
+
+```powershell
+.\deploy\aws\serverless\scripts\aws-off.ps1 -Region ap-south-1
+```
+
+Check status:
+
+```powershell
+.\deploy\aws\serverless\scripts\aws-status.ps1 -Region ap-south-1
+```
+
+The start command is safe to repeat. It updates the stacks when the templates change and then resumes Lambda. The stop command sets Lambda reserved concurrency to zero; it does not delete the runtime stack or change the API URL.
+
+## Costs and data safety
+
+- There is no EC2 instance or continuously running container in this architecture.
+- Lambda compute is billed on invocations/runtime; a concurrency pause blocks Lambda execution.
+- HTTP API is request-billed, so requests while paused may still cost money. Close the app and stop polling.
+- DynamoDB uses on-demand request billing, but stored data remains and storage can incur ongoing charges.
+- Cognito usage can incur charges depending on monthly active users and the selected pricing tier.
+- SAM may create a deployment artifact S3 bucket with `--resolve-s3`; it is retained for future deployments and can incur small storage charges.
+- No cost is guaranteed to be zero. Check AWS Billing/Cost Explorer and configure a budget alert before regular use.
+
+The core stack is intentionally retained. Do not delete it as a normal stop action. Deleting or replacing the persistent foundation is a separate data/identity migration operation and is not automated by these scripts.
+
+## Current API
+
+- `GET /health` — unauthenticated health probe.
+- `GET /me` — authenticated Cognito identity summary.
+- `GET|POST /incidents`
+- `GET|PATCH|DELETE /incidents/{id}`
+- `GET|POST /incidents/{id}/comments`
+- `GET|POST /alerts`
+- `PATCH /alerts/{id}`
+- `GET|POST /metrics`
+
+All application endpoints except health require a valid Cognito JWT. This is the AWS backend foundation; remaining application features/integrations must be validated before production use.
