@@ -107,7 +107,9 @@ Resources:
         detail-type:
           - IncidentCreated
           - IncidentUpdated
+          - IncidentDeleted
           - AlertCreated
+          - AlertUpdated
           - MetricRecorded
       Targets:
         - Id: AutomationEventsQueueTarget
