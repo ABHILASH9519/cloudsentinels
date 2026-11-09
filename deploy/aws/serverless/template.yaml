@@ -190,7 +190,7 @@ Resources:
     Properties:
       StageName: !Ref StageName
       CorsConfiguration:
-        AllowOrigins: [!Ref AppOrigin]
+        AllowOrigins: [!Ref AppOrigin, !Ref LocalDevOrigin]
         AllowHeaders: [authorization, content-type]
         AllowMethods: [GET, POST, PATCH, PUT, DELETE, OPTIONS]
         MaxAge: 600
