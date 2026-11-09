@@ -36,14 +36,14 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\deploy\aws\serverless\scripts\aws-on.ps1 -Region ap-south-1 -AppOrigin "https://YOUR-VERCEL-DOMAIN" -CognitoDomainPrefix "a-globally-unique-lowercase-prefix"
 ```
 
-Use the exact deployed Vercel origin, with no path or trailing slash, and choose a globally unique Cognito prefix. The script:
+Use the exact deployed Vercel origin, with no path or trailing slash, and choose a globally unique Cognito prefix. For the current preview branch, the verified stable Vercel alias is `https://devops-git-feat-n8n-event-au-e5ea6d-abhilashs-projects-d66ddd5e.vercel.app`; use that as `-AppOrigin` when configuring Cognito for this preview. If the project alias changes, use the current alias shown in Vercel. Production must use its own exact production origin and matching Cognito callback/logout URLs. The script:
 1. Verifies AWS credentials.
 2. Creates/updates the persistent Cognito + DynamoDB foundation.
 3. Creates/updates the API Gateway + Lambda runtime.
 4. Resumes Lambda execution.
 5. Prints the frontend configuration values.
 
-After the first successful start, configure these public values in Vercel Project → Settings → Environment Variables (and locally in `src/frontend/.env.local` if required), then redeploy/restart the frontend:
+After the first successful start, copy the printed outputs into Vercel Project → Settings → Environment Variables for the `feat/n8n-event-automation` Preview branch (and locally in `src/frontend/.env.local` if required). Use the matching outputs from the same AWS region and core/runtime stacks. Set all five values below; do not enter the example placeholders from `.env.example`. Then create a fresh Preview deployment because Vite embeds `VITE_*` values at build time:
 
 - `VITE_AWS_REGION`
 - `VITE_COGNITO_USER_POOL_ID`
@@ -51,7 +51,7 @@ After the first successful start, configure these public values in Vercel Projec
 - `VITE_COGNITO_DOMAIN`
 - `VITE_AWS_API_URL`
 
-These are public browser configuration values, not secrets. Never put AWS access keys or other credentials in `VITE_*` variables.
+These are public browser configuration values, not secrets. Never put AWS access keys or other credentials in `VITE_*` variables. `VITE_COGNITO_DOMAIN` is the HTTPS `CognitoHostedUi` output; `VITE_AWS_API_URL` is the `ApiBaseUrl` output; `VITE_COGNITO_USER_POOL_ID` and `VITE_COGNITO_CLIENT_ID` are `UserPoolId` and `UserPoolClientId`; `VITE_AWS_REGION` is the region used for the stacks. The Cognito app client must allow the exact Vercel origin with a trailing `/` as both callback and logout URL. The frontend redirects back to `${window.location.origin}/`, so preview aliases must be explicitly allowlisted in the core stack.
 
 ## Daily start / stop
 
