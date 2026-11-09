@@ -29,6 +29,8 @@ Globals:
 Resources:
   UserPool:
     Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       UserPoolName: !Sub "${AWS::StackName}-users"
       UsernameAttributes: [email]
@@ -66,10 +68,6 @@ Resources:
         - !Sub "${AppOrigin}/"
       LogoutURLs:
         - !Sub "${AppOrigin}/"
-      ExplicitAuthFlows:
-        - ALLOW_USER_SRP_AUTH
-        - ALLOW_REFRESH_TOKEN_AUTH
-        - ALLOW_USER_PASSWORD_AUTH
 
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
