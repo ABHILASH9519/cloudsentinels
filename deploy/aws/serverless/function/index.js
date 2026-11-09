@@ -134,7 +134,9 @@ async function updateItem(userId, type, id, body) {
 export async function handler(event) {
   try {
     const method = event.requestContext?.http?.method ?? "GET";
-    const path = event.rawPath ?? "/";
+    let path = event.rawPath ?? "/";
+    const stagePrefix = `/${process.env.STAGE_NAME ?? "v1"}/`;
+    if (path.startsWith(stagePrefix)) path = path.slice(stagePrefix.length - 1);
     if (path.endsWith("/health") && method === "GET") {
       return response(200, { status: "ok", service: "cloudsentinels-aws-api" });
     }
@@ -151,8 +153,8 @@ export async function handler(event) {
 
     const body = parseBody(event);
     const segments = path.split("/").filter(Boolean);
-    const resource = segments[1];
-    const id = segments[2];
+    const resource = segments[0];
+    const id = segments[1];
     const now = new Date().toISOString();
 
 
@@ -203,7 +205,7 @@ export async function handler(event) {
       }
     }
 
-    if (resource === "incidents" && id && segments[3] === "comments") {
+    if (resource === "incidents" && id && segments[2] === "comments") {
       if (method === "GET") return response(200, await listItems(userId, `COMMENT#${id}#`));
       if (method === "POST") {
         const incident = await getItem(userId, "INCIDENT", id);
