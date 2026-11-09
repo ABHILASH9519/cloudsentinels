@@ -1,4 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import {
   DeleteCommand,
   DynamoDBDocumentClient,
@@ -9,7 +10,27 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const eventBridge = new EventBridgeClient({});
 const table = process.env.TABLE_NAME;
+const eventBusName = process.env.EVENT_BUS_NAME;
+
+async function publishDomainEvent(detailType, userId, resource) {
+  if (!eventBusName) return;
+  try {
+    await eventBridge.send(new PutEventsCommand({
+      Entries: [{
+        EventBusName: eventBusName,
+        Source: "cloudsentinels.api",
+        DetailType: detailType,
+        Time: new Date(),
+        Detail: JSON.stringify({ userId, resource, occurredAt: new Date().toISOString() }),
+      }],
+    }));
+  } catch (error) {
+    // Domain persistence must not fail because an optional automation transport is unavailable.
+    console.error("Domain event publish failed", { detailType, name: error?.name });
+  }
+}
 
 const response = (statusCode, body) => ({
   statusCode,
@@ -184,6 +205,7 @@ export async function handler(event) {
           suggestedFix: "",
           assignee: "",
         });
+        await publishDomainEvent("IncidentCreated", userId, { id: item.id, severity: item.severity, title: item.title });
         return response(201, item);
       }
     }
@@ -191,6 +213,7 @@ export async function handler(event) {
     if (resource === "incidents" && id && segments.length === 2) {
       if (method === "GET") {
         const item = await getItem(userId, "INCIDENT", id);
+        if (item) await publishDomainEvent("IncidentUpdated", userId, { id: item.id, status: item.status, severity: item.severity });
         return item ? response(200, item) : response(404, { error: "Incident not found." });
       }
       if (method === "PATCH" || method === "PUT") {
@@ -231,6 +254,7 @@ export async function handler(event) {
           status: "active",
           timestamp: now,
         });
+        await publishDomainEvent("AlertCreated", userId, { id: alert.id, severity: alert.severity, title: alert.title });
         return response(201, alert);
       }
     }
@@ -255,6 +279,7 @@ export async function handler(event) {
           source: cleanText(body.source ?? "", "source", 100),
           timestamp: now,
         });
+        await publishDomainEvent("MetricRecorded", userId, { id: item.id, name: item.name, value: item.value, unit: item.unit });
         return response(201, item);
       }
     }
