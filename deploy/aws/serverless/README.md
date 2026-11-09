@@ -1,6 +1,6 @@
 # CloudSentinels — switchable AWS + ICP architectures
 
-This branch contains **Option 1: AWS-native**. The existing ICP implementation remains on `main`; the separate Clerk + ICP experiment remains on its own branch. Nothing here deletes or rewrites those architectures.
+This branch contains **Option 1: AWS-native**. The existing ICP implementation remains on `main`; the separate Clerk + ICP experiment remains on its own branch. Nothing here deletes or rewrites those architectures. See [architecture switching](../../../docs/architecture-switching.md) for switching the source branch between ICP and AWS.
 
 ## On-demand operating model
 
