@@ -114,7 +114,7 @@ export function DashboardPage() {
 
       {/* Charts */}
       <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="telemetry-glass border-cyan-200/10">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Incidents by Status
@@ -163,7 +163,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="telemetry-glass border-cyan-200/10">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Incidents by Severity
