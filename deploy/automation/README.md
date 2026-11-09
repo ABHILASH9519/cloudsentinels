@@ -51,7 +51,18 @@ docker compose --env-file .env up -d
 
 4. Open http://localhost:5678 and create the n8n owner account.
 5. In n8n, create an AWS credential for the SQS Trigger node. Use a dedicated least-privilege IAM identity scoped to the automation queue ARN; temporary credentials are preferred. The environment variables are provided for local development only and are not required if credentials are configured directly in n8n.
-6. Configure an SQS Trigger for the queue URL printed by the AWS runtime stack output `AutomationQueueUrl`. Select the region `ap-south-1`.
+6. Configure an SQS Trigger for the queue URL printed by the AWS runtime stack output `AutomationQueueUrl`. Select the region `ap-south-1`. The credential needs only the following queue-scoped actions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"],
+    "Resource": "<AutomationQueueArn>"
+  }]
+}
+```
 7. Create a workflow with an IF/Switch node on `detail-type`, then add the appropriate notification/ticketing nodes. Enable the workflow only after testing with a non-production event.
 
 Stop when finished:
