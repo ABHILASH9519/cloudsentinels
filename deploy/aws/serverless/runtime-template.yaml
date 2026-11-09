@@ -29,8 +29,69 @@ Globals:
       Variables:
         TABLE_NAME: !Ref ApplicationTableName
         STAGE_NAME: !Ref StageName
+        EVENT_BUS_NAME: !Ref CloudSentinelsEventBus
 
 Resources:
+  CloudSentinelsEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: cloudsentinels-domain-events
+
+  AutomationDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-automation-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  AutomationEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-automation-events
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt AutomationDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  AutomationEventsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref AutomationEventsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt AutomationEventsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt AutomationEventRule.Arn
+
+  AutomationEventRule:
+    Type: AWS::Events::Rule
+    DependsOn: AutomationEventsQueuePolicy
+    Properties:
+      Name: cloudsentinels-domain-events-to-sqs
+      EventBusName: !Ref CloudSentinelsEventBus
+      EventPattern:
+        source:
+          - cloudsentinels.api
+        detail-type:
+          - IncidentCreated
+          - IncidentUpdated
+          - AlertCreated
+          - MetricRecorded
+      Targets:
+        - Id: AutomationEventsQueueTarget
+          Arn: !GetAtt AutomationEventsQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt AutomationDeadLetterQueue.Arn
+
   OperationsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -39,6 +100,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApplicationTableName
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref CloudSentinelsEventBus
       Events:
         Health:
           Type: HttpApi
@@ -134,3 +197,11 @@ Outputs:
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
   OperationsFunctionName:
     Value: !Ref OperationsFunction
+  EventBusName:
+    Value: !Ref CloudSentinelsEventBus
+  AutomationQueueUrl:
+    Value: !Ref AutomationEventsQueue
+  AutomationQueueArn:
+    Value: !GetAtt AutomationEventsQueue.Arn
+  AutomationDeadLetterQueueUrl:
+    Value: !Ref AutomationDeadLetterQueue
