@@ -3,6 +3,7 @@ import { assertAwsConfig, awsConfig } from "./awsConfig";
 const TOKEN_KEY = "cloudsentinels.aws.tokens";
 const VERIFIER_KEY = "cloudsentinels.aws.pkce";
 const STATE_KEY = "cloudsentinels.aws.state";
+const NONCE_KEY = "cloudsentinels.aws.nonce";
 
 type TokenSet = { access_token: string; id_token: string; refresh_token?: string; expires_at: number };
 
@@ -34,8 +35,10 @@ export async function startSignIn() {
   assertAwsConfig();
   const verifier = randomString(64);
   const state = randomString(32);
+  const nonce = randomString(32);
   sessionStorage.setItem(VERIFIER_KEY, verifier);
   sessionStorage.setItem(STATE_KEY, state);
+  sessionStorage.setItem(NONCE_KEY, nonce);
   const params = new URLSearchParams({
     client_id: awsConfig.clientId!,
     response_type: "code",
@@ -44,18 +47,26 @@ export async function startSignIn() {
     code_challenge_method: "S256",
     code_challenge: await challenge(verifier),
     state,
+    nonce,
   });
   window.location.assign(`${awsConfig.domain}/oauth2/authorize?${params.toString()}`);
 }
 
 export async function completeSignIn() {
   const url = new URL(window.location.href);
+  const oauthError = url.searchParams.get("error");
+  if (oauthError) {
+    const description = url.searchParams.get("error_description");
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+    throw new Error(description || `Cognito sign-in failed: ${oauthError}`);
+  }
   const code = url.searchParams.get("code");
   if (!code) return;
   const state = url.searchParams.get("state");
   const expectedState = sessionStorage.getItem(STATE_KEY);
   const verifier = sessionStorage.getItem(VERIFIER_KEY);
-  if (!state || !expectedState || state !== expectedState || !verifier) {
+  const expectedNonce = sessionStorage.getItem(NONCE_KEY);
+  if (!state || !expectedState || state !== expectedState || !verifier || !expectedNonce) {
     throw new Error("Cognito sign-in state validation failed. Please sign in again.");
   }
   const body = new URLSearchParams({
@@ -71,9 +82,21 @@ export async function completeSignIn() {
     body,
   });
   if (!result.ok) throw new Error("Cognito could not complete sign-in. Verify the app callback URL and Cognito configuration.");
-  saveTokens(await result.json());
+  const tokenSet = await result.json();
+  const idPayload = (() => {
+    try {
+      const segment = String(tokenSet.id_token ?? "").split(".")[1];
+      const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
+      return JSON.parse(atob(normalized + "=".repeat((4 - normalized.length % 4) % 4)));
+    } catch { return null; }
+  })();
+  if (!idPayload || idPayload.nonce !== expectedNonce) {
+    throw new Error("Cognito ID-token nonce validation failed. Please sign in again.");
+  }
+  saveTokens(tokenSet);
   sessionStorage.removeItem(VERIFIER_KEY);
   sessionStorage.removeItem(STATE_KEY);
+  sessionStorage.removeItem(NONCE_KEY);
   window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
 }
 
