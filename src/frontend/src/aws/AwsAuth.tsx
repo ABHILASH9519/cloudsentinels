@@ -1,6 +1,21 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
+import {
+  type PropsWithChildren,
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { assertAwsConfig } from "./awsConfig";
-import { completeSignIn, decodeIdToken, getAccessToken, signOut, startSignIn } from "./oidc";
+import {
+  completeSignIn,
+  decodeIdToken,
+  getAccessToken,
+  signOut,
+  startSignIn,
+} from "./oidc";
 
 type AuthContextValue = {
   isLoaded: boolean;
@@ -21,11 +36,15 @@ export function AwsAuthProvider({ children }: PropsWithChildren) {
   const refresh = useCallback(async () => {
     const token = await getAccessToken();
     const claims = decodeIdToken();
-    setUser(token && claims && typeof claims.sub === "string" ? {
-      id: claims.sub,
-      email: typeof claims.email === "string" ? claims.email : null,
-      name: typeof claims.name === "string" ? claims.name : null,
-    } : null);
+    setUser(
+      token && claims && typeof claims.sub === "string"
+        ? {
+            id: claims.sub,
+            email: typeof claims.email === "string" ? claims.email : null,
+            name: typeof claims.name === "string" ? claims.name : null,
+          }
+        : null,
+    );
   }, []);
 
   useEffect(() => {
@@ -36,21 +55,47 @@ export function AwsAuthProvider({ children }: PropsWithChildren) {
         await completeSignIn();
         await refresh();
       } catch (reason) {
-        if (active) setError(reason instanceof Error ? reason.message : "AWS authentication initialization failed.");
-      } finally { if (active) setIsLoaded(true); }
+        if (active)
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "AWS authentication initialization failed.",
+          );
+      } finally {
+        if (active) setIsLoaded(true);
+      }
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [refresh]);
 
   const signIn = useCallback(async () => {
-    try { setError(null); await startSignIn(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not start sign-in."); }
+    try {
+      setError(null);
+      await startSignIn();
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Could not start sign-in.",
+      );
+    }
   }, []);
-  const logout = useCallback(async () => { await signOut(); }, []);
+  const logout = useCallback(async () => {
+    await signOut();
+  }, []);
   const getToken = useCallback(() => getAccessToken(), []);
-  const value = useMemo(() => ({
-    isLoaded, isSignedIn: !!user, user, error, signIn, signOut: logout, getToken,
-  }), [isLoaded, user, error, signIn, logout, getToken]);
+  const value = useMemo(
+    () => ({
+      isLoaded,
+      isSignedIn: !!user,
+      user,
+      error,
+      signIn,
+      signOut: logout,
+      getToken,
+    }),
+    [isLoaded, user, error, signIn, logout, getToken],
+  );
 
   return createElement(AuthContext.Provider, { value, children });
 }

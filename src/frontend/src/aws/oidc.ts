@@ -5,31 +5,57 @@ const VERIFIER_KEY = "cloudsentinels.aws.pkce";
 const STATE_KEY = "cloudsentinels.aws.state";
 const NONCE_KEY = "cloudsentinels.aws.nonce";
 
-type TokenSet = { access_token: string; id_token: string; refresh_token?: string; expires_at: number };
+type TokenSet = {
+  access_token: string;
+  id_token: string;
+  refresh_token?: string;
+  expires_at: number;
+};
 
 function base64Url(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 function randomString(size = 64) {
   const bytes = crypto.getRandomValues(new Uint8Array(size));
   return base64Url(bytes);
 }
 async function challenge(verifier: string) {
-  return base64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+  return base64Url(
+    new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
+    ),
+  );
 }
-function redirectUri() { return `${window.location.origin}/`; }
+function redirectUri() {
+  return `${window.location.origin}/`;
+}
 
 export function getTokens(): TokenSet | null {
-  try { return JSON.parse(sessionStorage.getItem(TOKEN_KEY) ?? "null") as TokenSet | null; }
-  catch { return null; }
+  try {
+    return JSON.parse(
+      sessionStorage.getItem(TOKEN_KEY) ?? "null",
+    ) as TokenSet | null;
+  } catch {
+    return null;
+  }
 }
-function saveTokens(tokens: Omit<TokenSet, "expires_at"> & { expires_in: number }) {
-  const next: TokenSet = { ...tokens, expires_at: Date.now() + tokens.expires_in * 1000 };
+function saveTokens(
+  tokens: Omit<TokenSet, "expires_at"> & { expires_in: number },
+) {
+  const next: TokenSet = {
+    ...tokens,
+    expires_at: Date.now() + tokens.expires_in * 1000,
+  };
   sessionStorage.setItem(TOKEN_KEY, JSON.stringify(next));
 }
-export function clearTokens() { sessionStorage.removeItem(TOKEN_KEY); }
+export function clearTokens() {
+  sessionStorage.removeItem(TOKEN_KEY);
+}
 
 export async function startSignIn() {
   assertAwsConfig();
@@ -49,7 +75,9 @@ export async function startSignIn() {
     state,
     nonce,
   });
-  window.location.assign(`${awsConfig.domain}/oauth2/authorize?${params.toString()}`);
+  window.location.assign(
+    `${awsConfig.domain}/oauth2/authorize?${params.toString()}`,
+  );
 }
 
 export async function completeSignIn() {
@@ -57,7 +85,11 @@ export async function completeSignIn() {
   const oauthError = url.searchParams.get("error");
   if (oauthError) {
     const description = url.searchParams.get("error_description");
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+    window.history.replaceState(
+      {},
+      document.title,
+      window.location.pathname + window.location.hash,
+    );
     throw new Error(description || `Cognito sign-in failed: ${oauthError}`);
   }
   const code = url.searchParams.get("code");
@@ -66,8 +98,16 @@ export async function completeSignIn() {
   const expectedState = sessionStorage.getItem(STATE_KEY);
   const verifier = sessionStorage.getItem(VERIFIER_KEY);
   const expectedNonce = sessionStorage.getItem(NONCE_KEY);
-  if (!state || !expectedState || state !== expectedState || !verifier || !expectedNonce) {
-    throw new Error("Cognito sign-in state validation failed. Please sign in again.");
+  if (
+    !state ||
+    !expectedState ||
+    state !== expectedState ||
+    !verifier ||
+    !expectedNonce
+  ) {
+    throw new Error(
+      "Cognito sign-in state validation failed. Please sign in again.",
+    );
   }
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -81,30 +121,46 @@ export async function completeSignIn() {
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!result.ok) throw new Error("Cognito could not complete sign-in. Verify the app callback URL and Cognito configuration.");
+  if (!result.ok)
+    throw new Error(
+      "Cognito could not complete sign-in. Verify the app callback URL and Cognito configuration.",
+    );
   const tokenSet = await result.json();
   const idPayload = (() => {
     try {
       const segment = String(tokenSet.id_token ?? "").split(".")[1];
       const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
-      return JSON.parse(atob(normalized + "=".repeat((4 - normalized.length % 4) % 4)));
-    } catch { return null; }
+      return JSON.parse(
+        atob(normalized + "=".repeat((4 - (normalized.length % 4)) % 4)),
+      );
+    } catch {
+      return null;
+    }
   })();
   if (!idPayload || idPayload.nonce !== expectedNonce) {
-    throw new Error("Cognito ID-token nonce validation failed. Please sign in again.");
+    throw new Error(
+      "Cognito ID-token nonce validation failed. Please sign in again.",
+    );
   }
   saveTokens(tokenSet);
   sessionStorage.removeItem(VERIFIER_KEY);
   sessionStorage.removeItem(STATE_KEY);
   sessionStorage.removeItem(NONCE_KEY);
-  window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+  window.history.replaceState(
+    {},
+    document.title,
+    window.location.pathname + window.location.hash,
+  );
 }
 
 export async function getAccessToken(): Promise<string | null> {
   const tokens = getTokens();
   if (!tokens) return null;
   if (tokens.expires_at > Date.now() + 60_000) return tokens.access_token;
-  if (!tokens.refresh_token) { clearTokens(); return null; }
+  if (!tokens.refresh_token) {
+    clearTokens();
+    return null;
+  }
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     client_id: awsConfig.clientId!,
@@ -115,16 +171,25 @@ export async function getAccessToken(): Promise<string | null> {
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
   });
-  if (!result.ok) { clearTokens(); return null; }
+  if (!result.ok) {
+    clearTokens();
+    return null;
+  }
   const refreshed = await result.json();
-  saveTokens({ ...refreshed, refresh_token: refreshed.refresh_token ?? tokens.refresh_token });
+  saveTokens({
+    ...refreshed,
+    refresh_token: refreshed.refresh_token ?? tokens.refresh_token,
+  });
   return refreshed.access_token;
 }
 
 export async function signOut() {
   assertAwsConfig();
   clearTokens();
-  const params = new URLSearchParams({ client_id: awsConfig.clientId!, logout_uri: redirectUri() });
+  const params = new URLSearchParams({
+    client_id: awsConfig.clientId!,
+    logout_uri: redirectUri(),
+  });
   window.location.assign(`${awsConfig.domain}/logout?${params.toString()}`);
 }
 
@@ -134,5 +199,7 @@ export function decodeIdToken(): Record<string, unknown> | null {
   try {
     const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
     return JSON.parse(atob(payload)) as Record<string, unknown>;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
