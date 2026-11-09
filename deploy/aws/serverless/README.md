@@ -21,7 +21,7 @@ Prerequisites: AWS CLI, AWS SAM CLI, Docker (for SAM build), and an AWS account 
    sam build
    sam deploy --guided
    ```
-3. Set `AppOrigin` to the exact HTTPS origin where the frontend is hosted (no path), and `CognitoDomainPrefix` to the unique prefix.
+3. Set `AppOrigin` to the exact HTTPS origin where the frontend is hosted (no path), `CognitoDomainPrefix` to the unique prefix, and optionally `LocalDevOrigin` (default `http://localhost:5173`) for local Vite development.
 4. Save the stack outputs: `UserPoolId`, `UserPoolClientId`, `CognitoIssuer`, `CognitoHostedUi`, and `ApiBaseUrl`.
 5. Configure the frontend's `VITE_AWS_REGION`, `VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`, `VITE_COGNITO_DOMAIN`, and `VITE_AWS_API_URL` values. These are public client configuration values, not secrets.
 6. Configure the Vercel frontend environment and redeploy.
