@@ -25,6 +25,7 @@ Globals:
     Environment:
       Variables:
         TABLE_NAME: !Ref ApplicationTable
+        STAGE_NAME: !Ref StageName
 
 Resources:
   UserPool:
