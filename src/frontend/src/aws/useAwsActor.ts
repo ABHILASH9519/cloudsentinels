@@ -42,7 +42,14 @@ export function useAwsActor() {
       async updateAlertStatus(id, status) { await request(`/alerts/${id}`, "PATCH", { status }); },
       async getDashboardSummary() {
         const [incidents, alerts, metrics] = await Promise.all([request<any[]>("/incidents"), request<any[]>("/alerts"), request<any[]>("/metrics")]);
-        const count = (key: string) => Object.entries(incidents.reduce((acc: Record<string, number>, row) => ({ ...acc, [row[key]]: (acc[row[key]] ?? 0) + 1 }), {})).map(([k,v]) => [k, BigInt(v)] as [string,bigint]);
+        const count = (key: string): Array<[string, bigint]> => {
+          const counts: Record<string, number> = {};
+          for (const row of incidents) {
+            const label = String(row[key] ?? "unknown");
+            counts[label] = (counts[label] ?? 0) + 1;
+          }
+          return Object.entries(counts).map(([label, value]) => [label, BigInt(value)]);
+        };
         return { incidentsByStatus: count("status"), incidentsBySeverity: count("severity"), activeAlertsCount: BigInt(alerts.filter(row => row.status === "active").length), latestMetrics: metrics.slice(-10).reverse().map(metric) } as DashboardSummary;
       },
       async getCallerUserProfile() { return request<UserProfile | null>("/profile").catch(() => null); },
