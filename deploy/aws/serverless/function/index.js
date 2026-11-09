@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DeleteCommand,
@@ -157,24 +156,6 @@ export async function handler(event) {
     const now = new Date().toISOString();
 
 
-    if (resource === "profile" && segments.length === 2) {
-      if (method === "GET") {
-        const profile = await getItem(userId, "PROFILE", "SELF");
-        return response(200, profile ? { name: profile.name } : null);
-      }
-      if (method === "PUT") {
-        const profile = {
-          PK: `USER#${userId}`,
-          SK: "PROFILE#SELF",
-          id: "SELF",
-          ownerId: userId,
-          name: cleanText(body.name, "name", 120, true),
-          updatedAt: now,
-        };
-        await db.send(new PutCommand({ TableName: table, Item: profile }));
-        return response(200, { name: profile.name });
-      }
-    }
     if (resource === "profile" && segments.length === 2) {
       if (method === "GET") {
         const profile = await db.send(new GetCommand({ TableName: table, Key: { PK: `USER#${userId}`, SK: "PROFILE#SELF" } }));
