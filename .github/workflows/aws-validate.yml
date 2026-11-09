@@ -24,6 +24,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Validate SAM template
-        run: sam validate --lint --template-file deploy/aws/serverless/template.yaml
+        run: sam validate --lint --template-file deploy/aws/serverless/runtime-template.yaml
+      - name: Lint persistent CloudFormation template
+        run: pip install cfn-lint && cfn-lint deploy/aws/serverless/core-template.yaml deploy/aws/serverless/runtime-template.yaml
       - name: Check Lambda syntax
         run: node --check deploy/aws/serverless/function/index.js
