@@ -1,6 +1,6 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import { assertAwsConfig } from "./awsConfig";
-import { completeSignIn, decodeIdToken, getAccessToken, getTokens, signOut, startSignIn } from "./oidc";
+import { completeSignIn, decodeIdToken, getAccessToken, signOut, startSignIn } from "./oidc";
 
 type AuthContextValue = {
   isLoaded: boolean;
