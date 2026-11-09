@@ -6,12 +6,13 @@ Parameters:
   AppOrigin:
     Type: String
     Description: Exact HTTPS frontend origin, e.g. https://cloudsentinels.vercel.app
+    AllowedPattern: "^https://[A-Za-z0-9.-]+(:[0-9]+)?$"
+    ConstraintDescription: Supply an HTTPS origin only, without a path.
   CognitoDomainPrefix:
     Type: String
     Description: Globally unique Cognito hosted UI domain prefix (lowercase, 1-63 chars).
-  TableName:
-    Type: String
-    Default: cloudsentinels-app
+    AllowedPattern: "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+    ConstraintDescription: Use 1-63 lowercase letters, digits, or hyphens; start and end with a letter or digit.
   StageName:
     Type: String
     Default: v1
@@ -29,7 +30,7 @@ Resources:
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
-      UserPoolName: cloudsentinels-users
+      UserPoolName: !Sub "${AWS::StackName}-users"
       UsernameAttributes: [email]
       AutoVerifiedAttributes: [email]
       Policies:
@@ -81,7 +82,7 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      TableName: !Ref TableName
+      TableName: !Sub "${AWS::StackName}-app"
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: PK
@@ -101,7 +102,6 @@ Resources:
   OperationsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: cloudsentinels-operations
       CodeUri: function/
       Handler: index.handler
       Policies:
