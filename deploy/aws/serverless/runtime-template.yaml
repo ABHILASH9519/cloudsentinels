@@ -74,7 +74,6 @@ Resources:
 
   AutomationEventRule:
     Type: AWS::Events::Rule
-    DependsOn: AutomationEventsQueuePolicy
     Properties:
       Name: cloudsentinels-domain-events-to-sqs
       EventBusName: !Ref CloudSentinelsEventBus
