@@ -149,7 +149,7 @@ export function MonitoringPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="mission-page p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-700 text-foreground">
@@ -280,7 +280,7 @@ export function MonitoringPage() {
               </Button>
             </DialogTrigger>
             <DialogContent
-              className="bg-card border-border"
+              className="telemetry-glass border-cyan-200/10"
               data-ocid="monitoring.metric.dialog"
             >
               <DialogHeader>
