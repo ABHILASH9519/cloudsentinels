@@ -1,99 +1,98 @@
-# CloudSentinels workflow automation
+# Optional n8n and Zapier integrations
 
-This layer adds asynchronous event-driven automation without coupling third-party workflows to the user-facing API request path.
+CloudSentinels itself runs on AWS. The application frontend, authentication, APIs, data storage, event routing and queues remain AWS-native. **n8n and Zapier are optional external automation tools only**; neither hosts the application backend, stores CloudSentinels application data, or is required for the product to work.
 
-## Topology
+## AWS application architecture
 
 ```text
-React/Vercel
-   |
-API Gateway + Cognito JWT
-   |
-Lambda API -----> DynamoDB (authoritative application state)
-   |
-   +---- PutEvents (best-effort domain event)
-             |
-       EventBridge bus
-             |
-       EventBridge rule
-             |
-       SQS automation queue -----> n8n SQS Trigger
-             |                         |
-             |                         +--> severity/routing logic
-             |                         +--> Slack / Teams / email
-             |                         +--> ticketing / runbook integrations
-             |                         +--> call authenticated CloudSentinels API
-             |
-       SQS dead-letter queue (after repeated delivery failures)
+Frontend (Vercel)
+  -> Amazon Cognito
+  -> API Gateway + Lambda
+  -> DynamoDB (system of record)
 
-Optional: n8n can call Zapier Catch Hook for integrations only available in a Zap.
-Zapier is an outbound automation destination, not a second source of truth.
+Lambda domain events
+  -> Amazon EventBridge
+  -> Amazon SQS automation queue
+  -> Optional external automation consumer (only when configured)
+
+Amazon CloudWatch / SNS remain available for AWS-native monitoring and operational alerts.
 ```
 
-## Why n8n first
+The EventBridge bus and SQS queue are AWS-managed resources in the runtime stack. They buffer selected domain events so external automation can be connected without putting n8n or Zapier in the critical API request path. If no external tool is connected, CloudSentinels' core API and data operations still run on AWS.
 
-- Self-hosted and workflow definitions can be versioned/exported.
-- Supports branching, conditions, retries, error workflows and AWS SQS integration.
-- Can run locally only when needed; this Compose setup binds the editor to localhost.
-- Zapier remains optional for quick SaaS-to-SaaS actions. Do not route core incident persistence through Zapier.
+## What to use the automation tools for
 
-## Start locally
+Use them only for workflows where an external SaaS integration saves time:
 
-Requirements: Docker Desktop with Compose.
+- **n8n:** custom multi-step workflows, conditional routing, enrichment, approvals, and integrations that need more control.
+- **Zapier:** quick SaaS-to-SaaS connections such as sending a notification, creating a ticket, or adding a row to an external tracker.
 
-1. Copy `.env.example` to `.env`.
-2. Set unique strong values for `POSTGRES_PASSWORD` and `N8N_ENCRYPTION_KEY`.
-3. Start the automation service:
+Example use cases:
+1. A critical incident is created → notify a selected Slack or Microsoft Teams channel.
+2. An incident remains unresolved → create or update a ticket in an external issue tracker.
+3. A high-severity alert arrives → send an email/SMS escalation to the on-call contact.
+4. A daily operational summary is ready → send a report to an external channel.
 
-```powershell
-docker compose --env-file .env up -d
-```
+These are optional side effects. Do not put authentication, incident persistence, core alert processing, authorization, or application business logic in n8n/Zapier.
 
-4. Open http://localhost:5678 and create the n8n owner account.
-5. In n8n, create an AWS credential for the SQS Trigger node. Use a dedicated least-privilege IAM identity scoped to the automation queue ARN; temporary credentials are preferred. The environment variables are provided for local development only and are not required if credentials are configured directly in n8n.
-6. Configure an SQS Trigger for the queue URL printed by the AWS runtime stack output `AutomationQueueUrl`. Select the region `ap-south-1`. The credential needs only the following queue-scoped actions:
+## Connecting n8n
+
+Use n8n Cloud or an n8n instance you independently choose to operate. It is not deployed by this repository and no n8n container, PostgreSQL instance, EC2 host, or n8n-specific AWS runtime is required by CloudSentinels.
+
+For an AWS SQS Trigger node, configure an IAM identity with queue-scoped permissions only:
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [{
     "Effect": "Allow",
-    "Action": ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"],
+    "Action": [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:ChangeMessageVisibility"
+    ],
     "Resource": "<AutomationQueueArn>"
   }]
 }
 ```
-7. Create a workflow with an IF/Switch node on `detail-type`, then add the appropriate notification/ticketing nodes. Enable the workflow only after testing with a non-production event.
 
-Stop when finished:
+Use temporary credentials or a supported workload identity where possible. Do not use administrator credentials or place AWS secrets in frontend configuration.
 
-```powershell
-docker compose --env-file .env down
-```
+## Connecting Zapier
 
-This stops n8n and PostgreSQL but preserves their named volumes. To remove local workflow/database data too, use `docker compose --env-file .env down -v` only if you intentionally want to erase it.
+Use Zapier only for specific SaaS actions. Connect it through a secured webhook/API integration or a supported AWS event consumer. Do not expose the SQS queue publicly or put a Zapier webhook secret in browser code. A dedicated AWS integration endpoint/consumer should validate a shared secret or signature, apply rate limits, and forward only the minimum event fields required by the Zap.
 
 ## Event contract
 
-Events use the EventBridge envelope. The SQS message body contains the EventBridge event, including:
+The AWS event bus publishes these event types:
 
+- `IncidentCreated`
+- `IncidentUpdated`
+- `IncidentDeleted`
+- `AlertCreated`
+- `AlertUpdated`
+- `MetricRecorded`
+
+Each event includes the EventBridge envelope and minimal details:
 - `source`: `cloudsentinels.api`
-- `detail-type`: `IncidentCreated`, `IncidentUpdated`, `AlertCreated`, or `MetricRecorded`
+- `detail-type`: event type above
 - `detail.userId`: Cognito subject of the actor
-- `detail.resource`: minimal resource metadata (ID, severity/status/name; no raw logs or secrets)
+- `detail.resource`: resource identifier and selected metadata
 - `detail.occurredAt`: ISO-8601 timestamp
 
-The event contains identifiers and minimal metadata, not raw logs, access tokens, email addresses, or credentials. n8n should use a dedicated API credential or a scoped service integration when it needs to call protected application endpoints. Never forward a user's Cognito access token through a workflow.
+Do not forward raw logs, authentication tokens, passwords, or unnecessary personal data to external automation services. n8n/Zapier should use a dedicated scoped credential for any callback into CloudSentinels.
 
-## Reliability and safety
+## Reliability and operational boundaries
 
-- DynamoDB remains the source of truth. Event publishing is best-effort and does not roll back successful API writes.
-- EventBridge has a dedicated delivery DLQ for messages it cannot deliver to the primary queue. SQS separately retries processing by n8n; messages that exceed the configured receive count are moved to the processing DLQ.
-- Configure an n8n error workflow and alert on DLQ depth. Use idempotency keyed by EventBridge event ID before creating tickets or sending non-repeatable notifications.
-- Do not let a workflow automatically delete incidents, disable accounts, or perform destructive remediation without an approval gate.
-- Protect n8n with strong owner credentials, encryption key, restricted network access and backups. The local Compose file binds port 5678 to 127.0.0.1 only.
-- This local setup is not a production deployment. For shared use, deploy n8n behind HTTPS with durable PostgreSQL backups, secret management, network restrictions and an IAM role rather than long-lived access keys.
+- DynamoDB remains the source of truth.
+- EventBridge and SQS provide AWS-native buffering and dead-letter handling.
+- External automation failures must not make core application features unavailable.
+- Use idempotency based on the EventBridge event ID to avoid duplicate tickets or notifications.
+- Add approval gates before destructive remediation or account/incident deletion.
+- Monitor queue age and dead-letter queue depth in CloudWatch.
+- Event publication is currently best-effort from the API. For workflows that must never miss an event, a transactional outbox is a future hardening requirement.
 
 ## Cost and lifecycle
 
-The n8n Compose stack creates no AWS compute resources. AWS EventBridge and SQS are provisioned only when the AWS runtime stack is deployed and can incur usage charges. Stopping local Docker does not pause AWS resources. The existing `aws-off.ps1` pauses the API Lambda only; it does not delete the automation queue or stop any separately hosted n8n service.
+No n8n or Zapier runtime is created or billed by the CloudSentinels AWS deployment. The AWS EventBridge bus and SQS queues are part of the AWS runtime stack and can incur usage charges. Any n8n/Zapier subscription or hosting cost is separate and applies only if you choose to connect and use that service. Stopping or disconnecting an automation tool does not stop the AWS application.
