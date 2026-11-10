@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 process.env.TABLE_NAME = "cloudsentinels-test-table";
-const { classifyEvent, handler } = await import("./index.js");
+const { classifyEvent, resolveProcedure, handler } = await import("./index.js");
 
 test("classifies known events without claiming remediation ran", () => {
   const result = classifyEvent({
@@ -81,7 +81,8 @@ test("returns only failed SQS message identifiers for malformed records", async 
 
 test("treats duplicate DynamoDB events as successfully handled", async (t) => {
   const originalSend = DynamoDBDocumentClient.prototype.send;
-  DynamoDBDocumentClient.prototype.send = async function () {
+  DynamoDBDocumentClient.prototype.send = async function (command) {
+    if (command.constructor.name === "QueryCommand") return { Items: [] };
     const error = new Error("already exists");
     error.name = "ConditionalCheckFailedException";
     throw error;
@@ -152,4 +153,77 @@ test("bounds unknown event type values before storing them", () => {
   const result = classifyEvent({ "detail-type": "x".repeat(200) });
   assert.equal(result.eventType.length, 80);
   assert.equal(result.status, "OBSERVED");
+});
+
+
+test("resolves new event types from the versioned procedure registry", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function (command) {
+    assert.equal(command.constructor.name, "QueryCommand");
+    assert.equal(command.input.ExpressionAttributeValues[":pk"], "SYSTEM#PROCEDURES");
+    assert.equal(command.input.ExpressionAttributeValues[":prefix"], "PROCEDURE#CustomPodSignal#");
+    return { Items: [{
+      procedureId: "pod-restart-v3",
+      version: 3,
+      enabled: true,
+      action: "restart-pod",
+      risk: "low",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "CustomPodSignal",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "PENDING_CLUSTER_ADAPTER");
+  assert.equal(result.recommendedAction, "restart-pod");
+  assert.equal(result.procedureId, "pod-restart-v3");
+  assert.equal(result.procedureVersion, 3);
+});
+
+test("blocks procedure registry entries that request unsupported actions", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      procedureId: "unsafe-shell-v1",
+      version: 1,
+      enabled: true,
+      action: "run-arbitrary-shell",
+      risk: "critical",
+      requiresApproval: true,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "CustomUnsafeSignal",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "BLOCKED_INVALID_PROCEDURE");
+  assert.equal(result.recommendedAction, null);
+  assert.equal(result.requiresApproval, true);
+});
+
+test("disabled registry procedures remain observe-only", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      procedureId: "disabled-v1",
+      version: 1,
+      enabled: false,
+      action: "restart-pod",
+      risk: "low",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "PodCrashLoopBackOff",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "OBSERVED");
+  assert.equal(result.recommendedAction, null);
 });
