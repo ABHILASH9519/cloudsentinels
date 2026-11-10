@@ -4,17 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: "Plan only, create the review cluster, or destroy it"
+        description: "Create a change-set plan, execute a reviewed plan, or destroy the review stack"
         type: choice
         required: true
-        options: [plan, create, destroy]
+        options: [plan, execute, destroy]
       review_approved:
         description: "Confirm review-day owner approval and cost/network review"
         type: boolean
         required: true
         default: false
+      change_set_name:
+        description: "Exact change-set name printed by a prior plan run (execute only)"
+        type: string
+        required: false
       cluster_name:
-        description: "EKS cluster name (required for plan/create)"
+        description: "EKS cluster name (required for plan)"
         type: string
         required: false
       kubernetes_version:
@@ -60,8 +64,8 @@ on:
         description: "Narrow comma-separated IPv4 CIDR allowlist; never 0.0.0.0/0"
         type: string
         required: false
-      confirm_create:
-        description: "Type CREATE-CLOUDSENTINELS-EKS only for create"
+      confirm_execute:
+        description: "Type EXECUTE-CLOUDSENTINELS-EKS only after reviewing the change set"
         type: string
         required: false
       confirm_destroy:
@@ -96,11 +100,14 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Validate approval and parameters
+      - name: Validate approval and operation inputs
         shell: bash
         env:
           OPERATION: ${{ inputs.operation }}
           REVIEW_APPROVED: ${{ inputs.review_approved }}
+          CHANGE_SET_NAME: ${{ inputs.change_set_name }}
+          CONFIRM_EXECUTE: ${{ inputs.confirm_execute }}
+          CONFIRM_DESTROY: ${{ inputs.confirm_destroy }}
           CLUSTER_NAME: ${{ inputs.cluster_name }}
           K8S_VERSION: ${{ inputs.kubernetes_version }}
           VPC_ID: ${{ inputs.vpc_id }}
@@ -112,8 +119,6 @@ jobs:
           DESIRED_SIZE: ${{ inputs.desired_size }}
           MAX_SIZE: ${{ inputs.max_size }}
           PUBLIC_CIDRS: ${{ inputs.public_access_cidrs }}
-          CONFIRM_CREATE: ${{ inputs.confirm_create }}
-          CONFIRM_DESTROY: ${{ inputs.confirm_destroy }}
         run: |
           set -euo pipefail
           [[ "$REVIEW_APPROVED" == "true" ]] || { echo "review_approved must be true"; exit 1; }
@@ -123,9 +128,13 @@ jobs:
             [[ "$CONFIRM_DESTROY" == "DESTROY-CLOUDSENTINELS-EKS" ]] || { echo "Destroy confirmation mismatch"; exit 1; }
             exit 0
           fi
-          [[ "$OPERATION" == "plan" || "$OPERATION" == "create" ]] || exit 1
-          [[ "$OPERATION" != "create" || "$CONFIRM_CREATE" == "CREATE-CLOUDSENTINELS-EKS" ]] || { echo "Create confirmation mismatch"; exit 1; }
-          [[ "$CLUSTER_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,54}$ ]] || { echo "Invalid cluster name"; exit 1; }
+          if [[ "$OPERATION" == "execute" ]]; then
+            [[ "$CHANGE_SET_NAME" =~ ^review-[0-9]+$ ]] || { echo "Use the exact review-* change-set name from the plan run"; exit 1; }
+            [[ "$CONFIRM_EXECUTE" == "EXECUTE-CLOUDSENTINELS-EKS" ]] || { echo "Execution confirmation mismatch"; exit 1; }
+            exit 0
+          fi
+          [[ "$OPERATION" == "plan" ]] || exit 1
+          [[ "$CLUSTER_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,54}$ ]] || { echo "Cluster name must be at most 55 characters"; exit 1; }
           [[ "$K8S_VERSION" =~ ^1[.][0-9]{2}$ ]] || { echo "Invalid Kubernetes version format"; exit 1; }
           [[ "$VPC_ID" =~ ^vpc-[0-9a-f]+$ ]] || { echo "Invalid VPC ID"; exit 1; }
           [[ "$SUBNETS" == subnet-* && "$SUBNETS" == *,subnet-* ]] || { echo "Provide at least two subnet IDs"; exit 1; }
@@ -140,7 +149,7 @@ jobs:
           if [[ ",$PUBLIC_CIDRS," == *",0.0.0.0/0,"* ]]; then echo "0.0.0.0/0 is forbidden"; exit 1; fi
 
       - name: Fetch and validate live Airtable cluster inventory
-        if: inputs.operation != 'destroy'
+        if: inputs.operation == 'plan'
         shell: bash
         env:
           AIRTABLE_API_TOKEN: ${{ secrets.AIRTABLE_API_TOKEN }}
@@ -168,9 +177,10 @@ jobs:
           set -euo pipefail
           ACTUAL_ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
           [[ -n "$EXPECTED_ACCOUNT_ID" && "$ACTUAL_ACCOUNT" == "$EXPECTED_ACCOUNT_ID" ]] || { echo "AWS account does not match AWS_ACCOUNT_ID"; exit 1; }
-          if [[ "$OPERATION" == "destroy" ]]; then exit 0; fi
+          if [[ "$OPERATION" != "plan" ]]; then exit 0; fi
           IFS=',' read -r -a SUBNET_ARRAY <<< "$SUBNETS"
-          [[ "${#SUBNET_ARRAY[@]}" -ge 2 ]] || { echo "At least two private subnets are required"; exit 1; }
+          SUBNET_COUNT=${#SUBNET_ARRAY[@]}
+          [[ "$SUBNET_COUNT" -ge 2 ]] || { echo "At least two private subnets are required"; exit 1; }
           ZONES=""
           for subnet in "${SUBNET_ARRAY[@]}"; do
             DETAILS="$(aws ec2 describe-subnets --subnet-ids "$subnet" --query 'Subnets[0].[VpcId,AvailabilityZone,MapPublicIpOnLaunch]' --output text)"
@@ -188,8 +198,8 @@ jobs:
           aws cloudformation delete-stack --stack-name "$STACK_NAME" --role-arn "$CFN_ROLE_ARN"
           aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME"
 
-      - name: Create CloudFormation change set
-        if: inputs.operation == 'plan' || inputs.operation == 'create'
+      - name: Create CloudFormation change set (plan only)
+        if: inputs.operation == 'plan'
         shell: bash
         env:
           CLUSTER_NAME: ${{ inputs.cluster_name }}
@@ -206,33 +216,39 @@ jobs:
         run: |
           set -euo pipefail
           CHANGE_SET="review-${GITHUB_RUN_ID}"
-          aws cloudformation create-change-set \\
-            --stack-name "$STACK_NAME" \\
-            --change-set-name "$CHANGE_SET" \\
-            --change-set-type CREATE \\
-            --role-arn "$CFN_ROLE_ARN" \\
-            --template-body file://deploy/eks/review-day-cluster.yaml \\
-            --parameters \\
-              "ParameterKey=ClusterName,ParameterValue=$CLUSTER_NAME" \\
-              "ParameterKey=KubernetesVersion,ParameterValue=$K8S_VERSION" \\
-              "ParameterKey=VpcId,ParameterValue=$VPC_ID" \\
-              "ParameterKey=PrivateSubnetIds,ParameterValue=$SUBNETS" \\
-              "ParameterKey=ClusterRoleArn,ParameterValue=$CLUSTER_ROLE" \\
-              "ParameterKey=NodeRoleArn,ParameterValue=$NODE_ROLE" \\
-              "ParameterKey=NodeInstanceType,ParameterValue=$INSTANCE_TYPE" \\
-              "ParameterKey=MinSize,ParameterValue=$MIN_SIZE" \\
-              "ParameterKey=DesiredSize,ParameterValue=$DESIRED_SIZE" \\
-              "ParameterKey=MaxSize,ParameterValue=$MAX_SIZE" \\
+          aws cloudformation create-change-set \
+            --stack-name "$STACK_NAME" \
+            --change-set-name "$CHANGE_SET" \
+            --change-set-type CREATE \
+            --role-arn "$CFN_ROLE_ARN" \
+            --template-body file://deploy/eks/review-day-cluster.yaml \
+            --parameters \
+              "ParameterKey=ClusterName,ParameterValue=$CLUSTER_NAME" \
+              "ParameterKey=KubernetesVersion,ParameterValue=$K8S_VERSION" \
+              "ParameterKey=VpcId,ParameterValue=$VPC_ID" \
+              "ParameterKey=PrivateSubnetIds,ParameterValue=$SUBNETS" \
+              "ParameterKey=ClusterRoleArn,ParameterValue=$CLUSTER_ROLE" \
+              "ParameterKey=NodeRoleArn,ParameterValue=$NODE_ROLE" \
+              "ParameterKey=NodeInstanceType,ParameterValue=$INSTANCE_TYPE" \
+              "ParameterKey=MinSize,ParameterValue=$MIN_SIZE" \
+              "ParameterKey=DesiredSize,ParameterValue=$DESIRED_SIZE" \
+              "ParameterKey=MaxSize,ParameterValue=$MAX_SIZE" \
               "ParameterKey=PublicAccessCidrs,ParameterValue=$PUBLIC_CIDRS"
           aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$CHANGE_SET"
           aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CHANGE_SET" --output table
-          echo "CHANGE_SET=$CHANGE_SET" >> "$GITHUB_ENV"
+          echo "Planned change set: $CHANGE_SET"
 
-      - name: Execute approved create change set
-        if: inputs.operation == 'create'
+      - name: Verify and execute reviewed change set
+        if: inputs.operation == 'execute'
         shell: bash
+        env:
+          CHANGE_SET_NAME: ${{ inputs.change_set_name }}
         run: |
           set -euo pipefail
-          aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$CHANGE_SET"
+          DETAILS="$(aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CHANGE_SET_NAME" --query '[StackName,ChangeSetType,Status]' --output text)"
+          read -r stack_name change_set_type change_set_status <<< "$DETAILS"
+          [[ "$stack_name" == "$STACK_NAME" && "$change_set_type" == "CREATE" && "$change_set_status" == "CREATE_COMPLETE" ]] || { echo "Change set is not a ready CREATE plan for the expected stack"; exit 1; }
+          aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CHANGE_SET_NAME" --output table
+          aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$CHANGE_SET_NAME"
           aws cloudformation wait stack-create-complete --stack-name "$STACK_NAME"
           aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output table
