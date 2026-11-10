@@ -32,6 +32,9 @@ function parseRecord(record) {
       throw new Error(`Remediation command is missing ${field}.`);
     }
   }
+  if (typeof detail.requiresApproval !== "boolean") {
+    throw new Error("Remediation command is missing its approval policy flag.");
+  }
   if (!ALLOWED_ACTIONS.has(detail.action)) throw new Error("Remediation action is not allow-listed.");
   return detail;
 }
@@ -66,7 +69,7 @@ async function execute(detail) {
     eventRecord.commandId !== detail.commandId ||
     eventRecord.recommendedAction !== detail.action ||
     eventRecord.clusterName !== detail.clusterName ||
-    eventRecord.requiresApproval !== true
+    eventRecord.requiresApproval !== detail.requiresApproval
   ) {
     throw new Error("Remediation command no longer matches an approved event record.");
   }
