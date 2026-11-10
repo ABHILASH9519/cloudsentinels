@@ -73,7 +73,7 @@ async function execute(detail) {
   if (["RECOVERY_VERIFIED", "ACTION_SUBMITTED_UNVERIFIED"].includes(eventRecord.status)) {
     return;
   }
-  if (!["APPROVED_AWAITING_EXECUTOR", "EXECUTING"].includes(eventRecord.status)) {
+  if (!["APPROVED_AWAITING_EXECUTOR", "EXECUTING", "EXECUTION_FAILED"].includes(eventRecord.status)) {
     throw new Error("Remediation event is not in an executable state.");
   }
 
@@ -83,33 +83,41 @@ async function execute(detail) {
     });
   }
 
-  const invocation = await lambda.send(new InvokeCommand({
-    FunctionName: adapterFunctionArn,
-    InvocationType: "RequestResponse",
-    Payload: Buffer.from(JSON.stringify({
-      schemaVersion: "1",
-      commandId: detail.commandId,
-      eventId: detail.eventId,
-      action: detail.action,
-      clusterName: detail.clusterName,
-      approvedBy: detail.approvedBy,
-      approvedAt: detail.approvedAt,
-    })),
-  }));
-
-  if (invocation.FunctionError) {
-    const message = Buffer.from(invocation.Payload ?? []).toString("utf8").slice(0, 500);
-    throw new Error(`Remediation adapter failed: ${message}`);
-  }
-
   let adapterResult;
   try {
-    adapterResult = JSON.parse(Buffer.from(invocation.Payload ?? []).toString("utf8"));
-  } catch {
-    throw new Error("Remediation adapter returned invalid JSON.");
-  }
-  if (adapterResult.accepted !== true) {
-    throw new Error("Remediation adapter did not accept the command.");
+    const invocation = await lambda.send(new InvokeCommand({
+      FunctionName: adapterFunctionArn,
+      InvocationType: "RequestResponse",
+      Payload: Buffer.from(JSON.stringify({
+        schemaVersion: "1",
+        commandId: detail.commandId,
+        eventId: detail.eventId,
+        action: detail.action,
+        clusterName: detail.clusterName,
+        approvedBy: detail.approvedBy,
+        approvedAt: detail.approvedAt,
+      })),
+    }));
+
+    if (invocation.FunctionError) {
+      const message = Buffer.from(invocation.Payload ?? []).toString("utf8").slice(0, 500);
+      throw new Error(`Remediation adapter failed: ${message}`);
+    }
+
+    try {
+      adapterResult = JSON.parse(Buffer.from(invocation.Payload ?? []).toString("utf8"));
+    } catch {
+      throw new Error("Remediation adapter returned invalid JSON.");
+    }
+    if (adapterResult.accepted !== true) {
+      throw new Error("Remediation adapter did not accept the command.");
+    }
+  } catch (error) {
+    await setStatus(key, detail.commandId, "EXECUTION_FAILED", {
+      executionFailedAt: new Date().toISOString(),
+      lastExecutionError: String(error?.message ?? "Adapter failure").slice(0, 300),
+    });
+    throw error;
   }
 
   const recoveryVerified = adapterResult.recoveryVerified === true;
