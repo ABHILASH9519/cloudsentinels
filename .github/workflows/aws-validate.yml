@@ -1,12 +1,15 @@
 name: AWS architecture checks
 on:
   push:
-    branches: [feat/aws-native-architecture, feat/n8n-event-automation, feat/acceptance-observability-oidc]
+    branches: [feat/aws-native-architecture, feat/n8n-event-automation, feat/acceptance-observability-oidc, feat/four-layer-self-healing-architecture]
   pull_request:
     branches: [main]
     paths:
       - "deploy/aws/serverless/**"
       - "deploy/automation/**"
+      - "deploy/kubernetes/**"
+      - "docs/architecture/**"
+      - "docs/integrations/**"
       - "src/frontend/src/aws/**"
       - "src/frontend/src/App.tsx"
       - "src/frontend/src/main.tsx"
