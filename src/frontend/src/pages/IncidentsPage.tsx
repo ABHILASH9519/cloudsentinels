@@ -77,7 +77,7 @@ export function IncidentsPage() {
   const SKELETON_KEYS = ["sk1", "sk2", "sk3", "sk4", "sk5"];
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="mission-page p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-700 text-foreground">

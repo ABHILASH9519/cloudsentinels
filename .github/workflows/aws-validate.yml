@@ -1,11 +1,12 @@
 name: AWS architecture checks
 on:
   push:
-    branches: [feat/aws-native-architecture]
+    branches: [feat/aws-native-architecture, feat/n8n-event-automation, feat/acceptance-observability-oidc]
   pull_request:
     branches: [main]
     paths:
       - "deploy/aws/serverless/**"
+      - "deploy/automation/**"
       - "src/frontend/src/aws/**"
       - "src/frontend/src/App.tsx"
       - "src/frontend/src/main.tsx"
@@ -25,7 +26,39 @@ jobs:
           python-version: "3.12"
       - name: Validate SAM template
         run: sam validate --lint --template-file deploy/aws/serverless/runtime-template.yaml
+      - name: Build SAM functions and install per-function dependencies
+        run: sam build --template-file deploy/aws/serverless/runtime-template.yaml
       - name: Lint persistent CloudFormation template
         run: pip install cfn-lint && cfn-lint deploy/aws/serverless/core-template.yaml deploy/aws/serverless/runtime-template.yaml
       - name: Check Lambda syntax
-        run: node --check deploy/aws/serverless/function/index.js
+        run: |
+          node --check deploy/aws/serverless/function/index.js
+          node --check deploy/aws/serverless/automation/index.js
+          node --check deploy/aws/serverless/zapier-relay/index.js
+          node --check deploy/aws/serverless/zapier-command/index.js
+          node --check deploy/aws/serverless/remediation-worker/index.js
+      - name: Run remediation worker tests
+        working-directory: deploy/aws/serverless/remediation-worker
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+      - name: Run Zapier command receiver tests
+        working-directory: deploy/aws/serverless/zapier-command
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+      - name: Run AWS API tests
+        working-directory: deploy/aws/serverless/function
+        run: |
+          npm install --no-audit --no-fund
+          node --test
+      - name: Run automation processor tests
+        working-directory: deploy/aws/serverless/automation
+        run: |
+          npm install --no-audit --no-fund
+          node --test
+      - name: Run Zapier relay tests
+        working-directory: deploy/aws/serverless/zapier-relay
+        run: |
+          npm install --no-audit --no-fund
+          node --test

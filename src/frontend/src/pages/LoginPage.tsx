@@ -5,7 +5,7 @@ export function LoginPage({ authError }: { authError?: string | null }) {
   const { signIn, error, isLoaded } = useAwsAuth();
   const message = authError || error;
   return (
-    <div className="min-h-screen bg-background grid-bg flex items-center justify-center p-4">
+    <div className="space-login min-h-screen bg-background grid-bg flex items-center justify-center p-4">
       <div className="relative w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/15 border border-primary/30 glow-cyan mb-4">
@@ -15,7 +15,7 @@ export function LoginPage({ authError }: { authError?: string | null }) {
             CloudSentinels
           </h1>
           <p className="text-muted-foreground text-sm">
-            AI-Powered DevOps Assistant
+            AI-powered self-healing for Kubernetes & live clusters
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 mb-8">

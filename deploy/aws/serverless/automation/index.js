@@ -1,0 +1,162 @@
+﻿import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+
+const tableName = process.env.TABLE_NAME;
+const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+
+// This coordinator is deliberately non-destructive. It records and classifies
+// events; it does not call Kubernetes APIs until a cluster adapter, target,
+// RBAC grant, and approval policy have been configured.
+const remediationRules = {
+  PodCrashLoopBackOff: {
+    action: "restart-pod",
+    risk: "medium",
+    requiresApproval: false,
+  },
+  NodeNotReady: {
+    action: "replace-or-recover-node",
+    risk: "high",
+    requiresApproval: true,
+  },
+  CpuThresholdExceeded: {
+    action: "scale-workload",
+    risk: "medium",
+    requiresApproval: true,
+  },
+  MemoryPressure: {
+    action: "diagnose-memory-pressure",
+    risk: "low",
+    requiresApproval: false,
+  },
+  DeploymentUnhealthy: {
+    action: "rollback-deployment",
+    risk: "high",
+    requiresApproval: true,
+  },
+  ApiLatencyHigh: {
+    action: "scale-or-investigate-service",
+    risk: "medium",
+    requiresApproval: true,
+  },
+};
+
+export function classifyEvent(domainEvent) {
+  const rawEventType = domainEvent["detail-type"];
+  const eventType = typeof rawEventType === "string" && rawEventType
+    ? rawEventType.slice(0, 80)
+    : "Unknown";
+  const detail = domainEvent.detail && typeof domainEvent.detail === "object"
+    ? domainEvent.detail
+    : {};
+  const rule = Object.hasOwn(remediationRules, rawEventType)
+    ? remediationRules[rawEventType]
+    : undefined;
+  if (!rule) {
+    return {
+      eventType,
+      status: "OBSERVED",
+      recommendedAction: null,
+      risk: "informational",
+      requiresApproval: false,
+      reason: "No remediation rule is configured for this event type.",
+      clusterName: null,
+    };
+  }
+
+  const rawClusterName = detail.clusterName ?? detail.clusterArn ?? detail.cluster ?? null;
+  const clusterName = typeof rawClusterName === "string" && rawClusterName.trim()
+    ? rawClusterName.trim().slice(0, 256)
+    : null;
+  if (!clusterName) {
+    return {
+      eventType,
+      status: "BLOCKED_NO_CLUSTER_TARGET",
+      recommendedAction: rule.action,
+      risk: rule.risk,
+      requiresApproval: rule.requiresApproval,
+      reason: "The event does not identify a registered Kubernetes cluster target.",
+      clusterName: null,
+    };
+  }
+
+  return {
+    eventType,
+    status: rule.requiresApproval ? "PENDING_APPROVAL" : "PENDING_CLUSTER_ADAPTER",
+    recommendedAction: rule.action,
+    risk: rule.risk,
+    requiresApproval: rule.requiresApproval,
+    reason: rule.requiresApproval
+      ? "A cluster target is present, but this action requires an explicit approval workflow."
+      : "A cluster target is present, but no Kubernetes remediation adapter is enabled.",
+    clusterName,
+  };
+}
+
+async function recordEvent(domainEvent) {
+  if (!tableName) throw new Error("TABLE_NAME is not configured.");
+  if (!domainEvent || typeof domainEvent.id !== "string" || !domainEvent.id.trim()) {
+    throw new Error("The EventBridge message is missing its event id.");
+  }
+  if (domainEvent.id.length > 128) {
+    throw new Error("The EventBridge event id exceeds the 128-character limit.");
+  }
+
+  const classification = classifyEvent(domainEvent);
+  const now = new Date().toISOString();
+  const item = {
+    PK: "SYSTEM#AUTOMATION",
+    SK: `EVENT#${domainEvent.id}`,
+    id: domainEvent.id,
+    source: typeof domainEvent.source === "string"
+      ? domainEvent.source.slice(0, 128)
+      : "unknown",
+    eventType: classification.eventType,
+    eventTime: typeof domainEvent.time === "string" && domainEvent.time.length <= 40
+      ? domainEvent.time
+      : now,
+    createdAt: now,
+    status: classification.status,
+    recommendedAction: classification.recommendedAction,
+    risk: classification.risk,
+    requiresApproval: classification.requiresApproval,
+    clusterName: classification.clusterName,
+    reason: classification.reason,
+    recoveryVerified: false,
+  };
+
+  try {
+    await db.send(new PutCommand({
+      TableName: tableName,
+      Item: item,
+      ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+    }));
+    console.info("Automation event classified", {
+      eventId: item.id,
+      eventType: item.eventType,
+      status: item.status,
+    });
+  } catch (error) {
+    if (error?.name === "ConditionalCheckFailedException") {
+      console.info("Duplicate automation event ignored", { eventId: item.id });
+      return;
+    }
+    throw error;
+  }
+}
+
+export async function handler(event) {
+  const batchItemFailures = [];
+  for (const record of event.Records ?? []) {
+    try {
+      const domainEvent = JSON.parse(record.body ?? "{}");
+      await recordEvent(domainEvent);
+    } catch (error) {
+      console.error("Automation event processing failed", {
+        messageId: record.messageId,
+        errorName: error?.name ?? "Error",
+      });
+      batchItemFailures.push({ itemIdentifier: record.messageId });
+    }
+  }
+  return { batchItemFailures };
+}

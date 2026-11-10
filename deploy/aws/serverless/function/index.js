@@ -1,4 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import {
   DeleteCommand,
   DynamoDBDocumentClient,
@@ -9,7 +10,39 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const eventBridge = new EventBridgeClient({});
 const table = process.env.TABLE_NAME;
+const eventBusName = process.env.EVENT_BUS_NAME;
+
+async function publishDomainEvent(detailType, userId, resource) {
+  if (!eventBusName) return;
+  try {
+    const result = await eventBridge.send(new PutEventsCommand({
+      Entries: [{
+        EventBusName: eventBusName,
+        Source: "cloudsentinels.api",
+        DetailType: detailType,
+        Time: new Date(),
+        Detail: JSON.stringify({ userId, resource, occurredAt: new Date().toISOString() }),
+      }],
+    }));
+    if ((result.FailedEntryCount ?? 0) > 0) {
+      console.error("Domain event publish partially failed", {
+        detailType,
+        failedEntryCount: result.FailedEntryCount,
+        entryErrors: (result.Entries ?? [])
+          .filter((entry) => entry.ErrorCode)
+          .map((entry) => ({
+            errorCode: entry.ErrorCode,
+            errorMessage: entry.ErrorMessage,
+          })),
+      });
+    }
+  } catch (error) {
+    // Domain persistence must not fail because an optional automation transport is unavailable.
+    console.error("Domain event publish failed", { detailType, name: error?.name });
+  }
+}
 
 const response = (statusCode, body) => ({
   statusCode,
@@ -184,6 +217,7 @@ export async function handler(event) {
           suggestedFix: "",
           assignee: "",
         });
+        await publishDomainEvent("IncidentCreated", userId, { id: item.id, severity: item.severity, title: item.title });
         return response(201, item);
       }
     }
@@ -195,12 +229,14 @@ export async function handler(event) {
       }
       if (method === "PATCH" || method === "PUT") {
         const item = await updateItem(userId, "INCIDENT", id, body);
+        if (item) await publishDomainEvent("IncidentUpdated", userId, { id: item.id, status: item.status, severity: item.severity });
         return item ? response(200, item) : response(404, { error: "Incident not found." });
       }
       if (method === "DELETE") {
         const current = await getItem(userId, "INCIDENT", id);
         if (!current) return response(404, { error: "Incident not found." });
         await db.send(new DeleteCommand({ TableName: table, Key: { PK: `USER#${userId}`, SK: `INCIDENT#${String(id).padStart(16, "0")}` } }));
+        await publishDomainEvent("IncidentDeleted", userId, { id: current.id, severity: current.severity });
         return response(200, { deleted: true });
       }
     }
@@ -231,6 +267,7 @@ export async function handler(event) {
           status: "active",
           timestamp: now,
         });
+        await publishDomainEvent("AlertCreated", userId, { id: alert.id, severity: alert.severity, title: alert.title });
         return response(201, alert);
       }
     }
@@ -238,6 +275,7 @@ export async function handler(event) {
     if (resource === "alerts" && id) {
       if (method === "PATCH" || method === "PUT") {
         const item = await updateItem(userId, "ALERT", id, body);
+        if (item) await publishDomainEvent("AlertUpdated", userId, { id: item.id, status: item.status, severity: item.severity });
         return item ? response(200, item) : response(404, { error: "Alert not found." });
       }
     }
@@ -255,6 +293,7 @@ export async function handler(event) {
           source: cleanText(body.source ?? "", "source", 100),
           timestamp: now,
         });
+        await publishDomainEvent("MetricRecorded", userId, { id: item.id, name: item.name, value: item.value, unit: item.unit });
         return response(201, item);
       }
     }

@@ -33,7 +33,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-xl">
+    <div className="mission-page p-6 space-y-6 max-w-xl">
       <div>
         <h1 className="font-display text-2xl font-700 text-foreground">
           Settings

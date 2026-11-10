@@ -149,7 +149,7 @@ export function MonitoringPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="mission-page p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-700 text-foreground">
@@ -426,7 +426,7 @@ export function MonitoringPage() {
       </Card>
 
       {/* Metrics Chart */}
-      <Card className="bg-card border-border">
+      <Card className="telemetry-glass border-cyan-200/10">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">
             Recent Metrics

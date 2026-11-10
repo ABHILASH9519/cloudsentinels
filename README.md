@@ -1,6 +1,20 @@
 # CloudSentinels
 
-CloudSentinels is an incident-management and observability console for teams operating cloud workloads and Kubernetes clusters. The current implementation uses a React/TypeScript frontend and a Motoko backend on the Internet Computer.
+CloudSentinels is an incident-management and observability project for teams operating cloud workloads and Kubernetes clusters. The goal is to bring incident context, monitoring signals and operational workflows into one place, then make routine response work safer and easier to understand.
+
+The repository currently contains two implementation tracks:
+
+- **Existing application:** React/TypeScript frontend with a Motoko backend on the Internet Computer. The capabilities and limitations below describe this working application.
+- **AWS-native architecture (in development):** a separate React/AWS integration path, API/Lambda runtime, EventBridge and SQS event processing, plus an optional Zapier relay. These changes are being developed on feature branches and must not be mistaken for a deployed production migration.
+
+The AWS automation processor classifies and records events. A signed Zapier command path now validates approval policy and dispatches approved commands to a separately configured remediation adapter. The adapter itself, cluster-specific resource mapping and scoped Kubernetes permissions must still be deployed and tested; live cluster remediation remains disabled by default.
+
+
+## Zapier-triggered AWS remediation workflow
+
+The AWS feature branch adds a signed command path from Zapier back into AWS. Zapier can receive incident events, apply filters and a human approval step, then send a signed command to the AWS API. AWS verifies the signature, checks the event's pending-approval state and recommended action, and queues the approved command for a separately deployed remediation adapter.
+
+See [Zapier self-healing setup](docs/zapier-self-healing-setup.md) for the end-to-end Zap configuration and adapter contract. Live cluster actions remain disabled by default; a real adapter, non-production EKS validation, and explicit execution opt-in are required before the worker is provisioned.
 
 ## Current capabilities in source
 

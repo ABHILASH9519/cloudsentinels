@@ -76,20 +76,23 @@ export function DashboardPage() {
   ];
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-700 text-foreground">
-          Dashboard
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Real-time infrastructure overview
-        </p>
-      </div>
+    <div className="mission-page p-6 space-y-6">
+      <section className="orbital-hero">
+        <div className="orbital-copy">
+          <div className="orbital-eyebrow"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,.9)]" /> Orbital operations / Mission control</div>
+          <h1 className="orbital-title">CloudSentinels<br />Autonomous cluster defense.</h1>
+          <p className="orbital-description">AI-powered self-healing for Kubernetes and live cluster systems. Observe infrastructure signals, investigate anomalies, and coordinate safe recovery from one command environment.</p>
+        </div>
+        <div className="orbital-coordinates">
+          <div>Control plane<strong> AWS native</strong></div>
+          <div>Operating mode<strong> Observe · Analyze · Recover</strong></div>
+        </div>
+      </section>
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
-          <Card key={stat.label} className="bg-card border-border">
+          <Card key={stat.label} className="telemetry-glass border-cyan-200/10">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-muted-foreground">

@@ -19,6 +19,31 @@ Parameters:
   StageName:
     Type: String
     Default: v1
+  ZapierWebhookSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional ARN of a Secrets Manager secret containing webhookUrl and signingSecret.
+  ZapierCommandSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional ARN of a Secrets Manager secret containing the signingSecret used by Zapier to approve remediation commands.
+  RemediationAdapterFunctionArn:
+    Type: String
+    Default: ""
+    Description: Optional ARN of a separately deployed Kubernetes remediation adapter Lambda.
+  RemediationExecutionEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Must be explicitly enabled together with an adapter ARN before commands are dispatched.
+
+Conditions:
+  HasZapierWebhookSecret: !Not [!Equals [!Ref ZapierWebhookSecretArn, ""]]
+  HasZapierCommandSecret: !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
+  CanExecuteRemediation: !And
+    - !Equals [!Ref RemediationExecutionEnabled, "true"]
+    - !Not [!Equals [!Ref RemediationAdapterFunctionArn, ""]]
+    - !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
 
 Globals:
   Function:
@@ -29,8 +54,357 @@ Globals:
       Variables:
         TABLE_NAME: !Ref ApplicationTableName
         STAGE_NAME: !Ref StageName
+        EVENT_BUS_NAME: !Ref CloudSentinelsEventBus
 
 Resources:
+  CloudSentinelsEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: cloudsentinels-domain-events
+
+  AutomationDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-automation-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  AutomationDeliveryDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-automation-delivery-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  AutomationEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-automation-events
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt AutomationDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  AutomationEventsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref AutomationEventsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt AutomationEventsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt AutomationEventRule.Arn
+
+  AutomationDeliveryDlqPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref AutomationDeliveryDeadLetterQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt AutomationDeliveryDeadLetterQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt AutomationEventRule.Arn
+
+  AutomationEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cloudsentinels-domain-events-to-sqs
+      EventBusName: !Ref CloudSentinelsEventBus
+      EventPattern:
+        source:
+          - cloudsentinels.api
+          - cloudsentinels.cluster-agent
+        detail-type:
+          - IncidentCreated
+          - IncidentUpdated
+          - IncidentDeleted
+          - AlertCreated
+          - AlertUpdated
+          - MetricRecorded
+          - PodCrashLoopBackOff
+          - NodeNotReady
+          - CpuThresholdExceeded
+          - MemoryPressure
+          - DeploymentUnhealthy
+          - ApiLatencyHigh
+      Targets:
+        - Id: AutomationEventsQueueTarget
+          Arn: !GetAtt AutomationEventsQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt AutomationDeliveryDeadLetterQueue.Arn
+
+  ZapierRelayProcessingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierWebhookSecret
+    Properties:
+      QueueName: cloudsentinels-zapier-relay-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  ZapierRelayDeliveryDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierWebhookSecret
+    Properties:
+      QueueName: cloudsentinels-zapier-delivery-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  ZapierRelayQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierWebhookSecret
+    Properties:
+      QueueName: cloudsentinels-zapier-events
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ZapierRelayProcessingDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  ZapierRelayQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasZapierWebhookSecret
+    Properties:
+      Queues:
+        - !Ref ZapierRelayQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ZapierRelayQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ZapierIntegrationEventRule.Arn
+
+  ZapierRelayDeliveryDlqPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasZapierWebhookSecret
+    Properties:
+      Queues:
+        - !Ref ZapierRelayDeliveryDeadLetterQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ZapierRelayDeliveryDeadLetterQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ZapierIntegrationEventRule.Arn
+
+  ZapierIntegrationEventRule:
+    Type: AWS::Events::Rule
+    Condition: HasZapierWebhookSecret
+    Properties:
+      Name: cloudsentinels-events-to-zapier-relay
+      EventBusName: !Ref CloudSentinelsEventBus
+      EventPattern:
+        source:
+          - cloudsentinels.api
+          - cloudsentinels.cluster-agent
+        detail-type:
+          - IncidentCreated
+          - IncidentUpdated
+          - AlertCreated
+          - AlertUpdated
+          - PodCrashLoopBackOff
+          - NodeNotReady
+          - CpuThresholdExceeded
+          - MemoryPressure
+          - DeploymentUnhealthy
+          - ApiLatencyHigh
+      Targets:
+        - Id: ZapierRelayQueueTarget
+          Arn: !GetAtt ZapierRelayQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt ZapierRelayDeliveryDeadLetterQueue.Arn
+
+  ZapierRelayFunction:
+    Type: AWS::Serverless::Function
+    Condition: HasZapierWebhookSecret
+    Properties:
+      CodeUri: zapier-relay/
+      Handler: index.handler
+      Timeout: 20
+      MemorySize: 256
+      Environment:
+        Variables:
+          ZAPIER_WEBHOOK_SECRET_ARN: !Ref ZapierWebhookSecretArn
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref ZapierWebhookSecretArn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ApplicationTableName}"
+      Events:
+        ZapierRelayQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ZapierRelayQueue.Arn
+            BatchSize: 5
+            MaximumBatchingWindowInSeconds: 2
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+
+  RemediationCommandsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierCommandSecret
+    Properties:
+      QueueName: cloudsentinels-remediation-commands-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  RemediationCommandsQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierCommandSecret
+    Properties:
+      QueueName: cloudsentinels-remediation-commands
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RemediationCommandsDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  RemediationCommandsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasZapierCommandSecret
+    Properties:
+      Queues:
+        - !Ref RemediationCommandsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt RemediationCommandsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt RemediationCommandApprovedRule.Arn
+
+  RemediationCommandsDlqPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasZapierCommandSecret
+    Properties:
+      Queues:
+        - !Ref RemediationCommandsDeadLetterQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt RemediationCommandsDeadLetterQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt RemediationCommandApprovedRule.Arn
+
+  RemediationCommandApprovedRule:
+    Type: AWS::Events::Rule
+    Condition: HasZapierCommandSecret
+    Properties:
+      Name: cloudsentinels-approved-remediation-to-sqs
+      EventBusName: !Ref CloudSentinelsEventBus
+      EventPattern:
+        source:
+          - cloudsentinels.zapier
+        detail-type:
+          - RemediationCommandApproved
+      Targets:
+        - Id: RemediationCommandsQueueTarget
+          Arn: !GetAtt RemediationCommandsQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt RemediationCommandsDeadLetterQueue.Arn
+
+  ZapierCommandFunction:
+    Type: AWS::Serverless::Function
+    Condition: HasZapierCommandSecret
+    Properties:
+      CodeUri: zapier-command/
+      Handler: index.handler
+      Timeout: 15
+      MemorySize: 256
+      Environment:
+        Variables:
+          ZAPIER_COMMAND_SECRET_ARN: !Ref ZapierCommandSecretArn
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApplicationTableName
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref CloudSentinelsEventBus
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref ZapierCommandSecretArn
+      Events:
+        ZapierCommand:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /automation/commands
+            Method: POST
+
+  RemediationCommandWorker:
+    Type: AWS::Serverless::Function
+    Condition: CanExecuteRemediation
+    Properties:
+      CodeUri: remediation-worker/
+      Handler: index.handler
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          REMEDIATION_ADAPTER_FUNCTION_ARN: !Ref RemediationAdapterFunctionArn
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApplicationTableName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Ref RemediationAdapterFunctionArn
+      Events:
+        ApprovedRemediationCommands:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt RemediationCommandsQueue.Arn
+            BatchSize: 1
+            MaximumBatchingWindowInSeconds: 0
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+
   OperationsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -39,6 +413,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApplicationTableName
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref CloudSentinelsEventBus
       Events:
         Health:
           Type: HttpApi
@@ -111,6 +487,32 @@ Resources:
             Auth:
               Authorizer: CognitoJwtAuthorizer
 
+  AutomationProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: automation/
+      Handler: index.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApplicationTableName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+              Resource: !GetAtt AutomationEventsQueue.Arn
+      Events:
+        AutomationQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AutomationEventsQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 5
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+
   HttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -129,8 +531,155 @@ Resources:
               audience:
                 - !Ref UserPoolClientId
 
+
+  OperationsFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-operations-function-errors
+      AlarmDescription: Operations API Lambda reported one or more invocation errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OperationsFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AutomationProcessorErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-automation-processor-errors
+      AlarmDescription: Automation processor Lambda reported one or more invocation errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AutomationProcessor
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AutomationDeadLetterQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-automation-dlq-visible-messages
+      AlarmDescription: One or more failed automation events reached the processing dead-letter queue.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AutomationDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AutomationDeliveryDeadLetterQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-automation-delivery-dlq-visible-messages
+      AlarmDescription: One or more failed EventBridge deliveries reached the automation delivery dead-letter queue.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AutomationDeliveryDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ZapierRelayErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasZapierWebhookSecret
+    Properties:
+      AlarmName: cloudsentinels-zapier-relay-errors
+      AlarmDescription: Zapier relay Lambda reported one or more invocation errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ZapierRelayFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ZapierDeliveryDeadLetterQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasZapierWebhookSecret
+    Properties:
+      AlarmName: cloudsentinels-zapier-delivery-dlq-visible-messages
+      AlarmDescription: One or more failed Zapier webhook deliveries reached the delivery dead-letter queue.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ZapierRelayDeliveryDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
 Outputs:
   ApiBaseUrl:
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
   OperationsFunctionName:
     Value: !Ref OperationsFunction
+  EventBusName:
+    Value: !Ref CloudSentinelsEventBus
+  AutomationQueueUrl:
+    Value: !Ref AutomationEventsQueue
+  AutomationQueueArn:
+    Value: !GetAtt AutomationEventsQueue.Arn
+  AutomationDeadLetterQueueUrl:
+    Value: !Ref AutomationDeadLetterQueue
+  AutomationDeliveryDeadLetterQueueUrl:
+    Value: !Ref AutomationDeliveryDeadLetterQueue
+  AutomationProcessorFunctionName:
+    Value: !Ref AutomationProcessor
+  ZapierRelayQueueUrl:
+    Condition: HasZapierWebhookSecret
+    Value: !Ref ZapierRelayQueue
+  ZapierRelayFunctionName:
+    Condition: HasZapierWebhookSecret
+    Value: !Ref ZapierRelayFunction
+  ZapierRelayProcessingDlqUrl:
+    Condition: HasZapierWebhookSecret
+    Value: !Ref ZapierRelayProcessingDeadLetterQueue
+  RemediationCommandsQueueUrl:
+    Condition: HasZapierCommandSecret
+    Value: !Ref RemediationCommandsQueue
+  RemediationCommandsQueueArn:
+    Condition: HasZapierCommandSecret
+    Value: !GetAtt RemediationCommandsQueue.Arn
+  ZapierCommandFunctionName:
+    Condition: HasZapierCommandSecret
+    Value: !Ref ZapierCommandFunction
+  RemediationCommandWorkerFunctionName:
+    Condition: CanExecuteRemediation
+    Value: !Ref RemediationCommandWorker
+  ZapierRelayDeliveryDlqUrl:
+    Condition: HasZapierWebhookSecret
+    Value: !Ref ZapierRelayDeliveryDeadLetterQueue
