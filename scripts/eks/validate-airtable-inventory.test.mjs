@@ -27,7 +27,7 @@ test("Airtable export normalization returns only allowlisted cluster fields", ()
     "Kubeconfig": [{ url: "must-not-be-exported" }],
     "Secure Onboarding Token": "must-not-be-exported"
   });
-  assert.deepEqual(Object.keys(normalized).sort(), ["clusterName", "environment", "lastSeenAt", "linkedNodeCount", "nodeCount", "onboardingDate", "recordCreatedAt", "podCount", "status"].sort());
+  assert.deepEqual(Object.keys(normalized).sort(), ["clusterName", "environment", "lastSeenAt", "linkedNodeCount", "nodeCount", "onboardingDate", "recordCreatedAt", "podCount", "reportedEndpoint", "cpuUsagePercent", "memoryUsageMB", "healthStatus"].sort());
   assert.equal(normalized.clusterName, "review-cluster");
 });
 
@@ -46,6 +46,11 @@ test("fresh inventory import can pass while old node telemetry remains explicitl
   assert.equal(result.summary.staleTelemetryRecords, 1);
   assert.equal(result.summary.clustersMissingNodeLinks, 0);
   assert.equal(assertFreshInventory(result), result);
+});
+
+test("accepts Other environment and Retired cluster status from new inventory", () => {
+  const input = { source: "Cloud-Sentinel", clusters: [{ clusterName: "legacy-dr-01", environment: "Other", status: "Retired", nodeCount: 0, podCount: 0, recordCreatedAt: "2026-11-10T00:00:00.000Z", lastSeenAt: null }] };
+  assert.equal(reconcileInventory(input, { now }).clusters[0].classification, "STALE");
 });
 
 test("freshness gate blocks an old Airtable inventory import", () => {
