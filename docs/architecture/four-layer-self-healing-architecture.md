@@ -1,5 +1,9 @@
 # CloudSentinels Four-Layer Self-Healing Architecture
 
+## Diagram source
+
+The editable Mermaid source is [four-layer-self-healing-architecture.mmd](./four-layer-self-healing-architecture.mmd).
+
 ## Purpose
 
 CloudSentinels is a multi-cluster incident detection and remediation control plane for online Kubernetes, serverless Kubernetes workloads, and offline/local Kubernetes. The design separates cluster execution, secure connectivity, intelligence/orchestration, and automation execution.
