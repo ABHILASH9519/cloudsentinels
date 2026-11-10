@@ -2,8 +2,8 @@
 import fs from "node:fs";
 const SECRET_KEY = /(kubeconfig|token|secret|credential|private.?key|password|api.?key)/i;
 const NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const ENVIRONMENTS = new Set(["Development", "QA", "Staging", "Production"]);
-const STATUSES = new Set(["Active", "Inactive", "Provisioning", "Degraded", "Unknown"]);
+const ENVIRONMENTS = new Set(["Development", "QA", "Staging", "Production", "Other"]);
+const STATUSES = new Set(["Active", "Inactive", "Provisioning", "Degraded", "Unknown", "Retired"]);
 export function assertNoSecrets(value, path = "$") {
   if (Array.isArray(value)) { value.forEach((item, index) => assertNoSecrets(item, path + "[" + index + "]")); return; }
   if (!value || typeof value !== "object") return;
