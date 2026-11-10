@@ -180,12 +180,3 @@ Resources:
         project: cloudsentinels
         environment: minor-review
         lifecycle: review-day
-Outputs:
-  ClusterName:
-    Value: !Ref CloudSentinelsReviewCluster
-  ClusterArn:
-    Value: !GetAtt CloudSentinelsReviewCluster.Arn
-  ClusterEndpoint:
-    Value: !GetAtt CloudSentinelsReviewCluster.Endpoint
-  NodeGroupName:
-    Value: !Ref CloudSentinelsReviewNodeGroup
