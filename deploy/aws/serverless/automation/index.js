@@ -1,5 +1,5 @@
 ﻿import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
 const tableName = process.env.TABLE_NAME;
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -92,6 +92,109 @@ export function classifyEvent(domainEvent) {
   };
 }
 
+
+// Procedures are data-driven records in the existing DynamoDB table:
+// PK = SYSTEM#PROCEDURES, SK = PROCEDURE#<eventType>#<zero-padded-version>.
+// Dynamic records can select only adapter actions that the execution layer
+// explicitly supports. Adding a procedure never grants arbitrary code execution.
+const ALLOWED_ACTIONS = new Set([
+  "restart-pod",
+  "replace-or-recover-node",
+  "scale-workload",
+  "diagnose-memory-pressure",
+  "rollback-deployment",
+  "scale-or-investigate-service",
+]);
+const ALLOWED_RISKS = new Set(["low", "medium", "high", "critical"]);
+
+function clusterTarget(detail) {
+  const raw = detail.clusterName ?? detail.clusterArn ?? detail.cluster ?? null;
+  return typeof raw === "string" && raw.trim() ? raw.trim().slice(0, 256) : null;
+}
+
+export async function resolveProcedure(domainEvent) {
+  const classification = await resolveProcedure(domainEvent);
+  const detail = domainEvent.detail && typeof domainEvent.detail === "object"
+    ? domainEvent.detail
+    : {};
+  const target = clusterTarget(detail);
+  if (!tableName || classification.eventType === "Unknown") return classification;
+
+  const result = await db.send(new QueryCommand({
+    TableName: tableName,
+    KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+    ExpressionAttributeValues: {
+      ":pk": "SYSTEM#PROCEDURES",
+      ":prefix": `PROCEDURE#${classification.eventType}#`,
+    },
+    ScanIndexForward: false,
+    Limit: 1,
+  }));
+  const procedure = (result.Items ?? [])[0];
+  if (!procedure) return { ...classification, clusterName: target };
+
+  if (procedure.enabled === false) {
+    return {
+      ...classification,
+      status: "OBSERVED",
+      recommendedAction: null,
+      risk: "informational",
+      requiresApproval: false,
+      reason: "The matching procedure is disabled in the procedure registry.",
+      clusterName: target,
+      procedureId: procedure.procedureId ?? null,
+      procedureVersion: procedure.version ?? null,
+    };
+  }
+
+  if (
+    typeof procedure.action !== "string" ||
+    !ALLOWED_ACTIONS.has(procedure.action) ||
+    !ALLOWED_RISKS.has(procedure.risk) ||
+    typeof procedure.requiresApproval !== "boolean"
+  ) {
+    return {
+      ...classification,
+      status: "BLOCKED_INVALID_PROCEDURE",
+      recommendedAction: null,
+      risk: "high",
+      requiresApproval: true,
+      reason: "The matching procedure is malformed or requests an unsupported action.",
+      clusterName: target,
+      procedureId: procedure.procedureId ?? null,
+      procedureVersion: procedure.version ?? null,
+    };
+  }
+
+  if (!target) {
+    return {
+      ...classification,
+      status: "BLOCKED_NO_CLUSTER_TARGET",
+      recommendedAction: procedure.action,
+      risk: procedure.risk,
+      requiresApproval: procedure.requiresApproval,
+      reason: "The event does not identify a registered Kubernetes cluster target.",
+      clusterName: null,
+      procedureId: procedure.procedureId ?? null,
+      procedureVersion: procedure.version ?? null,
+    };
+  }
+
+  return {
+    ...classification,
+    status: procedure.requiresApproval ? "PENDING_APPROVAL" : "PENDING_CLUSTER_ADAPTER",
+    recommendedAction: procedure.action,
+    risk: procedure.risk,
+    requiresApproval: procedure.requiresApproval,
+    reason: procedure.requiresApproval
+      ? "A matching versioned procedure requires explicit approval."
+      : "A matching procedure is available; execution still requires an enabled cluster adapter.",
+    clusterName: target,
+    procedureId: procedure.procedureId ?? null,
+    procedureVersion: procedure.version ?? null,
+  };
+}
+
 async function recordEvent(domainEvent) {
   if (!tableName) throw new Error("TABLE_NAME is not configured.");
   if (!domainEvent || typeof domainEvent.id !== "string" || !domainEvent.id.trim()) {
@@ -117,6 +220,8 @@ async function recordEvent(domainEvent) {
     createdAt: now,
     status: classification.status,
     recommendedAction: classification.recommendedAction,
+    procedureId: classification.procedureId ?? null,
+    procedureVersion: classification.procedureVersion ?? null,
     risk: classification.risk,
     requiresApproval: classification.requiresApproval,
     clusterName: classification.clusterName,
