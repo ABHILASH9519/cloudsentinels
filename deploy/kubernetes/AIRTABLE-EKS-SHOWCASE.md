@@ -11,9 +11,9 @@ This manifest publishes the sanitized Airtable inventory inside a real Kubernete
 - Deployment: `airtable-inventory` (init container copies the fixture to EBS; NGINX serves it)
 - Service: `airtable-inventory` (ClusterIP)
 
-The source dataset contains 16 cluster records and 15 each of nodes, pods, anomalies, incidents, notifications and deployments (106 records total). It preserves sample record IDs and relationship labels. Notification recipients and message bodies are redacted in this Kubernetes copy. Kubeconfig and onboarding-token fields are excluded.
+The refreshed source contains 20 Kubernetes Cluster records. The checked-in snapshot also reports 15 historical records each for Nodes, Pods, Deployments, Anomalies, and Incidents as freshness metadata; those child rows are not copied as live telemetry. The ConfigMap embeds `deploy/eks/airtable-inventory.snapshot.json`, including the 20 sanitized cluster records, rollups, and explicit data-quality notes. Kubeconfig, onboarding tokens, attachments, and credentials are excluded.
 
-**Important:** Airtable rows are sample inventory, not AWS resource instructions. This creates one showcase namespace and one EBS-backed data volume. It does not create 16 EKS clusters, 15 EC2 nodes, or 15 live Kubernetes pods from historical records. The JSON is sample inventory, not live telemetry.
+**Important:** Airtable rows are sample inventory, not AWS resource instructions. This creates one showcase namespace and one EBS-backed data volume. It does not create 16 EKS clusters, 15 EC2 nodes, or 15 live Kubernetes pods from historical records. The JSON is inventory import evidence, not live telemetry. Cluster rows were imported on 2026-11-10, but the linked child tables have no cluster associations and node `Last Seen` values are from June 2024.
 
 ## Prerequisites
 
