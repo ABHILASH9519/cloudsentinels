@@ -278,3 +278,25 @@ test("blocks procedures missing required registry metadata", async (t) => {
   assert.equal(result.recommendedAction, null);
   assert.equal(result.requiresApproval, true);
 });
+
+
+test("blocks disabled registry records that are missing required metadata", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      enabled: false,
+      action: "restart-pod",
+      risk: "low",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "IncompleteDisabledProcedure",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "BLOCKED_INVALID_PROCEDURE");
+  assert.equal(result.recommendedAction, null);
+  assert.equal(result.requiresApproval, true);
+});
