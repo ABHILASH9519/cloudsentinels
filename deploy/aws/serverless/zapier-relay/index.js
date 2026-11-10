@@ -40,6 +40,15 @@ async function getConfig() {
   return parsed;
 }
 
+const EVENT_POLICIES = {
+  PodCrashLoopBackOff: { action: "restart-pod", risk: "medium", requiresApproval: false },
+  NodeNotReady: { action: "replace-or-recover-node", risk: "high", requiresApproval: true },
+  CpuThresholdExceeded: { action: "scale-workload", risk: "medium", requiresApproval: true },
+  MemoryPressure: { action: "diagnose-memory-pressure", risk: "low", requiresApproval: false },
+  DeploymentUnhealthy: { action: "rollback-deployment", risk: "high", requiresApproval: true },
+  ApiLatencyHigh: { action: "scale-or-investigate-service", risk: "medium", requiresApproval: true },
+};
+
 function safeString(value, max = 200) {
   return typeof value === "string" && value.trim()
     ? value.trim().slice(0, max)
@@ -49,18 +58,21 @@ function safeString(value, max = 200) {
 function toPayload(event) {
   const detail = event.detail && typeof event.detail === "object" ? event.detail : {};
   const resource = detail.resource && typeof detail.resource === "object" ? detail.resource : {};
+  const eventType = safeString(event["detail-type"], 80);
+  const policy = EVENT_POLICIES[eventType] ?? {};
   const payload = {
     schemaVersion: "1",
     eventId: safeString(event.id, 128),
-    eventType: safeString(event["detail-type"], 80),
+    eventType,
     source: safeString(event.source, 80),
     occurredAt: safeString(event.time, 40),
     severity: safeString(detail.severity ?? detail.priority, 32),
     incidentId: safeString(detail.incidentId ?? resource.id ?? detail.resourceId, 128),
     clusterRef: safeString(detail.clusterName ?? detail.cluster, 128),
     status: safeString(detail.status, 64),
-    recommendedAction: safeString(detail.recommendedAction, 80),
-    requiresApproval: detail.requiresApproval === true,
+    risk: safeString(detail.risk ?? policy.risk, 32),
+    recommendedAction: safeString(detail.recommendedAction ?? policy.action, 80),
+    requiresApproval: detail.requiresApproval === true || policy.requiresApproval === true,
     recoveryVerified: detail.recoveryVerified === true,
   };
   return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
