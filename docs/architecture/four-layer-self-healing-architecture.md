@@ -30,7 +30,7 @@ Three supported cluster modes:
 ### Layer 4 — Automation and procedure fabric
 
 - EventBridge + SQS provide durable event delivery, retries, dead-letter queues, and decoupling.
-- A **procedure registry** maps event signatures to versioned, tested runbooks. It is extensible rather than a finite list of hard-coded branches.
+- A **procedure registry** maps event signatures to versioned, tested runbooks. The automation coordinator resolves records from DynamoDB (`PK=SYSTEM#PROCEDURES`, `SK=PROCEDURE#<event-type>#<version>`) and falls back to built-in baseline rules. It is extensible rather than a finite list of hard-coded branches; the registry stores data, not executable scripts.
 - Zapier handles external workflow integrations (notifications, tickets, approvals, status updates). Cluster mutations should execute through the controlled Kubernetes/AWS execution adapters, not by giving Zapier unrestricted kubeconfig access.
 - Execution adapters apply the narrow action; verification checks health and closes or escalates the incident.
 - Every run records input event, matched procedure/version, actor, policy decision, action, result, retry count, and audit trace.
@@ -76,7 +76,7 @@ The registry can grow with new event signatures and procedure versions. It must 
 
 ## Airtable inventory integration
 
-Airtable base: `Cloud-Sentinel`. Tables discovered: Kubernetes Clusters, Nodes, Pods, Deployments, Anomalies, Incidents, and Notifications.
+Airtable base: `Cloud-Sentinel`. Tables discovered: Kubernetes Clusters, Nodes, Pods, Deployments, Anomalies, Incidents, and Notifications. The repository already contains a sanitized showcase snapshot at `deploy/kubernetes/airtable-inventory-showcase.yaml` and instructions at `deploy/kubernetes/AIRTABLE-EKS-SHOWCASE.md`.
 
 The cluster/node/pod/deployment tables are an **inventory/reference dataset**, not a Kubernetes deployment specification. Several records use example hostnames (`*.k8s.company.com`), example GitHub repositories, historical 2023/2024 timestamps, and a planned K3s record. They do not contain enough trusted information to recreate a real cluster or workload. Do not create EKS clusters, node groups, namespaces, Deployments, or Services directly from status/count fields.
 
