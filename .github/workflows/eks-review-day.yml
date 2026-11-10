@@ -149,7 +149,7 @@ jobs:
           if [[ ",$PUBLIC_CIDRS," == *",0.0.0.0/0,"* ]]; then echo "0.0.0.0/0 is forbidden"; exit 1; fi
 
       - name: Fetch and validate live Airtable cluster inventory
-        if: inputs.operation == 'plan'
+        if: inputs.operation != 'destroy'
         shell: bash
         env:
           AIRTABLE_API_TOKEN: ${{ secrets.AIRTABLE_API_TOKEN }}
@@ -157,7 +157,18 @@ jobs:
           set -euo pipefail
           [[ -n "$AIRTABLE_API_TOKEN" ]] || { echo "Set read-only AIRTABLE_API_TOKEN on minor-review environment"; exit 1; }
           node scripts/eks/fetch-airtable-inventory.mjs --output "$RUNNER_TEMP/airtable-inventory.safe.json"
-          node scripts/eks/validate-airtable-inventory.mjs --input "$RUNNER_TEMP/airtable-inventory.safe.json" --stale-after-days 90 --require-fresh
+          node scripts/eks/validate-airtable-inventory.mjs --input "$RUNNER_TEMP/airtable-inventory.safe.json" --stale-after-days 90 --require-fresh > "$RUNNER_TEMP/airtable-inventory-validation.json"
+          cat "$RUNNER_TEMP/airtable-inventory-validation.json"
+
+      - name: Preserve sanitized inventory and validation evidence
+        if: inputs.operation != 'destroy'
+        uses: actions/upload-artifact@v4
+        with:
+          name: airtable-inventory-review-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/airtable-inventory.safe.json
+            ${{ runner.temp }}/airtable-inventory-validation.json
+          retention-days: 14
 
       - name: Configure AWS credentials through OIDC
         uses: aws-actions/configure-aws-credentials@v4
