@@ -1,0 +1,11 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { assertNoSecrets, reconcileInventory } from "./validate-airtable-inventory.mjs";
+const now = "2026-11-10T00:00:00.000Z";
+const base = { source: "Cloud-Sentinel", clusters: [{ clusterName: "review-cluster", environment: "Development", status: "Active", onboardingDate: "2026-11-01T00:00:00.000Z", nodeCount: 2, podCount: 8 }], liveClusters: [{ clusterName: "review-cluster", nodeCount: 2, podCount: 8 }, { clusterName: "unlisted-cluster", nodeCount: 1, podCount: 3 }] };
+test("matches fresh source inventory and finds cluster-only resources", () => { const r = reconcileInventory(base, { now }); assert.equal(r.summary.MATCH, 1); assert.equal(r.summary.CLUSTER_ONLY, 1); });
+test("marks historical snapshots stale", () => { const x = structuredClone(base); x.clusters[0].onboardingDate = "2024-06-01T00:00:00.000Z"; assert.equal(reconcileInventory(x, { now }).clusters[0].classification, "STALE"); });
+test("detects node and pod count drift", () => { const x = structuredClone(base); x.liveClusters[0].nodeCount = 4; assert.equal(reconcileInventory(x, { now }).clusters[0].classification, "DRIFT"); });
+test("marks fresh source-only records", () => { const x = structuredClone(base); x.liveClusters = []; assert.equal(reconcileInventory(x, { now }).clusters[0].classification, "SOURCE_ONLY"); });
+test("rejects credential-bearing fields", () => { assert.throws(() => assertNoSecrets({ clusters: [], secureOnboardingToken: "redacted" }), /Sensitive field/); });
+test("rejects duplicate names and malformed counts", () => { const x = structuredClone(base); x.clusters.push(structuredClone(x.clusters[0])); assert.throws(() => reconcileInventory(x, { now }), /Duplicate cluster/); const y = structuredClone(base); y.clusters[0].nodeCount = -1; assert.throws(() => reconcileInventory(y, { now }), /nodeCount/); });
