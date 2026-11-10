@@ -157,3 +157,28 @@ test("rejects requests without an explicit approval marker", async () => {
   assert.equal(updates.length, 0);
   assert.equal(published.length, 0);
 });
+
+test("accepts a policy-approved low-risk command without a human approval identity", async () => {
+  record.requiresApproval = false;
+  record.status = "PENDING_CLUSTER_ADAPTER";
+  record.recommendedAction = "restart-pod";
+
+  const result = await handler(signedRequest({
+    action: "restart-pod",
+    approvedBy: "zapier-auto-policy",
+  }));
+
+  assert.equal(result.statusCode, 202);
+  assert.equal(record.status, "APPROVED_AWAITING_EXECUTOR");
+  assert.equal(updates.length, 1);
+  const detail = JSON.parse(published[0].Entries[0].Detail);
+  assert.equal(detail.requiresApproval, false);
+});
+
+test("requires a human approval identity for high-risk commands", async () => {
+  const result = await handler(signedRequest({ approvedBy: "zapier-auto-policy" }));
+
+  assert.equal(result.statusCode, 403);
+  assert.equal(updates.length, 0);
+  assert.equal(published.length, 0);
+});
