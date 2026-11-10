@@ -133,20 +133,6 @@ export async function resolveProcedure(domainEvent) {
   const procedure = (result.Items ?? [])[0];
   if (!procedure) return { ...classification, clusterName: target };
 
-  if (procedure.enabled === false) {
-    return {
-      ...classification,
-      status: "OBSERVED",
-      recommendedAction: null,
-      risk: "informational",
-      requiresApproval: false,
-      reason: "The matching procedure is disabled in the procedure registry.",
-      clusterName: target,
-      procedureId: procedure.procedureId ?? null,
-      procedureVersion: procedure.version ?? null,
-    };
-  }
-
   const validProcedureMetadata =
     typeof procedure.procedureId === "string" &&
     procedure.procedureId.trim().length > 0 &&
@@ -173,6 +159,20 @@ export async function resolveProcedure(domainEvent) {
       risk: "high",
       requiresApproval: true,
       reason: "The matching procedure is malformed, requests an unsupported action, or violates the risk approval policy.",
+      clusterName: target,
+      procedureId: procedure.procedureId ?? null,
+      procedureVersion: procedure.version ?? null,
+    };
+  }
+
+  if (procedure.enabled === false) {
+    return {
+      ...classification,
+      status: "OBSERVED",
+      recommendedAction: null,
+      risk: "informational",
+      requiresApproval: false,
+      reason: "The matching procedure is disabled in the procedure registry.",
       clusterName: target,
       procedureId: procedure.procedureId ?? null,
       procedureVersion: procedure.version ?? null,
