@@ -1,0 +1,218 @@
+name: EKS review-day provisioning
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Plan only, create the review cluster, or destroy it"
+        type: choice
+        required: true
+        options: [plan, create, destroy]
+      review_approved:
+        description: "Confirm review-day owner approval and cost/network review"
+        type: boolean
+        required: true
+        default: false
+      cluster_name:
+        description: "EKS cluster name (required for plan/create)"
+        type: string
+        required: false
+      kubernetes_version:
+        description: "EKS Kubernetes version supported in ap-south-1"
+        type: string
+        required: false
+      vpc_id:
+        description: "Owner-approved VPC ID"
+        type: string
+        required: false
+      private_subnet_ids:
+        description: "Comma-separated private subnet IDs in distinct AZs"
+        type: string
+        required: false
+      cluster_role_arn:
+        description: "Pre-reviewed EKS cluster IAM role ARN"
+        type: string
+        required: false
+      node_role_arn:
+        description: "Pre-reviewed EKS node IAM role ARN"
+        type: string
+        required: false
+      node_instance_type:
+        description: "Owner-approved EC2 instance type"
+        type: string
+        required: false
+      min_size:
+        description: "Managed node group minimum (1-5)"
+        type: string
+        required: false
+        default: "1"
+      desired_size:
+        description: "Managed node group desired capacity (1-5)"
+        type: string
+        required: false
+        default: "1"
+      max_size:
+        description: "Managed node group maximum (1-5)"
+        type: string
+        required: false
+        default: "2"
+      public_access_cidrs:
+        description: "Narrow comma-separated IPv4 CIDR allowlist; never 0.0.0.0/0"
+        type: string
+        required: false
+      confirm_create:
+        description: "Type CREATE-CLOUDSENTINELS-EKS only for create"
+        type: string
+        required: false
+      confirm_destroy:
+        description: "Type DESTROY-CLOUDSENTINELS-EKS only for destroy"
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cloudsentinels-review-day-eks
+  cancel-in-progress: false
+
+jobs:
+  eks:
+    name: ${{ inputs.operation }} EKS review cluster
+    runs-on: ubuntu-latest
+    environment: minor-review
+    timeout-minutes: 60
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: cloudsentinels-minor-review-eks
+    steps:
+      - name: Checkout reviewed branch
+        uses: actions/checkout@v4
+
+      - name: Validate approval and parameters
+        shell: bash
+        env:
+          OPERATION: ${{ inputs.operation }}
+          REVIEW_APPROVED: ${{ inputs.review_approved }}
+          CLUSTER_NAME: ${{ inputs.cluster_name }}
+          K8S_VERSION: ${{ inputs.kubernetes_version }}
+          VPC_ID: ${{ inputs.vpc_id }}
+          SUBNETS: ${{ inputs.private_subnet_ids }}
+          CLUSTER_ROLE: ${{ inputs.cluster_role_arn }}
+          NODE_ROLE: ${{ inputs.node_role_arn }}
+          INSTANCE_TYPE: ${{ inputs.node_instance_type }}
+          MIN_SIZE: ${{ inputs.min_size }}
+          DESIRED_SIZE: ${{ inputs.desired_size }}
+          MAX_SIZE: ${{ inputs.max_size }}
+          PUBLIC_CIDRS: ${{ inputs.public_access_cidrs }}
+          CONFIRM_CREATE: ${{ inputs.confirm_create }}
+          CONFIRM_DESTROY: ${{ inputs.confirm_destroy }}
+        run: |
+          set -euo pipefail
+          [[ "$REVIEW_APPROVED" == "true" ]] || { echo "review_approved must be true"; exit 1; }
+          [[ -n "$AWS_REGION" ]] || { echo "Set AWS_REGION on minor-review environment"; exit 1; }
+          if [[ "$OPERATION" == "destroy" ]]; then
+            [[ "$CONFIRM_DESTROY" == "DESTROY-CLOUDSENTINELS-EKS" ]] || { echo "Destroy confirmation mismatch"; exit 1; }
+            exit 0
+          fi
+          [[ "$OPERATION" == "plan" || "$OPERATION" == "create" ]] || exit 1
+          [[ "$OPERATION" != "create" || "$CONFIRM_CREATE" == "CREATE-CLOUDSENTINELS-EKS" ]] || { echo "Create confirmation mismatch"; exit 1; }
+          [[ "$CLUSTER_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$ ]] || { echo "Invalid cluster name"; exit 1; }
+          [[ "$K8S_VERSION" =~ ^1\\.(3[0-9])$ ]] || { echo "Invalid Kubernetes version format"; exit 1; }
+          [[ "$VPC_ID" =~ ^vpc-[0-9a-f]+$ ]] || { echo "Invalid VPC ID"; exit 1; }
+          [[ "$SUBNETS" == subnet-* && "$SUBNETS" == *,subnet-* ]] || { echo "Provide at least two subnet IDs"; exit 1; }
+          [[ "$CLUSTER_ROLE" =~ ^arn:aws:iam::[0-9]{12}:role/.+$ ]] || { echo "Invalid cluster role ARN"; exit 1; }
+          [[ "$NODE_ROLE" =~ ^arn:aws:iam::[0-9]{12}:role/.+$ ]] || { echo "Invalid node role ARN"; exit 1; }
+          [[ "$INSTANCE_TYPE" =~ ^[a-z][0-9a-z.]+$ ]] || { echo "Invalid instance type"; exit 1; }
+          for value in "$MIN_SIZE" "$DESIRED_SIZE" "$MAX_SIZE"; do
+            [[ "$value" =~ ^[1-5]$ ]] || { echo "Node sizes must be integers from 1 to 5"; exit 1; }
+          done
+          (( MIN_SIZE <= DESIRED_SIZE && DESIRED_SIZE <= MAX_SIZE )) || { echo "Require min <= desired <= max"; exit 1; }
+          [[ -n "$PUBLIC_CIDRS" && "$PUBLIC_CIDRS" != "0.0.0.0/0" ]] || { echo "Restricted public API CIDR allowlist required"; exit 1; }
+          if [[ ",$PUBLIC_CIDRS," == *",0.0.0.0/0,"* ]]; then echo "0.0.0.0/0 is forbidden"; exit 1; fi
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: cloudsentinels-review-eks-${{ github.run_id }}
+
+      - name: Verify AWS account and VPC/subnet boundaries
+        if: inputs.operation != 'destroy'
+        shell: bash
+        env:
+          EXPECTED_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          VPC_ID: ${{ inputs.vpc_id }}
+          SUBNETS: ${{ inputs.private_subnet_ids }}
+        run: |
+          set -euo pipefail
+          ACTUAL_ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+          [[ -n "$EXPECTED_ACCOUNT_ID" && "$ACTUAL_ACCOUNT" == "$EXPECTED_ACCOUNT_ID" ]] || { echo "AWS account does not match AWS_ACCOUNT_ID"; exit 1; }
+          IFS=',' read -r -a SUBNET_ARRAY <<< "$SUBNETS"
+          [[ "${#SUBNET_ARRAY[@]}" -ge 2 ]] || { echo "At least two private subnets are required"; exit 1; }
+          ZONES=""
+          for subnet in "${SUBNET_ARRAY[@]}"; do
+            DETAILS="$(aws ec2 describe-subnets --subnet-ids "$subnet" --query 'Subnets[0].[VpcId,AvailabilityZone,MapPublicIpOnLaunch]' --output text)"
+            read -r subnet_vpc zone public_ip <<< "$DETAILS"
+            [[ "$subnet_vpc" == "$VPC_ID" && "$public_ip" == "False" ]] || { echo "Subnet $subnet must belong to VPC and not auto-assign public IPs"; exit 1; }
+            [[ ",$ZONES," != *",$zone,"* ]] || { echo "Subnets must span distinct AZs"; exit 1; }
+            ZONES="$ZONES$zone,"
+          done
+
+      - name: Destroy review cluster stack
+        if: inputs.operation == 'destroy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation delete-stack --stack-name "$STACK_NAME"
+          aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME"
+
+      - name: Create CloudFormation change set
+        if: inputs.operation == 'plan' || inputs.operation == 'create'
+        shell: bash
+        env:
+          CLUSTER_NAME: ${{ inputs.cluster_name }}
+          K8S_VERSION: ${{ inputs.kubernetes_version }}
+          VPC_ID: ${{ inputs.vpc_id }}
+          SUBNETS: ${{ inputs.private_subnet_ids }}
+          CLUSTER_ROLE: ${{ inputs.cluster_role_arn }}
+          NODE_ROLE: ${{ inputs.node_role_arn }}
+          INSTANCE_TYPE: ${{ inputs.node_instance_type }}
+          MIN_SIZE: ${{ inputs.min_size }}
+          DESIRED_SIZE: ${{ inputs.desired_size }}
+          MAX_SIZE: ${{ inputs.max_size }}
+          PUBLIC_CIDRS: ${{ inputs.public_access_cidrs }}
+        run: |
+          set -euo pipefail
+          CHANGE_SET="review-${GITHUB_RUN_ID}"
+          aws cloudformation create-change-set \\
+            --stack-name "$STACK_NAME" \\
+            --change-set-name "$CHANGE_SET" \\
+            --change-set-type CREATE \\
+            --template-body file://deploy/eks/review-day-cluster.yaml \\
+            --parameters \\
+              "ParameterKey=ClusterName,ParameterValue=$CLUSTER_NAME" \\
+              "ParameterKey=KubernetesVersion,ParameterValue=$K8S_VERSION" \\
+              "ParameterKey=VpcId,ParameterValue=$VPC_ID" \\
+              "ParameterKey=PrivateSubnetIds,ParameterValue=$SUBNETS" \\
+              "ParameterKey=ClusterRoleArn,ParameterValue=$CLUSTER_ROLE" \\
+              "ParameterKey=NodeRoleArn,ParameterValue=$NODE_ROLE" \\
+              "ParameterKey=NodeInstanceType,ParameterValue=$INSTANCE_TYPE" \\
+              "ParameterKey=MinSize,ParameterValue=$MIN_SIZE" \\
+              "ParameterKey=DesiredSize,ParameterValue=$DESIRED_SIZE" \\
+              "ParameterKey=MaxSize,ParameterValue=$MAX_SIZE" \\
+              "ParameterKey=PublicAccessCidrs,ParameterValue=$PUBLIC_CIDRS"
+          aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$CHANGE_SET"
+          aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$CHANGE_SET" --output table
+          echo "CHANGE_SET=$CHANGE_SET" >> "$GITHUB_ENV"
+
+      - name: Execute approved create change set
+        if: inputs.operation == 'create'
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$CHANGE_SET"
+          aws cloudformation wait stack-create-complete --stack-name "$STACK_NAME"
+          aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output table
