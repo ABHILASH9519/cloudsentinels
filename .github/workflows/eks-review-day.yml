@@ -41,6 +41,10 @@ on:
         description: "Pre-reviewed EKS node IAM role ARN"
         type: string
         required: false
+      cluster_admin_role_arn:
+        description: "Dedicated review operator IAM role granted Kubernetes cluster-admin access"
+        type: string
+        required: false
       node_instance_type:
         description: "Owner-approved EC2 instance type"
         type: string
@@ -114,6 +118,7 @@ jobs:
           SUBNETS: ${{ inputs.private_subnet_ids }}
           CLUSTER_ROLE: ${{ inputs.cluster_role_arn }}
           NODE_ROLE: ${{ inputs.node_role_arn }}
+          CLUSTER_ADMIN_ROLE: ${{ inputs.cluster_admin_role_arn }}
           INSTANCE_TYPE: ${{ inputs.node_instance_type }}
           MIN_SIZE: ${{ inputs.min_size }}
           DESIRED_SIZE: ${{ inputs.desired_size }}
@@ -140,6 +145,8 @@ jobs:
           [[ "$SUBNETS" == subnet-* && "$SUBNETS" == *,subnet-* ]] || { echo "Provide at least two subnet IDs"; exit 1; }
           [[ "$CLUSTER_ROLE" =~ ^arn:aws:iam::[0-9]{12}:role/.+$ ]] || { echo "Invalid cluster role ARN"; exit 1; }
           [[ "$NODE_ROLE" =~ ^arn:aws:iam::[0-9]{12}:role/.+$ ]] || { echo "Invalid node role ARN"; exit 1; }
+          [[ "$CLUSTER_ADMIN_ROLE" =~ ^arn:aws:iam::[0-9]{12}:role/.+$ ]] || { echo "Invalid cluster admin role ARN"; exit 1; }
+          [[ "${CLUSTER_ADMIN_ROLE#arn:aws:iam::}" == "$EXPECTED_ACCOUNT_ID:"* ]] || { echo "Cluster admin role must be in the approved AWS account"; exit 1; }
           [[ "$INSTANCE_TYPE" =~ ^[a-z][0-9a-z.]+$ ]] || { echo "Invalid instance type"; exit 1; }
           for value in "$MIN_SIZE" "$DESIRED_SIZE" "$MAX_SIZE"; do
             [[ "$value" =~ ^[1-5]$ ]] || { echo "Node sizes must be integers from 1 to 5"; exit 1; }
@@ -219,6 +226,7 @@ jobs:
           SUBNETS: ${{ inputs.private_subnet_ids }}
           CLUSTER_ROLE: ${{ inputs.cluster_role_arn }}
           NODE_ROLE: ${{ inputs.node_role_arn }}
+          CLUSTER_ADMIN_ROLE: ${{ inputs.cluster_admin_role_arn }}
           INSTANCE_TYPE: ${{ inputs.node_instance_type }}
           MIN_SIZE: ${{ inputs.min_size }}
           DESIRED_SIZE: ${{ inputs.desired_size }}
@@ -240,6 +248,7 @@ jobs:
               "ParameterKey=PrivateSubnetIds,ParameterValue=$SUBNETS" \
               "ParameterKey=ClusterRoleArn,ParameterValue=$CLUSTER_ROLE" \
               "ParameterKey=NodeRoleArn,ParameterValue=$NODE_ROLE" \
+              "ParameterKey=ClusterAdminRoleArn,ParameterValue=$CLUSTER_ADMIN_ROLE" \
               "ParameterKey=NodeInstanceType,ParameterValue=$INSTANCE_TYPE" \
               "ParameterKey=MinSize,ParameterValue=$MIN_SIZE" \
               "ParameterKey=DesiredSize,ParameterValue=$DESIRED_SIZE" \
