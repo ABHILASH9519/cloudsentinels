@@ -11,7 +11,7 @@ Parameters:
     AllowedPattern: '^[A-Za-z0-9][A-Za-z0-9_-]*$'
   KubernetesVersion:
     Type: String
-    AllowedPattern: '^1[.][0-9]{2}
+    AllowedPattern: '^1[.][0-9]{2}'
     Description: Choose a version currently supported by EKS in the target region.
   VpcId:
     Type: AWS::EC2::VPC::Id
