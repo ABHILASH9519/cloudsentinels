@@ -23,9 +23,14 @@ Parameters:
     Type: String
     Default: ""
     Description: Optional ARN of a Secrets Manager secret containing webhookUrl and signingSecret.
+  ZapierCommandSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional ARN of a Secrets Manager secret containing the signingSecret used by Zapier to approve remediation commands.
 
 Conditions:
   HasZapierWebhookSecret: !Not [!Equals [!Ref ZapierWebhookSecretArn, ""]]
+  HasZapierCommandSecret: !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
 
 Globals:
   Function:
@@ -250,6 +255,109 @@ Resources:
             FunctionResponseTypes:
               - ReportBatchItemFailures
 
+  RemediationCommandsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierCommandSecret
+    Properties:
+      QueueName: cloudsentinels-remediation-commands-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  RemediationCommandsQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierCommandSecret
+    Properties:
+      QueueName: cloudsentinels-remediation-commands
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RemediationCommandsDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  RemediationCommandsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasZapierCommandSecret
+    Properties:
+      Queues:
+        - !Ref RemediationCommandsQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt RemediationCommandsQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt RemediationCommandApprovedRule.Arn
+
+  RemediationCommandsDlqPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasZapierCommandSecret
+    Properties:
+      Queues:
+        - !Ref RemediationCommandsDeadLetterQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt RemediationCommandsDeadLetterQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt RemediationCommandApprovedRule.Arn
+
+  RemediationCommandApprovedRule:
+    Type: AWS::Events::Rule
+    Condition: HasZapierCommandSecret
+    Properties:
+      Name: cloudsentinels-approved-remediation-to-sqs
+      EventBusName: !Ref CloudSentinelsEventBus
+      EventPattern:
+        source:
+          - cloudsentinels.zapier
+        detail-type:
+          - RemediationCommandApproved
+      Targets:
+        - Id: RemediationCommandsQueueTarget
+          Arn: !GetAtt RemediationCommandsQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt RemediationCommandsDeadLetterQueue.Arn
+
+  ZapierCommandFunction:
+    Type: AWS::Serverless::Function
+    Condition: HasZapierCommandSecret
+    Properties:
+      CodeUri: zapier-command/
+      Handler: index.handler
+      Timeout: 15
+      MemorySize: 256
+      Environment:
+        Variables:
+          ZAPIER_COMMAND_SECRET_ARN: !Ref ZapierCommandSecretArn
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApplicationTableName
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref CloudSentinelsEventBus
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref ZapierCommandSecretArn
+      Events:
+        ZapierCommand:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /automation/commands
+            Method: POST
+
   OperationsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -402,6 +510,15 @@ Outputs:
   ZapierRelayProcessingDlqUrl:
     Condition: HasZapierWebhookSecret
     Value: !Ref ZapierRelayProcessingDeadLetterQueue
+  RemediationCommandsQueueUrl:
+    Condition: HasZapierCommandSecret
+    Value: !Ref RemediationCommandsQueue
+  RemediationCommandsQueueArn:
+    Condition: HasZapierCommandSecret
+    Value: !GetAtt RemediationCommandsQueue.Arn
+  ZapierCommandFunctionName:
+    Condition: HasZapierCommandSecret
+    Value: !Ref ZapierCommandFunction
   ZapierRelayDeliveryDlqUrl:
     Condition: HasZapierWebhookSecret
     Value: !Ref ZapierRelayDeliveryDeadLetterQueue
