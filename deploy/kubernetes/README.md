@@ -32,7 +32,9 @@ These rules create Prometheus alert states. To show them inside the CloudSentine
 - Architecture: [Four-layer self-healing design](../../docs/architecture/four-layer-self-healing-architecture.md)
 - Airtable inventory onboarding rules: [Airtable → EKS](../../docs/integrations/airtable-eks-inventory-onboarding.md)
 - Minor-review EKS preparation: [EKS readiness runbook](../../docs/operations/minor-review-eks-readiness.md)
-- Existing sanitized sample showcase: [Airtable inventory on EKS](./AIRTABLE-EKS-SHOWCASE.md)
+- Refreshed sanitized 20-cluster snapshot: [`deploy/eks/airtable-inventory.snapshot.json`](../eks/airtable-inventory.snapshot.json)
+- Controlled review-day scenario matrix: [`deploy/eks/review-day-scenarios.json`](../eks/review-day-scenarios.json)
+- EBS-backed inventory showcase instructions: [Airtable inventory on EKS](./AIRTABLE-EKS-SHOWCASE.md)
 - Manifest: [airtable-inventory-showcase.yaml](./airtable-inventory-showcase.yaml)
 
-The showcase manifest packages a sanitized sample inventory into a ConfigMap and copies it to an encrypted EBS-backed PVC. It is **not** a manifest to recreate the listed historical clusters or workloads. Apply only to an explicitly selected, non-production EKS cluster after verifying EBS CSI and access prerequisites. No EKS cluster exists in the AWS account at present, so this artifact has not been applied.
+The showcase manifest packages the refreshed 20-cluster sanitized inventory into a ConfigMap and copies it to an encrypted EBS-backed PVC. It is **not** a manifest to recreate the listed historical clusters or workloads. Apply only to an explicitly selected, non-production EKS cluster after verifying EBS CSI and access prerequisites. No EKS cluster exists in the AWS account at present, so this artifact has not been applied.
