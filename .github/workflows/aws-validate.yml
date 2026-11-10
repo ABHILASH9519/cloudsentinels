@@ -35,6 +35,11 @@ jobs:
           node --check deploy/aws/serverless/function/index.js
           node --check deploy/aws/serverless/automation/index.js
           node --check deploy/aws/serverless/zapier-relay/index.js
+      - name: Run Zapier command receiver tests
+        working-directory: deploy/aws/serverless/zapier-command
+        run: |
+          npm install --no-audit --no-fund
+          npm test
       - name: Run AWS API tests
         working-directory: deploy/aws/serverless/function
         run: |
