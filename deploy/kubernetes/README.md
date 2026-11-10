@@ -26,3 +26,13 @@ If your Prometheus Operator only selects rules with specific namespace/labels, u
 - Container memory usage above 90% of requested memory
 
 These rules create Prometheus alert states. To show them inside the CloudSentinels UI, a separately authenticated Alertmanager/webhook ingestion service must forward events into the backend. Do not expose the canister or webhook to unauthenticated write access. The current UI's manual alert and metric forms store records; they do not scrape Prometheus by themselves.
+
+
+## CloudSentinels four-layer architecture and Airtable showcase
+
+- Architecture: [Four-layer self-healing design](../../docs/architecture/four-layer-self-healing-architecture.md)
+- Airtable inventory onboarding rules: [Airtable → EKS](../../docs/integrations/airtable-eks-inventory-onboarding.md)
+- Existing sanitized sample showcase: [Airtable inventory on EKS](./AIRTABLE-EKS-SHOWCASE.md)
+- Manifest: [airtable-inventory-showcase.yaml](./airtable-inventory-showcase.yaml)
+
+The showcase manifest packages a sanitized sample inventory into a ConfigMap and copies it to an encrypted EBS-backed PVC. It is **not** a manifest to recreate the listed historical clusters or workloads. Apply only to an explicitly selected, non-production EKS cluster after verifying EBS CSI and access prerequisites. The AWS account currently has no EKS cluster, so this artifact has not been applied.
