@@ -27,7 +27,7 @@ export function reconcileInventory(input, options = {}) {
   const seen = new Set();
   const results = input.clusters.map(cluster => {
     const name = cluster.clusterName;
-    if (typeof name !== "string" || name.trim().length === 0 || name.length > 128 || /[\\u0000-\\u001f]/.test(name)) throw new Error("Cluster name must be non-empty printable text (max 128 chars)");
+    if (typeof name !== "string" || name.trim().length === 0 || name.length > 128 || [...name].some(char => char.charCodeAt(0) < 32)) throw new Error("Cluster name must be non-empty printable text (max 128 chars)");
     const sourceKey = name.trim().toLowerCase();
     if (seen.has(sourceKey)) throw new Error("Duplicate cluster name: " + name);
     seen.add(sourceKey);
