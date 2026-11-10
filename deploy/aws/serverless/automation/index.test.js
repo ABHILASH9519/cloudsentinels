@@ -139,3 +139,17 @@ test("returns a failed SQS item when DynamoDB is unavailable", async (t) => {
     batchItemFailures: [{ itemIdentifier: "db-outage" }],
   });
 });
+
+test("does not treat inherited object property names as remediation rules", () => {
+  for (const eventType of ["constructor", "toString", "__proto__"]) {
+    const result = classifyEvent({ "detail-type": eventType });
+    assert.equal(result.status, "OBSERVED");
+    assert.equal(result.recommendedAction, null);
+  }
+});
+
+test("bounds unknown event type values before storing them", () => {
+  const result = classifyEvent({ "detail-type": "x".repeat(200) });
+  assert.equal(result.eventType.length, 80);
+  assert.equal(result.status, "OBSERVED");
+});
