@@ -1,7 +1,7 @@
 name: AWS architecture checks
 on:
   push:
-    branches: [feat/aws-native-architecture, feat/n8n-event-automation]
+    branches: [feat/aws-native-architecture, feat/n8n-event-automation, feat/acceptance-observability-oidc]
   pull_request:
     branches: [main]
     paths:
