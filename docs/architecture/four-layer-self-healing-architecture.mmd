@@ -12,16 +12,16 @@ flowchart TB
   end
   subgraph L2["LAYER 2 — CONNECTIVITY & IDENTITY"]
     direction LR
-    API["CloudSentinels API<br/>Cluster registry • event ingestion"]
+    API["CloudSentinels API<br/>User APIs implemented • cluster ingress pending"]
     AUTH["Authentication gateway<br/>Cognito JWT • OIDC • scoped RBAC"]
-    ADAPTER["Cluster adapters<br/>Online Kubernetes API • offline CLI"]
+    ADAPTER["Cluster adapters (implementation pending)<br/>Online Kubernetes API • offline CLI"]
     API <--> AUTH
     ADAPTER <--> API
   end
   subgraph L3["LAYER 3 — CLOUDSENTINELS INTELLIGENCE"]
     direction LR
     DETECT["Incident detection<br/>Events • metrics • logs • K8s watch"]
-    AI["AI analysis<br/>Correlation • root cause • risk"]
+    AI["AI analysis (provider integration pending)<br/>Correlation • root cause • risk"]
     ORCH["Remediation orchestration<br/>Policy • approval • idempotency"]
     DETECT --> AI --> ORCH
   end
@@ -30,7 +30,7 @@ flowchart TB
     BUS["EventBridge + SQS<br/>Retries • DLQ"]
     REG["Versioned procedure registry<br/>Extend by event type + version"]
     ZAP["Zapier workflows<br/>Tickets • notifications • approvals"]
-    EXEC["Execution adapters<br/>Kubernetes API • AWS API • local CLI"]
+    EXEC["Execution adapters (not deployed)<br/>Kubernetes API • AWS API • local CLI"]
     VERIFY["Verification + audit<br/>Health checks • rollback • incident closure"]
     BUS --> REG --> EXEC --> VERIFY
     REG <--> ZAP
