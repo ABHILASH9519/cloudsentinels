@@ -121,3 +121,45 @@ test("marks malformed JSON for SQS retry", async () => {
     batchItemFailures: [{ itemIdentifier: "bad-json" }],
   });
 });
+
+test("adds the configured high-risk action and approval requirement for Zapier", async () => {
+  requests = [];
+  fetchResponse = { ok: true, status: 200 };
+  await handler({
+    Records: [{
+      messageId: "policy-high",
+      body: JSON.stringify({
+        id: "event-node-1",
+        source: "cloudsentinels.cluster-agent",
+        "detail-type": "NodeNotReady",
+        detail: { clusterName: "staging-cluster" },
+      }),
+    }],
+  });
+
+  const payload = JSON.parse(requests[0].options.body);
+  assert.equal(payload.recommendedAction, "replace-or-recover-node");
+  assert.equal(payload.risk, "high");
+  assert.equal(payload.requiresApproval, true);
+});
+
+test("marks low-risk policy actions as eligible for automatic Zapier filtering", async () => {
+  requests = [];
+  fetchResponse = { ok: true, status: 200 };
+  await handler({
+    Records: [{
+      messageId: "policy-low",
+      body: JSON.stringify({
+        id: "event-pod-1",
+        source: "cloudsentinels.cluster-agent",
+        "detail-type": "PodCrashLoopBackOff",
+        detail: { clusterName: "staging-cluster" },
+      }),
+    }],
+  });
+
+  const payload = JSON.parse(requests[0].options.body);
+  assert.equal(payload.recommendedAction, "restart-pod");
+  assert.equal(payload.risk, "medium");
+  assert.equal(payload.requiresApproval, false);
+});
