@@ -77,4 +77,4 @@ The validator rejects secret-bearing keys and malformed records, then labels sou
 
 ## Template scope and limitations
 
-The CloudFormation template creates an EKS control plane and managed EC2 node group in an existing VPC. It does not create VPC/NAT, IAM roles, add-ons, agent, Prometheus, or application workloads. Public endpoint CIDRs are required because a standard GitHub-hosted runner cannot reach a private-only Kubernetes API. For private-only access, use an approved self-hosted runner inside the VPC and update the design first. A change-set plan is non-provisioning; executing create incurs charges.
+The CloudFormation template creates an EKS control plane and managed EC2 node group in an existing VPC. It does not create VPC/NAT, IAM roles, add-ons, agent, Prometheus, or application workloads. Public endpoint CIDRs are required because a standard GitHub-hosted runner cannot reach a private-only Kubernetes API. For private-only access, use an approved self-hosted runner inside the VPC and update the design first. A change-set plan is non-provisioning; executing the separately reviewed change set provisions chargeable resources.
