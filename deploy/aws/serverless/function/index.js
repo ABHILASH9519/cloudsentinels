@@ -17,7 +17,7 @@ const eventBusName = process.env.EVENT_BUS_NAME;
 async function publishDomainEvent(detailType, userId, resource) {
   if (!eventBusName) return;
   try {
-    await eventBridge.send(new PutEventsCommand({
+    const result = await eventBridge.send(new PutEventsCommand({
       Entries: [{
         EventBusName: eventBusName,
         Source: "cloudsentinels.api",
@@ -26,6 +26,18 @@ async function publishDomainEvent(detailType, userId, resource) {
         Detail: JSON.stringify({ userId, resource, occurredAt: new Date().toISOString() }),
       }],
     }));
+    if ((result.FailedEntryCount ?? 0) > 0) {
+      console.error("Domain event publish partially failed", {
+        detailType,
+        failedEntryCount: result.FailedEntryCount,
+        entryErrors: (result.Entries ?? [])
+          .filter((entry) => entry.ErrorCode)
+          .map((entry) => ({
+            errorCode: entry.ErrorCode,
+            errorMessage: entry.ErrorMessage,
+          })),
+      });
+    }
   } catch (error) {
     // Domain persistence must not fail because an optional automation transport is unavailable.
     console.error("Domain event publish failed", { detailType, name: error?.name });
