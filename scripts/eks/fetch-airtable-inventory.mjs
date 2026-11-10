@@ -5,7 +5,7 @@ const BASE_ID = "app3xn3iXAsm7MgA7";
 const CLUSTER_TABLE_ID = "tblkCeiGBpVuHgpvy";
 const ALLOWED_FIELDS = [
   "Cluster Name", "Environment", "Status", "Node Count", "Pod Count",
-  "Onboarding Date", "Health Status"
+  "Onboarding Date"
 ];
 
 export function normalizeClusterRecord(fields) {
