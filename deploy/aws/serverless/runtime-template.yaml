@@ -19,6 +19,13 @@ Parameters:
   StageName:
     Type: String
     Default: v1
+  ZapierWebhookSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional ARN of a Secrets Manager secret containing webhookUrl and signingSecret.
+
+Conditions:
+  HasZapierWebhookSecret: !Not [!Equals [!Ref ZapierWebhookSecretArn, ""]]
 
 Globals:
   Function:
@@ -123,6 +130,125 @@ Resources:
           Arn: !GetAtt AutomationEventsQueue.Arn
           DeadLetterConfig:
             Arn: !GetAtt AutomationDeliveryDeadLetterQueue.Arn
+
+  ZapierRelayProcessingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierWebhookSecret
+    Properties:
+      QueueName: cloudsentinels-zapier-relay-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  ZapierRelayDeliveryDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierWebhookSecret
+    Properties:
+      QueueName: cloudsentinels-zapier-delivery-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  ZapierRelayQueue:
+    Type: AWS::SQS::Queue
+    Condition: HasZapierWebhookSecret
+    Properties:
+      QueueName: cloudsentinels-zapier-events
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ZapierRelayProcessingDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  ZapierRelayQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasZapierWebhookSecret
+    Properties:
+      Queues:
+        - !Ref ZapierRelayQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ZapierRelayQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ZapierIntegrationEventRule.Arn
+
+  ZapierRelayDeliveryDlqPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasZapierWebhookSecret
+    Properties:
+      Queues:
+        - !Ref ZapierRelayDeliveryDeadLetterQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ZapierRelayDeliveryDeadLetterQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ZapierIntegrationEventRule.Arn
+
+  ZapierIntegrationEventRule:
+    Type: AWS::Events::Rule
+    Condition: HasZapierWebhookSecret
+    Properties:
+      Name: cloudsentinels-events-to-zapier-relay
+      EventBusName: !Ref CloudSentinelsEventBus
+      EventPattern:
+        source:
+          - cloudsentinels.api
+          - cloudsentinels.cluster-agent
+        detail-type:
+          - IncidentCreated
+          - IncidentUpdated
+          - AlertCreated
+          - AlertUpdated
+          - PodCrashLoopBackOff
+          - NodeNotReady
+          - CpuThresholdExceeded
+          - MemoryPressure
+          - DeploymentUnhealthy
+          - ApiLatencyHigh
+      Targets:
+        - Id: ZapierRelayQueueTarget
+          Arn: !GetAtt ZapierRelayQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt ZapierRelayDeliveryDeadLetterQueue.Arn
+
+  ZapierRelayFunction:
+    Type: AWS::Serverless::Function
+    Condition: HasZapierWebhookSecret
+    Properties:
+      CodeUri: zapier-relay/
+      Handler: index.handler
+      Timeout: 20
+      MemorySize: 256
+      Environment:
+        Variables:
+          ZAPIER_WEBHOOK_SECRET_ARN: !Ref ZapierWebhookSecretArn
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref ZapierWebhookSecretArn
+      Events:
+        ZapierRelayQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ZapierRelayQueue.Arn
+            BatchSize: 5
+            MaximumBatchingWindowInSeconds: 2
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
 
   OperationsFunction:
     Type: AWS::Serverless::Function
@@ -267,3 +393,15 @@ Outputs:
     Value: !Ref AutomationDeliveryDeadLetterQueue
   AutomationProcessorFunctionName:
     Value: !Ref AutomationProcessor
+  ZapierRelayQueueUrl:
+    Condition: HasZapierWebhookSecret
+    Value: !Ref ZapierRelayQueue
+  ZapierRelayFunctionName:
+    Condition: HasZapierWebhookSecret
+    Value: !Ref ZapierRelayFunction
+  ZapierRelayProcessingDlqUrl:
+    Condition: HasZapierWebhookSecret
+    Value: !Ref ZapierRelayProcessingDeadLetterQueue
+  ZapierRelayDeliveryDlqUrl:
+    Condition: HasZapierWebhookSecret
+    Value: !Ref ZapierRelayDeliveryDeadLetterQueue
