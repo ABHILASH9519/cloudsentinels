@@ -26,6 +26,7 @@ jobs:
       RUNTIME_STACK_NAME: cloudsentinels-runtime
       CORE_STACK_NAME: cloudsentinels-core
       STAGE_NAME: v1
+      ZAPIER_WEBHOOK_SECRET_ARN: ${{ vars.ZAPIER_WEBHOOK_SECRET_ARN }}
       ZAPIER_COMMAND_SECRET_ARN: ${{ vars.ZAPIER_COMMAND_SECRET_ARN }}
       REMEDIATION_ADAPTER_FUNCTION_ARN: ${{ vars.REMEDIATION_ADAPTER_FUNCTION_ARN }}
       REMEDIATION_EXECUTION_ENABLED: ${{ vars.REMEDIATION_EXECUTION_ENABLED || 'false' }}
@@ -138,6 +139,7 @@ jobs:
               "CognitoIssuer=$COGNITO_ISSUER" \
               "UserPoolClientId=$USER_POOL_CLIENT_ID" \
               "StageName=$STAGE_NAME" \
+              "ZapierWebhookSecretArn=$ZAPIER_WEBHOOK_SECRET_ARN" \
               "ZapierCommandSecretArn=$ZAPIER_COMMAND_SECRET_ARN" \
               "RemediationAdapterFunctionArn=$REMEDIATION_ADAPTER_FUNCTION_ARN" \
               "RemediationExecutionEnabled=$REMEDIATION_EXECUTION_ENABLED"
