@@ -2,15 +2,28 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 process.env.ZAPIER_WEBHOOK_SECRET_ARN = "arn:aws:secretsmanager:ap-south-1:123456789012:secret:test";
+process.env.TABLE_NAME = "cloudsentinels-relay-test-table";
 const signingSecret = "test-signing-secret-with-at-least-32-characters";
 const { handler } = await import("./index.js");
 
 const originalSecretSend = SecretsManagerClient.prototype.send;
+const originalDbSend = DynamoDBDocumentClient.prototype.send;
 const originalFetch = globalThis.fetch;
 let fetchResponse;
 let requests = [];
+const eventRecords = new Map();
+
+function storeEvent(eventId, attributes = {}) {
+  eventRecords.set(`EVENT#${eventId}`, {
+    id: eventId,
+    risk: "informational",
+    requiresApproval: false,
+    ...attributes,
+  });
+}
 
 SecretsManagerClient.prototype.send = async function () {
   return {
@@ -21,20 +34,29 @@ SecretsManagerClient.prototype.send = async function () {
   };
 };
 
+DynamoDBDocumentClient.prototype.send = async function (command) {
+  return { Item: eventRecords.get(command.input.Key.SK) };
+};
+
 globalThis.fetch = async (url, options) => {
   requests.push({ url, options });
   return fetchResponse;
 };
 
+test.beforeEach(() => {
+  requests = [];
+  eventRecords.clear();
+  fetchResponse = { ok: true, status: 200 };
+});
+
 test.after(() => {
   SecretsManagerClient.prototype.send = originalSecretSend;
+  DynamoDBDocumentClient.prototype.send = originalDbSend;
   globalThis.fetch = originalFetch;
 });
 
 test("forwards allow-listed event fields and signs the exact request body", async () => {
-  requests = [];
-  fetchResponse = { ok: true, status: 200 };
-
+  storeEvent("event-1", { clusterName: "demo" });
   const result = await handler({
     Records: [{
       messageId: "relay-1",
@@ -73,7 +95,7 @@ test("forwards allow-listed event fields and signs the exact request body", asyn
 });
 
 test("returns an SQS partial-batch failure when Zapier responds non-2xx", async () => {
-  requests = [];
+  storeEvent("event-2");
   fetchResponse = {
     ok: false,
     status: 503,
@@ -123,8 +145,12 @@ test("marks malformed JSON for SQS retry", async () => {
 });
 
 test("adds the configured high-risk action and approval requirement for Zapier", async () => {
-  requests = [];
-  fetchResponse = { ok: true, status: 200 };
+  storeEvent("event-node-1", {
+    risk: "high",
+    requiresApproval: true,
+    recommendedAction: "replace-or-recover-node",
+    clusterName: "staging-cluster",
+  });
   await handler({
     Records: [{
       messageId: "policy-high",
@@ -144,8 +170,12 @@ test("adds the configured high-risk action and approval requirement for Zapier",
 });
 
 test("marks low-risk policy actions as eligible for automatic Zapier filtering", async () => {
-  requests = [];
-  fetchResponse = { ok: true, status: 200 };
+  storeEvent("event-pod-1", {
+    risk: "medium",
+    recommendedAction: "restart-pod",
+    requiresApproval: false,
+    clusterName: "arn:aws:eks:ap-south-1:123456789012:cluster/staging-cluster",
+  });
   await handler({
     Records: [{
       messageId: "policy-low",
@@ -163,4 +193,23 @@ test("marks low-risk policy actions as eligible for automatic Zapier filtering",
   assert.equal(payload.recommendedAction, "restart-pod");
   assert.equal(payload.risk, "medium");
   assert.equal(payload.requiresApproval, false);
+});
+
+test("retries instead of notifying Zapier before the processor persists the event", async () => {
+  const result = await handler({
+    Records: [{
+      messageId: "processor-race",
+      body: JSON.stringify({
+        id: "event-not-ready",
+        source: "cloudsentinels.cluster-agent",
+        "detail-type": "NodeNotReady",
+        detail: { clusterName: "staging-cluster" },
+      }),
+    }],
+  });
+
+  assert.deepEqual(result, {
+    batchItemFailures: [{ itemIdentifier: "processor-race" }],
+  });
+  assert.equal(requests.length, 0);
 });
