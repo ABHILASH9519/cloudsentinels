@@ -6,7 +6,7 @@ This directory contains the non-production EKS infrastructure template and Airta
 
 - The only provisioning entry point is the manually dispatched workflow `.github/workflows/eks-review-day.yml`.
 - The workflow is bound to the protected GitHub environment `minor-review`. Configure required reviewers and restrict deployment branches in repository Settings before use.
-- The workflow uses GitHub OIDC, not long-lived AWS access keys.
+- The workflow reads the cluster inventory directly from Airtable using a read-only `AIRTABLE_API_TOKEN` environment secret, then validates it before planning/creating EKS. The token is never written to the export. It uses GitHub OIDC for AWS, not long-lived AWS access keys.
 - Set environment variables `AWS_ROLE_ARN`, `AWS_REGION=ap-south-1`, `AWS_ACCOUNT_ID`, and `EKS_CLOUDFORMATION_EXECUTION_ROLE_ARN` on the protected environment. Restrict the OIDC role to passing only this dedicated CloudFormation execution role.
 - The OIDC trust policy must restrict audience to `sts.amazonaws.com` and subject to `repo:ABHILASH9519/cloudsentinels:environment:minor-review`. The CloudFormation execution role must trust `cloudformation.amazonaws.com` and use narrowly scoped EKS/VPC describe and `iam:PassRole` permissions.
 - Every operation requires `review_approved=true`; create and destroy also require exact confirmation strings.
