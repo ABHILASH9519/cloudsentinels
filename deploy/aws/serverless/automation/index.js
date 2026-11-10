@@ -113,7 +113,7 @@ function clusterTarget(detail) {
 }
 
 export async function resolveProcedure(domainEvent) {
-  const classification = await resolveProcedure(domainEvent);
+  const classification = classifyEvent(domainEvent);
   const detail = domainEvent.detail && typeof domainEvent.detail === "object"
     ? domainEvent.detail
     : {};
