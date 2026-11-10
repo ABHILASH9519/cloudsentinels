@@ -153,12 +153,13 @@ test("marks low-risk policy actions as eligible for automatic Zapier filtering",
         id: "event-pod-1",
         source: "cloudsentinels.cluster-agent",
         "detail-type": "PodCrashLoopBackOff",
-        detail: { clusterName: "staging-cluster" },
+        detail: { clusterArn: "arn:aws:eks:ap-south-1:123456789012:cluster/staging-cluster" },
       }),
     }],
   });
 
   const payload = JSON.parse(requests[0].options.body);
+  assert.equal(payload.clusterRef, "arn:aws:eks:ap-south-1:123456789012:cluster/staging-cluster");
   assert.equal(payload.recommendedAction, "restart-pod");
   assert.equal(payload.risk, "medium");
   assert.equal(payload.requiresApproval, false);
