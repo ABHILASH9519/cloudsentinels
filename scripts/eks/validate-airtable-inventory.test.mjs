@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { assertNoSecrets, assertFreshInventory, reconcileInventory } from "./validate-airtable-inventory.mjs";
 import { normalizeClusterRecord } from "./fetch-airtable-inventory.mjs";
 const now = "2026-11-10T00:00:00.000Z";
@@ -59,4 +60,29 @@ test("freshness gate blocks an old Airtable inventory import", () => {
   const result = reconcileInventory(snapshot, { now });
   assert.equal(result.summary.freshSourceRecords, 0);
   assert.throws(() => assertFreshInventory(result), /No recent Airtable cluster inventory rows/);
+});
+
+test("accepts all 20 newly imported Airtable cluster rows while reporting missing telemetry links", () => {
+  const snapshot = JSON.parse(fs.readFileSync(new URL("../../deploy/eks/airtable-inventory.snapshot.json", import.meta.url), "utf8"));
+  const input = {
+    source: "Cloud-Sentinel",
+    clusters: snapshot.clusters.records.map(record => ({
+      clusterName: record.clusterName,
+      environment: record.environment,
+      status: record.status,
+      nodeCount: record.nodeCount,
+      podCount: record.podCount,
+      recordCreatedAt: record.recordCreatedAt,
+      lastSeenAt: null,
+      linkedNodeCount: record.linkedNodeNames.length,
+      healthStatus: record.healthStatus,
+      cpuUsagePercent: record.cpuUsagePercent
+    }))
+  };
+  const result = reconcileInventory(input, { now: "2026-11-10T16:00:00.000Z" });
+  assert.equal(result.clusters.length, 20);
+  assert.equal(result.summary.freshSourceRecords, 20);
+  assert.equal(result.summary.staleTelemetryRecords, 20);
+  assert.equal(result.summary.clustersMissingNodeLinks, 20);
+  assert.equal(assertFreshInventory(result), result);
 });
