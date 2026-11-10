@@ -10,7 +10,8 @@ The target region currently planned is `ap-south-1` (Mumbai), subject to confirm
 
 - AWS account: `115484989078`; region used by the existing CloudSentinels runtime: `ap-south-1`.
 - EKS discovery returned **zero clusters across all 17 enabled AWS regions**.
-- Existing roles named `CloudSentinels-EKS-ClusterRole` and `CloudSentinels-EKS-NodeRole` exist. Their trust principals are EKS and EC2 respectively; attached permissions and suitability must be reviewed before reuse.
+- Existing roles named `CloudSentinels-EKS-ClusterRole` and `CloudSentinels-EKS-NodeRole` exist. Their trust principals are EKS and EC2 respectively. The cluster role currently has `AmazonEKSClusterPolicy`; the node role has `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly`, and `AmazonEKSWorkerNodePolicy`. These are baseline policies only; validate current EKS requirements, trust, and attached permissions before reuse.
+- `CloudSentinelsDeploymentRole` has an inline policy scoped to the existing Cognito/DynamoDB/Lambda/EventBridge/SQS runtime resources, but it has no EKS provisioning permissions and trusts CloudFormation only. Do not treat it as an EKS cluster provisioning role or GitHub OIDC role.
 - Existing `CloudSentinelsDeploymentRole` trusts CloudFormation only. It is not a GitHub Actions deployment role.
 - No GitHub Actions OIDC provider (`token.actions.githubusercontent.com`) is registered in this account. The currently listed OIDC providers are Vercel providers.
 - The AWS identity available to the prior audit was the account root principal. **Do not use root for deployment or create privileged credentials from it.** A dedicated administrator/deployment identity is required.
