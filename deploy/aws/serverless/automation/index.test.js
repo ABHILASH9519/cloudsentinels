@@ -37,7 +37,7 @@ test("records a valid event with an idempotency condition", async (t) => {
   const originalSend = DynamoDBDocumentClient.prototype.send;
   const calls = [];
   DynamoDBDocumentClient.prototype.send = async function (command) {
-    calls.push(command.input);
+    calls.push({ name: command.constructor.name, input: command.input });
     return {};
   };
   t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
@@ -55,11 +55,15 @@ test("records a valid event with an idempotency condition", async (t) => {
   });
 
   assert.deepEqual(response, { batchItemFailures: [] });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].TableName, "cloudsentinels-test-table");
-  assert.equal(calls[0].Item.id, "event-123");
-  assert.equal(calls[0].Item.status, "PENDING_APPROVAL");
-  assert.equal(calls[0].ConditionExpression,
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].name, "QueryCommand");
+  assert.equal(calls[0].input.TableName, "cloudsentinels-test-table");
+  assert.equal(calls[0].input.ExpressionAttributeValues[":pk"], "SYSTEM#PROCEDURES");
+  assert.equal(calls[1].name, "PutCommand");
+  assert.equal(calls[1].input.TableName, "cloudsentinels-test-table");
+  assert.equal(calls[1].input.Item.id, "event-123");
+  assert.equal(calls[1].input.Item.status, "PENDING_APPROVAL");
+  assert.equal(calls[1].input.ConditionExpression,
     "attribute_not_exists(PK) AND attribute_not_exists(SK)");
 });
 
