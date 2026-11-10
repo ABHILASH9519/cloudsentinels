@@ -2,7 +2,7 @@
 
 CloudSentinels itself runs on AWS. The application frontend, authentication, APIs, data storage, event routing and queues remain AWS-native. **n8n and Zapier are optional external workflow tools only**; neither hosts the application backend, stores CloudSentinels application data, or is required for the product to work.
 
-- **Zapier implementation plan:** [ZAPIER.md](./ZAPIER.md) — event flow, workflow chart, sanitized payload contract, security, and production acceptance checks.
+- **Zapier integration guide:** [ZAPIER.md](./ZAPIER.md) — workflow chart, sanitized payload contract, security, provisioning, and production acceptance checks. The optional relay Lambda and SAM resources are implemented in this branch but are not deployed until a Zapier secret ARN and scoped AWS deployment session are available.
 
 ## AWS application architecture
 
@@ -86,5 +86,5 @@ Events use source `cloudsentinels.api` or `cloudsentinels.cluster-agent`. Do not
 - Use event ID as the idempotency key.
 - Monitor queue age and dead-letter queue depth in CloudWatch.
 - The API's event publication is currently best-effort; a transactional outbox is future reliability hardening.
-- The Zapier relay and its webhook secret are not deployed/configured yet.
+- The Zapier relay code and conditional SAM resources are committed; the relay is not deployed and its webhook secret is not configured yet.
 - Disconnecting Zapier must not stop the AWS application.
