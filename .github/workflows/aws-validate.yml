@@ -35,3 +35,13 @@ jobs:
           node --check deploy/aws/serverless/function/index.js
           node --check deploy/aws/serverless/automation/index.js
           node --check deploy/aws/serverless/zapier-relay/index.js
+      - name: Run automation processor tests
+        working-directory: deploy/aws/serverless/automation
+        run: |
+          npm install --no-audit --no-fund
+          node --test
+      - name: Run Zapier relay tests
+        working-directory: deploy/aws/serverless/zapier-relay
+        run: |
+          npm install --no-audit --no-fund
+          node --test
