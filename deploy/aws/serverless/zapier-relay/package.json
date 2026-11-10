@@ -1,0 +1,8 @@
+{
+  "name": "cloudsentinels-zapier-relay",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.900.0"
+  }
+}
