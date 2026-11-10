@@ -204,7 +204,7 @@ async function recordEvent(domainEvent) {
     throw new Error("The EventBridge event id exceeds the 128-character limit.");
   }
 
-  const classification = classifyEvent(domainEvent);
+  const classification = await resolveProcedure(domainEvent);
   const now = new Date().toISOString();
   const item = {
     PK: "SYSTEM#AUTOMATION",
