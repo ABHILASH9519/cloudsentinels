@@ -1,7 +1,11 @@
 import { createHmac } from "node:crypto";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 
 const secrets = new SecretsManagerClient({});
+const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const tableName = process.env.TABLE_NAME;
 const secretArn = process.env.ZAPIER_WEBHOOK_SECRET_ARN;
 let cachedConfig;
 let cachedAt = 0;
@@ -55,7 +59,7 @@ function safeString(value, max = 200) {
     : undefined;
 }
 
-function toPayload(event) {
+function toPayload(event, storedEvent) {
   const detail = event.detail && typeof event.detail === "object" ? event.detail : {};
   const resource = detail.resource && typeof detail.resource === "object" ? detail.resource : {};
   const eventType = safeString(event["detail-type"], 80);
@@ -68,18 +72,31 @@ function toPayload(event) {
     occurredAt: safeString(event.time, 40),
     severity: safeString(detail.severity ?? detail.priority, 32),
     incidentId: safeString(detail.incidentId ?? resource.id ?? detail.resourceId, 128),
-    clusterRef: safeString(detail.clusterName ?? detail.clusterArn ?? detail.cluster, 128),
+    clusterRef: safeString(storedEvent.clusterName ?? detail.clusterName ?? detail.clusterArn ?? detail.cluster, 256),
     status: safeString(detail.status, 64),
-    risk: safeString(detail.risk ?? policy.risk, 32),
-    recommendedAction: safeString(detail.recommendedAction ?? policy.action, 80),
-    requiresApproval: detail.requiresApproval === true || policy.requiresApproval === true,
+    risk: safeString(storedEvent.risk ?? detail.risk ?? policy.risk, 32),
+    recommendedAction: safeString(storedEvent.recommendedAction ?? detail.recommendedAction ?? policy.action, 80),
+    requiresApproval: storedEvent.requiresApproval === true || detail.requiresApproval === true || policy.requiresApproval === true,
     recoveryVerified: detail.recoveryVerified === true,
   };
   return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
 }
 
 async function deliver(event, config) {
-  const payload = toPayload(event);
+  if (!tableName) throw new Error("TABLE_NAME is not configured for the Zapier relay.");
+  if (typeof event.id !== "string" || !event.id) {
+    throw new Error("Automation event is missing its EventBridge id.");
+  }
+  const stored = await db.send(new GetCommand({
+    TableName: tableName,
+    Key: { PK: "SYSTEM#AUTOMATION", SK: `EVENT#${event.id}` },
+  }));
+  if (!stored.Item) {
+    // The processor and relay consume separate SQS queues. Retry the relay until
+    // the processor has persisted the authoritative policy decision.
+    throw new Error("Automation event record is not ready; retrying before Zapier delivery.");
+  }
+  const payload = toPayload(event, stored.Item);
   if (!payload.eventId || !payload.eventType || !ALLOWED_EVENTS.has(payload.eventType)) {
     console.info("Skipping unsupported or malformed event", {
       eventId: payload.eventId ?? "missing",
