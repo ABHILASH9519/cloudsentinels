@@ -27,10 +27,23 @@ Parameters:
     Type: String
     Default: ""
     Description: Optional ARN of a Secrets Manager secret containing the signingSecret used by Zapier to approve remediation commands.
+  RemediationAdapterFunctionArn:
+    Type: String
+    Default: ""
+    Description: Optional ARN of a separately deployed Kubernetes remediation adapter Lambda.
+  RemediationExecutionEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Must be explicitly enabled together with an adapter ARN before commands are dispatched.
 
 Conditions:
   HasZapierWebhookSecret: !Not [!Equals [!Ref ZapierWebhookSecretArn, ""]]
   HasZapierCommandSecret: !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
+  CanExecuteRemediation: !And
+    - !Equals [!Ref RemediationExecutionEnabled, "true"]
+    - !Not [!Equals [!Ref RemediationAdapterFunctionArn, ""]]
+    - !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
 
 Globals:
   Function:
@@ -358,6 +371,36 @@ Resources:
             Path: /automation/commands
             Method: POST
 
+  RemediationCommandWorker:
+    Type: AWS::Serverless::Function
+    Condition: CanExecuteRemediation
+    Properties:
+      CodeUri: remediation-worker/
+      Handler: index.handler
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          REMEDIATION_ADAPTER_FUNCTION_ARN: !Ref RemediationAdapterFunctionArn
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApplicationTableName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !Ref RemediationAdapterFunctionArn
+      Events:
+        ApprovedRemediationCommands:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt RemediationCommandsQueue.Arn
+            BatchSize: 1
+            MaximumBatchingWindowInSeconds: 0
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+
   OperationsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -519,6 +562,9 @@ Outputs:
   ZapierCommandFunctionName:
     Condition: HasZapierCommandSecret
     Value: !Ref ZapierCommandFunction
+  RemediationCommandWorkerFunctionName:
+    Condition: CanExecuteRemediation
+    Value: !Ref RemediationCommandWorker
   ZapierRelayDeliveryDlqUrl:
     Condition: HasZapierWebhookSecret
     Value: !Ref ZapierRelayDeliveryDeadLetterQueue
