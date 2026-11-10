@@ -13,6 +13,8 @@ The procedure registry extends event coverage without adding a new conditional b
 - `risk`: `low`, `medium`, `high`, or `critical`
 - `requiresApproval`: boolean; high-blast-radius operations must require approval
 
+The coordinator rejects records without a non-empty `procedureId` (maximum 128 characters), a positive safe-integer `version`, and an explicit boolean `enabled` flag. Procedures with `risk: high` or `risk: critical` are invalid unless `requiresApproval` is `true`. Invalid records are blocked and surfaced as `BLOCKED_INVALID_PROCEDURE`; they never fall back to an unsafe action.
+
 Example:
 
 ```json
@@ -47,7 +49,7 @@ A registry item cannot contain shell commands, scripts, arbitrary URLs, arbitrar
 2. Query `SYSTEM#PROCEDURES` for the matching event prefix, descending by sort key, limit one.
 3. If no record exists, use the built-in baseline classifier.
 4. If disabled, record `OBSERVED` and do not recommend an action.
-5. If malformed or unsupported, record `BLOCKED_INVALID_PROCEDURE`.
+5. If required metadata is missing, the action/risk is unsupported, or a high/critical-risk procedure does not require approval, record `BLOCKED_INVALID_PROCEDURE`.
 6. If the event has no registered cluster target, record `BLOCKED_NO_CLUSTER_TARGET`.
 7. Otherwise record either `PENDING_APPROVAL` or `PENDING_CLUSTER_ADAPTER`. This is a classification, not proof of execution.
 
