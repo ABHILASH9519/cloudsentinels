@@ -16,6 +16,7 @@ The target region currently planned is `ap-south-1` (Mumbai), subject to confirm
 - No GitHub Actions OIDC provider (`token.actions.githubusercontent.com`) is registered in this account. The currently listed OIDC providers are Vercel providers.
 - The AWS identity available to the prior audit was the account root principal. **Do not use root for deployment or create privileged credentials from it.** A dedicated administrator/deployment identity is required.
 - The CloudSentinels core and runtime CloudFormation stacks are present in `ap-south-1`; their last observed statuses were `CREATE_COMPLETE` and `UPDATE_COMPLETE` respectively.
+- A direct, read-only Lambda invocation of the runtime API handler's `GET /v1/health` route returned HTTP 200 with `status: ok`. This validates the handler health path, not a full external API Gateway/Cognito login flow.
 - The live EventBridge rule is enabled and routes the current fixed event-type allowlist from `cloudsentinels.api` and `cloudsentinels.cluster-agent` to the automation SQS queue. Its Lambda event-source mapping is enabled and the queue had zero visible/in-flight messages at audit time.
 - The PR contains a broader event rule for arbitrary detail types from API, cluster-agent, and local-agent sources, but that template change is **not deployed to the live AWS stack**. The live runtime therefore does not yet have the new dynamic event-ingestion behavior.
 - Zapier receiver/relay unit tests passed in CI. This proves the code paths under test, not delivery to a live Zapier account or a configured production Zap.
