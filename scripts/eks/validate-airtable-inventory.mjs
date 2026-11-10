@@ -35,7 +35,7 @@ export function reconcileInventory(input, options = {}) {
     if (!STATUSES.has(cluster.status)) throw new Error(name + ": invalid status");
     validCount(cluster.nodeCount, "nodeCount", name);
     validCount(cluster.podCount, "podCount", name);
-    const date = cluster.onboardingDate ? new Date(cluster.onboardingDate) : null;
+    const date = cluster.lastSeenAt ? new Date(cluster.lastSeenAt) : null;
     const ageDays = date && Number.isFinite(date.getTime()) ? Math.floor((now - date) / 86400000) : null;
     const current = live.get(name);
     let classification;
@@ -43,7 +43,7 @@ export function reconcileInventory(input, options = {}) {
     else if (!current) classification = "SOURCE_ONLY";
     else if (current.nodeCount !== cluster.nodeCount || current.podCount !== cluster.podCount) classification = "DRIFT";
     else classification = "MATCH";
-    return { clusterName: name, environment: cluster.environment, classification, sourceNodeCount: cluster.nodeCount, sourcePodCount: cluster.podCount, liveNodeCount: current?.nodeCount ?? null, livePodCount: current?.podCount ?? null, ageDays };
+    return { clusterName: name, environment: cluster.environment, classification, lastSeenAt: cluster.lastSeenAt ?? null, sourceNodeCount: cluster.nodeCount, sourcePodCount: cluster.podCount, liveNodeCount: current?.nodeCount ?? null, livePodCount: current?.podCount ?? null, ageDays };
   });
   for (const current of input.liveClusters ?? []) {
     if (typeof current.clusterName !== "string" || !NAME.test(current.clusterName)) throw new Error("Live cluster name must be DNS-compatible");
@@ -60,7 +60,9 @@ function main() {
   if (at < 0 || !args[at + 1]) throw new Error("Usage: node scripts/eks/validate-airtable-inventory.mjs --input <safe-export.json> [--stale-after-days 90]");
   const staleAt = args.indexOf("--stale-after-days"), staleAfterDays = staleAt >= 0 ? Number(args[staleAt + 1]) : 90;
   const input = JSON.parse(fs.readFileSync(args[at + 1], "utf8"));
-  process.stdout.write(JSON.stringify(reconcileInventory(input, { staleAfterDays }), null, 2) + "\n");
+  const result = reconcileInventory(input, { staleAfterDays });
+  if (args.includes("--require-fresh") && result.summary.MATCH + result.summary.SOURCE_ONLY + result.summary.DRIFT === 0) throw new Error("No fresh Airtable cluster records; update linked Nodes.Last Seen before planning EKS");
+  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 }
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {
   try { main(); } catch (error) { process.stderr.write("Inventory validation failed: " + error.message + "\n"); process.exitCode = 1; }
