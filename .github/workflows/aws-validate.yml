@@ -35,6 +35,13 @@ jobs:
           node --check deploy/aws/serverless/function/index.js
           node --check deploy/aws/serverless/automation/index.js
           node --check deploy/aws/serverless/zapier-relay/index.js
+          node --check deploy/aws/serverless/zapier-command/index.js
+          node --check deploy/aws/serverless/remediation-worker/index.js
+      - name: Run remediation worker tests
+        working-directory: deploy/aws/serverless/remediation-worker
+        run: |
+          npm install --no-audit --no-fund
+          npm test
       - name: Run Zapier command receiver tests
         working-directory: deploy/aws/serverless/zapier-command
         run: |
