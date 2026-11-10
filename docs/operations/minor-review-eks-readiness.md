@@ -48,6 +48,7 @@ All items below are gates, not assumptions:
 - Required EKS add-ons: VPC CNI, CoreDNS, kube-proxy, and EBS CSI where persistent volumes are needed.
 - CloudSentinels cluster agent uses a dedicated service account and least-privilege Kubernetes RBAC. Prefer EKS Pod Identity or IRSA for AWS permissions.
 - Prometheus/Alertmanager or the selected telemetry adapter forwards authenticated health events to the CloudSentinels ingestion API.
+- CloudWatch alarms cover API/automation Lambda errors, automation queue age (60-second threshold), processing and delivery DLQs, and the optional Zapier/remediation worker paths when those integrations are enabled.
 - The CloudSentinels procedure registry chooses only allowlisted adapter actions; no arbitrary shell execution.
 
 This is a target design, not a deployed cluster configuration. Exact instance types, counts, EKS version, and network CIDRs remain unset until review approval.
