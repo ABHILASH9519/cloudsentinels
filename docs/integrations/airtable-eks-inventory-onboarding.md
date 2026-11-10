@@ -43,6 +43,17 @@ Do not export Airtable attachment URLs, API credentials, environment secrets, to
 6. Apply only reviewed GitOps manifests with the dedicated OIDC deployment role.
 7. Reconcile and record post-apply health.
 
+## Review-day implementation assets
+
+- Safe Airtable inventory validator: `scripts/eks/validate-airtable-inventory.mjs`.
+- Validator tests: `scripts/eks/validate-airtable-inventory.test.mjs`.
+- Review-day EKS CloudFormation template: `deploy/eks/review-day-cluster.yaml`.
+- Approval-gated manual workflow: `.github/workflows/eks-review-day.yml`.
+- Non-provisioning CI validation: `.github/workflows/eks-inventory-validation.yml`.
+- Operating instructions and OIDC requirements: `deploy/eks/README.md`.
+
+The validator accepts an explicitly normalized, allowlisted JSON export and optional live-cluster snapshot. It rejects secret-bearing keys and emits only reconciliation labels/counts. Airtable inventory does not supply VPC/subnets, IAM role ARNs, EKS version, instance type, CIDR access, or workload manifests; those must be separately approved. The workflow's `plan` operation creates a change set only; `create` is protected by the `minor-review` environment and exact confirmation. The workflow file must reach the default branch before GitHub makes `workflow_dispatch` available.
+
 ## EKS status
 
 No EKS clusters were present in the AWS account during the acceptance audit. This document does not provision EKS or modify any AWS/Kubernetes resource.
