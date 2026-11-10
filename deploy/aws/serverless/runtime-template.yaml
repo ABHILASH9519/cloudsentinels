@@ -258,6 +258,10 @@ Resources:
               Action:
                 - secretsmanager:GetSecretValue
               Resource: !Ref ZapierWebhookSecretArn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ApplicationTableName}"
       Events:
         ZapierRelayQueue:
           Type: SQS
