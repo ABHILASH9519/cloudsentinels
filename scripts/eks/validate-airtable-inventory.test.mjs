@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertNoSecrets, reconcileInventory } from "./validate-airtable-inventory.mjs";
+import { assertNoSecrets, assertFreshInventory, reconcileInventory } from "./validate-airtable-inventory.mjs";
 import { normalizeClusterRecord } from "./fetch-airtable-inventory.mjs";
 const now = "2026-11-10T00:00:00.000Z";
 const base = { source: "Cloud-Sentinel", clusters: [{ clusterName: "review-cluster", environment: "Development", status: "Active", onboardingDate: "2023-03-25T00:00:00.000Z", lastSeenAt: "2026-11-01T00:00:00.000Z", nodeCount: 2, podCount: 8 }], liveClusters: [{ clusterName: "review-cluster", nodeCount: 2, podCount: 8 }, { clusterName: "unlisted-cluster", nodeCount: 1, podCount: 3 }] };
@@ -36,4 +36,11 @@ test("uses linked-node Last Seen rather than onboarding date for freshness", () 
   input.clusters[0].onboardingDate = "2023-03-25T00:00:00.000Z";
   input.clusters[0].lastSeenAt = "2026-11-09T00:00:00.000Z";
   assert.equal(reconcileInventory(input, { now }).clusters[0].classification, "MATCH");
+});
+
+test("freshness gate blocks the current all-stale snapshot", () => {
+  const stale = structuredClone(base);
+  stale.clusters[0].lastSeenAt = "2024-06-10T14:20:00.000Z";
+  const result = reconcileInventory(stale, { now });
+  assert.throws(() => assertFreshInventory(result), /No fresh Airtable cluster records/);
 });
