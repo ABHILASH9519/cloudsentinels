@@ -63,7 +63,6 @@ async function execute(detail) {
   const eventRecord = result.Item;
   if (
     !eventRecord ||
-    eventRecord.status !== "APPROVED_AWAITING_EXECUTOR" ||
     eventRecord.commandId !== detail.commandId ||
     eventRecord.recommendedAction !== detail.action ||
     eventRecord.clusterName !== detail.clusterName ||
@@ -71,10 +70,18 @@ async function execute(detail) {
   ) {
     throw new Error("Remediation command no longer matches an approved event record.");
   }
+  if (["RECOVERY_VERIFIED", "ACTION_SUBMITTED_UNVERIFIED"].includes(eventRecord.status)) {
+    return;
+  }
+  if (!["APPROVED_AWAITING_EXECUTOR", "EXECUTING"].includes(eventRecord.status)) {
+    throw new Error("Remediation event is not in an executable state.");
+  }
 
-  await setStatus(key, detail.commandId, "EXECUTING", {
-    executionStartedAt: new Date().toISOString(),
-  });
+  if (eventRecord.status === "APPROVED_AWAITING_EXECUTOR") {
+    await setStatus(key, detail.commandId, "EXECUTING", {
+      executionStartedAt: new Date().toISOString(),
+    });
+  }
 
   const invocation = await lambda.send(new InvokeCommand({
     FunctionName: adapterFunctionArn,
