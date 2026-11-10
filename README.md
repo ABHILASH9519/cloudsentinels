@@ -1,6 +1,14 @@
 # CloudSentinels
 
-CloudSentinels is an incident-management and observability console for teams operating cloud workloads and Kubernetes clusters. The current implementation uses a React/TypeScript frontend and a Motoko backend on the Internet Computer.
+CloudSentinels is an incident-management and observability project for teams operating cloud workloads and Kubernetes clusters. The goal is to bring incident context, monitoring signals and operational workflows into one place, then make routine response work safer and easier to understand.
+
+The repository currently contains two implementation tracks:
+
+- **Existing application:** React/TypeScript frontend with a Motoko backend on the Internet Computer. The capabilities and limitations below describe this working application.
+- **AWS-native architecture (in development):** a separate React/AWS integration path, API/Lambda runtime, EventBridge and SQS event processing, plus an optional Zapier relay. These changes are being developed on feature branches and must not be mistaken for a deployed production migration.
+
+The AWS automation processor currently classifies and records events. It does **not** execute Kubernetes remediation. Approval handling, a cluster adapter, scoped cluster permissions and end-to-end operational tests are still required before any remediation can be enabled.
+
 
 ## Current capabilities in source
 
