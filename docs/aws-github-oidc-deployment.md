@@ -14,6 +14,7 @@ Create a GitHub Actions environment named `preview` in the repository settings. 
 | `AWS_ACCOUNT_ID` | The AWS account ID that owns the existing preview stacks |
 | `AWS_APP_ORIGIN` | The exact HTTPS origin already allowed by the preview Cognito app client |
 | `CLOUDFORMATION_EXECUTION_ROLE_ARN` | The scoped CloudFormation service role used by the existing runtime stack |
+| `ZAPIER_WEBHOOK_SECRET_ARN` | Optional Secrets Manager ARN containing the outbound Zapier Catch Hook URL and signing secret |
 | `ZAPIER_COMMAND_SECRET_ARN` | Optional Secrets Manager ARN for the inbound Zapier command signature secret |
 | `REMEDIATION_ADAPTER_FUNCTION_ARN` | Optional ARN of the separately deployed remediation adapter Lambda |
 | `REMEDIATION_EXECUTION_ENABLED` | Keep `false` until the adapter is tested; set `true` only for an approved non-production rollout |
@@ -73,7 +74,7 @@ The job refuses to continue if the caller account differs from `AWS_ACCOUNT_ID`,
 - This is a preview runtime deployment only. There is no production target in this workflow.
 - The workflow updates only `cloudsentinels-runtime`; it reads the existing `cloudsentinels-core` outputs and does not change Cognito users or the DynamoDB table definition.
 - It leaves the outbound `ZapierWebhookSecretArn` unset unless separately configured. The inbound `ZapierCommandSecretArn`, adapter ARN, and execution flag are passed from the optional GitHub environment variables above.
-- The inbound Zapier command endpoint is HMAC-authenticated and checks the event's approval state and recommended action before queuing a command.
+- The outbound Zapier relay is created only when `ZAPIER_WEBHOOK_SECRET_ARN` is set. The inbound Zapier command endpoint is HMAC-authenticated and checks the event's approval state and recommended action before queuing a command.
 - The remediation worker is provisioned only when the command secret, adapter ARN, and `REMEDIATION_EXECUTION_ENABLED=true` are all configured. The adapter itself must enforce Kubernetes RBAC and idempotency and independently verify recovery.
 - Without a real, tested adapter, the AWS processor only classifies/records events and the command queue has no live cluster action. Do not describe the system as live self-healing.
 - The health endpoint confirms API availability, not authenticated end-to-end application behavior or successful downstream event processing.
