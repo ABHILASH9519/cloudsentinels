@@ -58,7 +58,7 @@ export function reconcileInventory(input, options = {}) {
   const summary = Object.fromEntries(labels.map(label => [label, results.filter(item => item.classification === label).length]));
   return {
     generatedAt: now.toISOString(),
-    summary: { ...summary, freshSourceRecords: results.filter(item => item.sourceFresh).length, staleTelemetryRecords: results.filter(item => item.classification === "STALE").length, clustersMissingNodeLinks: results.filter(item => (item.linkedNodeCount ?? 0) === 0).length },
+    summary: { ...summary, freshSourceRecords: results.filter(item => item.sourceFresh).length, staleTelemetryRecords: results.filter(item => item.classification === "STALE").length, clustersMissingNodeLinks: results.filter(item => item.recordCreatedAt !== undefined && (item.linkedNodeCount ?? 0) === 0).length },
     dataQuality: { sourceRecordFreshnessIsNotRuntimeTelemetry: true, note: "Airtable record creation time proves a recent inventory import only; Last Seen is the separate node telemetry signal." },
     clusters: results
   };
