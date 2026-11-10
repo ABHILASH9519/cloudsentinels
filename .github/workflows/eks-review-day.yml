@@ -91,6 +91,11 @@ jobs:
       - name: Checkout reviewed branch
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Validate approval and parameters
         shell: bash
         env:
@@ -133,6 +138,17 @@ jobs:
           (( MIN_SIZE <= DESIRED_SIZE && DESIRED_SIZE <= MAX_SIZE )) || { echo "Require min <= desired <= max"; exit 1; }
           [[ -n "$PUBLIC_CIDRS" && "$PUBLIC_CIDRS" != "0.0.0.0/0" ]] || { echo "Restricted public API CIDR allowlist required"; exit 1; }
           if [[ ",$PUBLIC_CIDRS," == *",0.0.0.0/0,"* ]]; then echo "0.0.0.0/0 is forbidden"; exit 1; fi
+
+      - name: Fetch and validate live Airtable cluster inventory
+        if: inputs.operation != 'destroy'
+        shell: bash
+        env:
+          AIRTABLE_API_TOKEN: ${{ secrets.AIRTABLE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ -n "$AIRTABLE_API_TOKEN" ]] || { echo "Set read-only AIRTABLE_API_TOKEN on minor-review environment"; exit 1; }
+          node scripts/eks/fetch-airtable-inventory.mjs --output "$RUNNER_TEMP/airtable-inventory.safe.json"
+          node scripts/eks/validate-airtable-inventory.mjs --input "$RUNNER_TEMP/airtable-inventory.safe.json" --stale-after-days 90
 
       - name: Configure AWS credentials through OIDC
         uses: aws-actions/configure-aws-credentials@v4
