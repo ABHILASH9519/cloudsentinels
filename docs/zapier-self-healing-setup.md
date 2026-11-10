@@ -55,12 +55,14 @@ The incoming relay uses **Webhooks by Zapier → Catch Hook**. Zapier's Catch Ho
 
 1. Create a Zap with **Webhooks by Zapier → Catch Hook** as its trigger. Copy the generated hook URL into the outbound relay secret used by the AWS runtime.
 2. Test the trigger with a CloudSentinels event. Use the fields `eventId`, `eventType`, `requiresApproval`, `recommendedAction`, and `clusterRef` from the relay payload.
-3. Add a Filter step. Continue only when `requiresApproval` is true and `recommendedAction` is present. Add event-type/severity conditions appropriate to your operational policy.
-4. Add a human approval step (for example, your organization's approved approval app). Do not treat a Zapier Filter or a successful webhook delivery as human approval.
-5. Add **Code by Zapier → Run JavaScript** after the approval step. Provide these Input Data fields:
+3. Require a non-empty `eventId`, `clusterRef`, and `recommendedAction`. Add event-type and severity filters that match your operational policy.
+4. Split the Zap into two policy paths (or create two separate Zaps):
+   - **Automatic low-risk path:** continue only when `requiresApproval` is false and the event/action is explicitly allowed by your policy. Set `approvedBy` to `zapier-auto-policy`.
+   - **Human approval path:** continue only when `requiresApproval` is true. Add your organization's approval step and map the approver identity into `approvedBy`. The AWS endpoint rejects the `zapier-auto-policy` identity for high-risk actions.
+5. Add **Code by Zapier → Run JavaScript** after the policy/approval path. Provide these Input Data fields:
    - `eventId`: event ID from the Catch Hook
    - `action`: `recommendedAction` from the Catch Hook
-   - `approvedBy`: identity/name from the approval result
+   - `approvedBy`: `zapier-auto-policy` for the automatic path, or the real approver identity for the human path
    - `signingSecret`: the same value stored in the AWS command secret. Restrict access to this Zap and its run history.
 6. Use this code to create a stable command ID and sign the exact request body:
 
