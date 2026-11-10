@@ -55,6 +55,10 @@ Do not export Airtable attachment URLs, API credentials, environment secrets, to
 
 The exporter reads only allowlisted cluster fields plus linked Nodes and Last Seen fields, derives latest node activity per cluster, and omits kubeconfig/token/attachment fields entirely. Freshness is based on node `Last Seen`, not cluster `Onboarding Date`. The validator accepts that normalized JSON export and optional live-cluster snapshot. It rejects secret-bearing keys and emits only reconciliation labels/counts. Airtable inventory does not supply VPC/subnets, IAM role ARNs, EKS version, instance type, CIDR access, or workload manifests; those must be separately approved. The workflow's `plan` operation first requires at least one cluster with fresh linked-node activity (90-day threshold), then creates a change set only; a separate `execute` operation rechecks the named change set, requires a second protected-environment approval, and requires exact confirmation before execution. The workflow file must reach the default branch before GitHub makes `workflow_dispatch` available.
 
+## Current data freshness assessment (2026-11-10)
+
+The live Airtable query returned 16 cluster records and 15 linked node records. All 15 node `Last Seen` timestamps fall between 7 and 10 June 2024; the planned showcase cluster has no linked-node activity. Under the 90-day freshness threshold, all 16 cluster records are currently `STALE`. The review-day workflow therefore stops before AWS authentication until at least one cluster's linked node activity is refreshed in Airtable. Existing node/pod counts remain historical reference values, not current capacity recommendations.
+
 ## EKS status
 
 No EKS clusters were present in the AWS account during the acceptance audit. This document does not provision EKS or modify any AWS/Kubernetes resource.
