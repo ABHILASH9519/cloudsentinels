@@ -2,7 +2,7 @@
 
 The workflow at [`.github/workflows/aws-deploy-preview.yml`](../.github/workflows/aws-deploy-preview.yml) provides a **manual, preview-only** deployment path for the existing `cloudsentinels-runtime` stack.
 
-It does not deploy on every push, modify the persistent Cognito/DynamoDB foundation, create a production stack, or enable the optional Zapier relay. A maintainer must deliberately run it from GitHub Actions. The job runs both Lambda test suites and SAM validation/build before requesting AWS credentials.
+It does not deploy on every push, modify the persistent Cognito/DynamoDB foundation, create a production stack, or enable the optional Zapier relay. A maintainer must deliberately run it from GitHub Actions. The job runs the Lambda test suites and SAM validation/build before requesting AWS credentials.
 
 ## Required GitHub environment configuration
 
@@ -14,6 +14,9 @@ Create a GitHub Actions environment named `preview` in the repository settings. 
 | `AWS_ACCOUNT_ID` | The AWS account ID that owns the existing preview stacks |
 | `AWS_APP_ORIGIN` | The exact HTTPS origin already allowed by the preview Cognito app client |
 | `CLOUDFORMATION_EXECUTION_ROLE_ARN` | The scoped CloudFormation service role used by the existing runtime stack |
+| `ZAPIER_COMMAND_SECRET_ARN` | Optional Secrets Manager ARN for the inbound Zapier command signature secret |
+| `REMEDIATION_ADAPTER_FUNCTION_ARN` | Optional ARN of the separately deployed remediation adapter Lambda |
+| `REMEDIATION_EXECUTION_ENABLED` | Keep `false` until the adapter is tested; set `true` only for an approved non-production rollout |
 
 Add this environment secret:
 
@@ -69,8 +72,10 @@ The job refuses to continue if the caller account differs from `AWS_ACCOUNT_ID`,
 
 - This is a preview runtime deployment only. There is no production target in this workflow.
 - The workflow updates only `cloudsentinels-runtime`; it reads the existing `cloudsentinels-core` outputs and does not change Cognito users or the DynamoDB table definition.
-- It leaves `ZapierWebhookSecretArn` at its default empty value. Configure and validate the secret separately before enabling the relay.
-- The automation processor classifies and records events. It does not execute Kubernetes remediation. Do not describe this as a live self-healing deployment.
+- It leaves the outbound `ZapierWebhookSecretArn` unset unless separately configured. The inbound `ZapierCommandSecretArn`, adapter ARN, and execution flag are passed from the optional GitHub environment variables above.
+- The inbound Zapier command endpoint is HMAC-authenticated and checks the event's approval state and recommended action before queuing a command.
+- The remediation worker is provisioned only when the command secret, adapter ARN, and `REMEDIATION_EXECUTION_ENABLED=true` are all configured. The adapter itself must enforce Kubernetes RBAC and idempotency and independently verify recovery.
+- Without a real, tested adapter, the AWS processor only classifies/records events and the command queue has no live cluster action. Do not describe the system as live self-healing.
 - The health endpoint confirms API availability, not authenticated end-to-end application behavior or successful downstream event processing.
 - The workflow is intentionally manual. Pushing code commits does not deploy AWS resources.
 
