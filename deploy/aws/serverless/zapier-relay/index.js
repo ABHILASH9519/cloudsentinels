@@ -68,7 +68,7 @@ function toPayload(event) {
     occurredAt: safeString(event.time, 40),
     severity: safeString(detail.severity ?? detail.priority, 32),
     incidentId: safeString(detail.incidentId ?? resource.id ?? detail.resourceId, 128),
-    clusterRef: safeString(detail.clusterName ?? detail.cluster, 128),
+    clusterRef: safeString(detail.clusterName ?? detail.clusterArn ?? detail.cluster, 128),
     status: safeString(detail.status, 64),
     risk: safeString(detail.risk ?? policy.risk, 32),
     recommendedAction: safeString(detail.recommendedAction ?? policy.action, 80),
