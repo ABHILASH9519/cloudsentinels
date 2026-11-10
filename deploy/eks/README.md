@@ -20,7 +20,7 @@ This directory contains the non-production EKS infrastructure template and Airta
 
 Airtable is inventory/reconciliation input, not a cluster specification or workload source. Export only:
 
-- Kubernetes Clusters: Cluster Name, Environment, Status, Node Count, Pod Count, Onboarding Date, Health Status.
+- Kubernetes Clusters: Cluster Name, Environment, Status, Node Count, Pod Count, Onboarding Date. Nodes: Cluster (linked record) and Last Seen (used to derive latest activity per cluster).
 - Nodes: Node Name, Cluster, Status, CPU Usage (%), Memory Usage (MB), Disk Usage (GB), Node Health Status, Last Seen.
 - Pods: Pod Name, Node, Namespace, Status, Restart Count, Container Count, Pod Health Status, Last Restart Time.
 - Deployments: Deployment Name, Cluster, Namespace, Replicas, Status, Deployment Tool, Deployment Timestamp, Git Repository URL, Deployed Commit SHA.
@@ -35,7 +35,8 @@ Never export Kubeconfig, Secure Onboarding Token, attachments, API credentials, 
       "clusterName": "review-cluster",
       "environment": "Development",
       "status": "Active",
-      "onboardingDate": "2026-11-01T00:00:00.000Z",
+      "onboardingDate": "2023-03-25T00:00:00.000Z",
+      "lastSeenAt": "2026-11-09T00:00:00.000Z",
       "nodeCount": 2,
       "podCount": 8
     }
@@ -50,7 +51,7 @@ Fetch the live allowlisted cluster table directly from Airtable (the token is re
 
 ```bash
 AIRTABLE_API_TOKEN=... node scripts/eks/fetch-airtable-inventory.mjs --output ./airtable-inventory.safe.json
-node scripts/eks/validate-airtable-inventory.mjs --input ./airtable-inventory.safe.json --stale-after-days 90
+node scripts/eks/validate-airtable-inventory.mjs --input ./airtable-inventory.safe.json --stale-after-days 90 --require-fresh
 ```
 
 Run the validator tests locally:
@@ -60,7 +61,7 @@ node scripts/eks/validate-airtable-inventory.mjs --input ./airtable-inventory.sa
 node --test scripts/eks/validate-airtable-inventory.test.mjs
 ```
 
-The validator rejects secret-bearing keys and malformed records, then labels source/live comparisons `MATCH`, `SOURCE_ONLY`, `CLUSTER_ONLY`, `DRIFT`, or `STALE`. Historical Airtable records are expected to be marked stale. The output is evidence only; it never generates infrastructure parameters or Kubernetes manifests from Airtable.
+The validator rejects secret-bearing keys and malformed records, then labels source/live comparisons `MATCH`, `SOURCE_ONLY`, `CLUSTER_ONLY`, `DRIFT`, or `STALE`. If every cluster has stale or missing linked-node activity, `--require-fresh` fails the plan before AWS authentication. Refresh the Airtable node `Last Seen` data first. The output is evidence only; it never generates infrastructure parameters or Kubernetes manifests from Airtable.
 
 ## Review-day execution
 
