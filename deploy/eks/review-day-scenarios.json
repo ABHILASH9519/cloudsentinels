@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "source": "Airtable Cloud-Sentinel / Kubernetes Clusters",
+  "sourceSnapshot": "deploy/eks/airtable-inventory.snapshot.json",
+  "purpose": "Review-day test selection and operator briefing only; these are reported inventory values, not live EKS telemetry or deployable workloads.",
+  "safety": "Do not execute remediation against the source cluster names or reported endpoints. Recreate controlled failures only in the review-day CloudSentinels EKS cluster after owner approval.",
+  "scenarios": [
+    {
+      "id": "healthy-baseline",
+      "sourceCluster": "prod-ap-south-04",
+      "environment": "Production",
+      "reportedStatus": "Active",
+      "reportedHealth": "Healthy",
+      "reportedCpuPercent": 58,
+      "reportedNodeCount": 9,
+      "reportedPodCount": 240,
+      "expectedSignal": "BASELINE_HEALTHY",
+      "executionPolicy": "Observe only; no remediation"
+    },
+    {
+      "id": "warning-qa",
+      "sourceCluster": "qa-02",
+      "environment": "QA",
+      "reportedStatus": "Degraded",
+      "reportedHealth": "Warning",
+      "reportedCpuPercent": 79,
+      "reportedNodeCount": 4,
+      "reportedPodCount": 80,
+      "expectedSignal": "WARNING",
+      "executionPolicy": "Diagnose and request operator review; no automatic mutation"
+    },
+    {
+      "id": "degraded-production",
+      "sourceCluster": "prod-eu-west-03",
+      "environment": "Production",
+      "reportedStatus": "Degraded",
+      "reportedHealth": "Warning",
+      "reportedCpuPercent": 88,
+      "reportedNodeCount": 10,
+      "reportedPodCount": 290,
+      "expectedSignal": "HIGH_WARNING",
+      "executionPolicy": "Human review required before any remediation"
+    },
+    {
+      "id": "critical-staging",
+      "sourceCluster": "staging-03",
+      "environment": "Staging",
+      "reportedStatus": "Degraded",
+      "reportedHealth": "Critical",
+      "reportedCpuPercent": 91,
+      "reportedNodeCount": 4,
+      "reportedPodCount": 95,
+      "expectedSignal": "CRITICAL",
+      "executionPolicy": "Approval required; never auto-execute from Airtable snapshot"
+    },
+    {
+      "id": "retired-exclusion",
+      "sourceCluster": "legacy-dr-01",
+      "environment": "Other",
+      "reportedStatus": "Retired",
+      "reportedHealth": "Offline",
+      "reportedCpuPercent": 0,
+      "reportedNodeCount": 0,
+      "reportedPodCount": 0,
+      "expectedSignal": "EXCLUDED_RETIRED",
+      "executionPolicy": "Exclude from active inventory and provisioning"
+    },
+    {
+      "id": "inactive-exclusion",
+      "sourceCluster": "dev-03",
+      "environment": "Development",
+      "reportedStatus": "Inactive",
+      "reportedHealth": "Offline",
+      "reportedCpuPercent": 0,
+      "reportedNodeCount": 2,
+      "reportedPodCount": 0,
+      "expectedSignal": "EXCLUDED_INACTIVE",
+      "executionPolicy": "Exclude from active baseline; verify source owner before reuse"
+    },
+    {
+      "id": "provisioning-exclusion",
+      "sourceCluster": "staging-04",
+      "environment": "Staging",
+      "reportedStatus": "Provisioning",
+      "reportedHealth": "Unknown",
+      "reportedCpuPercent": 22,
+      "reportedNodeCount": 3,
+      "reportedPodCount": 30,
+      "expectedSignal": "PROVISIONING",
+      "executionPolicy": "Do not treat as steady-state health baseline"
+    }
+  ],
+  "limitations": [
+    "Cluster records were added to Airtable on 2026-11-10; this proves recent inventory import, not live node heartbeat.",
+    "The cluster table has no linked Nodes records and the Nodes table has no Cluster links.",
+    "All 15 node Last Seen values remain from June 2024; Pods, Deployments, Anomalies, and Incidents also contain historical records.",
+    "Reported API endpoints use company.com-style hostnames and have not been verified as reachable or owned."
+  ]
+}
