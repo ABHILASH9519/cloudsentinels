@@ -24,7 +24,12 @@ Parameters:
     AllowedPattern: '^arn:aws:iam::[0-9]{12}:role/.+$'
   NodeRoleArn:
     Type: String
-    AllowedPattern: '^arn:aws:iam::[0-9]{12}:role/.+  NodeInstanceType:
+    AllowedPattern: '^arn:aws:iam::[0-9]{12}:role/.+$'
+  ClusterAdminRoleArn:
+    Type: String
+    Description: Dedicated review operator IAM role granted cluster-scoped Kubernetes admin access.
+    AllowedPattern: '^arn:aws:iam::[0-9]{12}:role/.+$'
+  NodeInstanceType:
     Type: String
     AllowedPattern: '^[a-z][0-9a-z.]+$'
   MinSize:
@@ -56,7 +61,7 @@ Resources:
         PublicAccessCidrs: !Ref PublicAccessCidrs
       AccessConfig:
         AuthenticationMode: API_AND_CONFIG_MAP
-        BootstrapClusterCreatorAdminPermissions: true
+        BootstrapClusterCreatorAdminPermissions: false
       Tags:
         - Key: project
           Value: cloudsentinels
@@ -119,158 +124,3 @@ Outputs:
     Value: !Ref CloudSentinelsReviewNodeGroup
   ClusterAdminPrincipalArn:
     Value: !Ref ClusterAdminRoleArn
-
-  ClusterAdminRoleArn:
-    Type: String
-    Description: Dedicated review operator IAM role granted cluster-scoped Kubernetes admin access.
-    AllowedPattern: '^arn:aws:iam::[0-9]{12}:role/.+  NodeInstanceType:
-    Type: String
-    AllowedPattern: '^[a-z][0-9a-z.]+$'
-  MinSize:
-    Type: Number
-    MinValue: 1
-    MaxValue: 5
-  DesiredSize:
-    Type: Number
-    MinValue: 1
-    MaxValue: 5
-  MaxSize:
-    Type: Number
-    MinValue: 1
-    MaxValue: 5
-  PublicAccessCidrs:
-    Type: CommaDelimitedList
-    Description: Narrow IPv4 CIDR allowlist; 0.0.0.0/0 is forbidden.
-Resources:
-  CloudSentinelsReviewCluster:
-    Type: AWS::EKS::Cluster
-    Properties:
-      Name: !Ref ClusterName
-      Version: !Ref KubernetesVersion
-      RoleArn: !Ref ClusterRoleArn
-      ResourcesVpcConfig:
-        SubnetIds: !Ref PrivateSubnetIds
-        EndpointPrivateAccess: true
-        EndpointPublicAccess: true
-        PublicAccessCidrs: !Ref PublicAccessCidrs
-      AccessConfig:
-        AuthenticationMode: API_AND_CONFIG_MAP
-        BootstrapClusterCreatorAdminPermissions: true
-      Tags:
-        - Key: project
-          Value: cloudsentinels
-        - Key: environment
-          Value: minor-review
-        - Key: cloudsentinels:approved-vpc-id
-          Value: !Ref VpcId
-        - Key: lifecycle
-          Value: review-day
-  CloudSentinelsReviewNodeGroup:
-    Type: AWS::EKS::Nodegroup
-    Properties:
-      ClusterName: !Ref CloudSentinelsReviewCluster
-      NodegroupName: !Join ['', [!Ref ClusterName, '-workers']]
-      NodeRole: !Ref NodeRoleArn
-      Subnets: !Ref PrivateSubnetIds
-      InstanceTypes:
-        - !Ref NodeInstanceType
-      CapacityType: ON_DEMAND
-      AmiType: AL2023_x86_64_STANDARD
-      ScalingConfig:
-        MinSize: !Ref MinSize
-        DesiredSize: !Ref DesiredSize
-        MaxSize: !Ref MaxSize
-      UpdateConfig:
-        MaxUnavailable: 1
-      Labels:
-        project: cloudsentinels
-        environment: minor-review
-      Tags:
-        project: cloudsentinels
-        environment: minor-review
-        lifecycle: review-day
-Outputs:
-  ClusterName:
-    Value: !Ref CloudSentinelsReviewCluster
-  ClusterArn:
-    Value: !GetAtt CloudSentinelsReviewCluster.Arn
-  ClusterEndpoint:
-    Value: !GetAtt CloudSentinelsReviewCluster.Endpoint
-  NodeGroupName:
-    Value: !Ref CloudSentinelsReviewNodeGroup
-
-  NodeInstanceType:
-    Type: String
-    AllowedPattern: '^[a-z][0-9a-z.]+$'
-  MinSize:
-    Type: Number
-    MinValue: 1
-    MaxValue: 5
-  DesiredSize:
-    Type: Number
-    MinValue: 1
-    MaxValue: 5
-  MaxSize:
-    Type: Number
-    MinValue: 1
-    MaxValue: 5
-  PublicAccessCidrs:
-    Type: CommaDelimitedList
-    Description: Narrow IPv4 CIDR allowlist; 0.0.0.0/0 is forbidden.
-Resources:
-  CloudSentinelsReviewCluster:
-    Type: AWS::EKS::Cluster
-    Properties:
-      Name: !Ref ClusterName
-      Version: !Ref KubernetesVersion
-      RoleArn: !Ref ClusterRoleArn
-      ResourcesVpcConfig:
-        SubnetIds: !Ref PrivateSubnetIds
-        EndpointPrivateAccess: true
-        EndpointPublicAccess: true
-        PublicAccessCidrs: !Ref PublicAccessCidrs
-      AccessConfig:
-        AuthenticationMode: API_AND_CONFIG_MAP
-        BootstrapClusterCreatorAdminPermissions: true
-      Tags:
-        - Key: project
-          Value: cloudsentinels
-        - Key: environment
-          Value: minor-review
-        - Key: cloudsentinels:approved-vpc-id
-          Value: !Ref VpcId
-        - Key: lifecycle
-          Value: review-day
-  CloudSentinelsReviewNodeGroup:
-    Type: AWS::EKS::Nodegroup
-    Properties:
-      ClusterName: !Ref CloudSentinelsReviewCluster
-      NodegroupName: !Join ['', [!Ref ClusterName, '-workers']]
-      NodeRole: !Ref NodeRoleArn
-      Subnets: !Ref PrivateSubnetIds
-      InstanceTypes:
-        - !Ref NodeInstanceType
-      CapacityType: ON_DEMAND
-      AmiType: AL2023_x86_64_STANDARD
-      ScalingConfig:
-        MinSize: !Ref MinSize
-        DesiredSize: !Ref DesiredSize
-        MaxSize: !Ref MaxSize
-      UpdateConfig:
-        MaxUnavailable: 1
-      Labels:
-        project: cloudsentinels
-        environment: minor-review
-      Tags:
-        project: cloudsentinels
-        environment: minor-review
-        lifecycle: review-day
-Outputs:
-  ClusterName:
-    Value: !Ref CloudSentinelsReviewCluster
-  ClusterArn:
-    Value: !GetAtt CloudSentinelsReviewCluster.Arn
-  ClusterEndpoint:
-    Value: !GetAtt CloudSentinelsReviewCluster.Endpoint
-  NodeGroupName:
-    Value: !Ref CloudSentinelsReviewNodeGroup
