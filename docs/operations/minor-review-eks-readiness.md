@@ -30,7 +30,8 @@ The feature branch now contains:
 - `scripts/eks/fetch-airtable-inventory.mjs`: read-only Airtable exporter for cluster health/utilization, source-record creation time, and linked-node `Last Seen` timestamps; kubeconfig/token/attachment fields are never requested.
 - `scripts/eks/validate-airtable-inventory.mjs`: credential-key rejection, source-import freshness, independent telemetry freshness reporting, and `MATCH`/`SOURCE_ONLY`/`CLUSTER_ONLY`/`DRIFT`/`STALE` reconciliation.
 - `.github/workflows/eks-review-day.yml`: manual-only `plan`, `execute`, and `destroy` operations using protected environment + OIDC; plan and execute are separate runs.
-- `.github/workflows/eks-inventory-validation.yml`: Node tests and CloudFormation lint without AWS credentials (passed on commit `c496052`; 13/13 tests and `cfn-lint`).
+- `scripts/eks/validate-showcase-manifest.py`: validates the six Kubernetes showcase resources, embedded JSON, 20-cluster count, and sensitive-key exclusion.
+- `.github/workflows/eks-inventory-validation.yml`: Node tests and CloudFormation lint without AWS credentials (passed on commit `c496052`; 13/13 tests and `cfn-lint`); the additional showcase-manifest validation step has been added and awaits its first CI result.
 - `deploy/eks/airtable-inventory.snapshot.json`: sanitized snapshot of the latest 20 cluster rows plus related-table freshness metadata.
 - `deploy/eks/review-day-scenarios.json`: seven controlled review scenarios derived from the new cluster health summary; observe/approval-only, not executable workload manifests.
 
