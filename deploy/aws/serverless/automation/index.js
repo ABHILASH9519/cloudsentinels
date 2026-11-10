@@ -40,7 +40,7 @@ const remediationRules = {
   },
 };
 
-function classifyEvent(domainEvent) {
+export function classifyEvent(domainEvent) {
   const eventType = domainEvent["detail-type"] ?? "Unknown";
   const detail = domainEvent.detail && typeof domainEvent.detail === "object"
     ? domainEvent.detail
