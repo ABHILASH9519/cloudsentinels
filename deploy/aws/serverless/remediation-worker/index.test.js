@@ -133,12 +133,23 @@ test("does not repeat an already completed command", async () => {
   assert.equal(updates.length, 0);
 });
 
-test("retries the SQS item if the adapter does not accept the command", async () => {
+test("records adapter failures and retries the same approved command", async () => {
   adapterResponse = { accepted: false };
-  const result = await handler(queueEvent());
+  const first = await handler(queueEvent());
 
-  assert.deepEqual(result, {
+  assert.deepEqual(first, {
     batchItemFailures: [{ itemIdentifier: "sqs-message-1" }],
   });
-  assert.equal(invocations.length, 1);
+  assert.equal(eventRecord.status, "EXECUTION_FAILED");
+
+  adapterResponse = {
+    accepted: true,
+    executionId: "execution-retry",
+    recoveryVerified: true,
+  };
+  const second = await handler(queueEvent());
+
+  assert.deepEqual(second, { batchItemFailures: [] });
+  assert.equal(invocations.length, 2);
+  assert.equal(eventRecord.status, "RECOVERY_VERIFIED");
 });
