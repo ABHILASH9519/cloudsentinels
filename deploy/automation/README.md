@@ -86,5 +86,5 @@ Events use source `cloudsentinels.api` or `cloudsentinels.cluster-agent`. Do not
 - Use event ID as the idempotency key.
 - Monitor queue age and dead-letter queue depth in CloudWatch.
 - The API's event publication is currently best-effort; a transactional outbox is future reliability hardening.
-- The Zapier relay code and conditional SAM resources are committed; the relay is not deployed and its webhook secret is not configured yet.
+- The Zapier relay code and conditional SAM resources are committed; the relay is not deployed and its webhook secret is not configured yet. A synthetic event test also exposed an ES-module packaging defect in the deployed Automation Processor; the branch now includes a package manifest fix, which must be deployed before the SQS-to-DynamoDB path can be considered healthy.
 - Disconnecting Zapier must not stop the AWS application.
