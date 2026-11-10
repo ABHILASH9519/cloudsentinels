@@ -104,3 +104,10 @@ See [n8n / Zapier automation](../../automation/README.md) for the EventBridge â†
 - `GET|POST /metrics`
 
 All application endpoints except health require a valid Cognito JWT. This is the AWS backend foundation; remaining application features/integrations must be validated before production use.
+
+
+## GitHub Actions preview deployment
+
+A manual, OIDC-based deployment workflow is available at `.github/workflows/aws-deploy-preview.yml`. It validates and tests the Lambda packages, builds the SAM template, assumes a dedicated GitHub Actions IAM role, updates only the existing runtime stack, and checks the API health endpoint. It does not run on every push and does not deploy production.
+
+Before using it, configure the repository's `preview` GitHub environment and the scoped AWS roles described in [GitHub Actions AWS deployment setup](../../../docs/aws-github-oidc-deployment.md). Do not use root credentials or store long-lived AWS keys in GitHub.
