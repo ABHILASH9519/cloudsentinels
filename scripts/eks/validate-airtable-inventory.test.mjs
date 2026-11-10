@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { assertNoSecrets, assertFreshInventory, reconcileInventory } from "./validate-airtable-inventory.mjs";
 import { normalizeClusterRecord } from "./fetch-airtable-inventory.mjs";
 const now = "2026-11-10T00:00:00.000Z";
-const base = { source: "Cloud-Sentinel", clusters: [{ clusterName: "review-cluster", environment: "Development", status: "Active", onboardingDate: "2023-03-25T00:00:00.000Z", lastSeenAt: "2026-11-01T00:00:00.000Z", nodeCount: 2, podCount: 8 }], liveClusters: [{ clusterName: "review-cluster", nodeCount: 2, podCount: 8 }, { clusterName: "unlisted-cluster", nodeCount: 1, podCount: 3 }] };
+const base = { source: "Cloud-Sentinel", clusters: [{ clusterName: "review-cluster", environment: "Development", status: "Active", onboardingDate: "2023-03-25T00:00:00.000Z", recordCreatedAt: "2026-11-09T00:00:00.000Z", lastSeenAt: "2026-11-01T00:00:00.000Z", linkedNodeCount: 1, nodeCount: 2, podCount: 8 }], liveClusters: [{ clusterName: "review-cluster", nodeCount: 2, podCount: 8 }, { clusterName: "unlisted-cluster", nodeCount: 1, podCount: 3 }] };
 test("matches fresh source inventory and finds cluster-only resources", () => { const r = reconcileInventory(base, { now }); assert.equal(r.summary.MATCH, 1); assert.equal(r.summary.CLUSTER_ONLY, 1); });
 test("marks historical snapshots stale", () => { const x = structuredClone(base); x.clusters[0].lastSeenAt = "2024-06-01T00:00:00.000Z"; assert.equal(reconcileInventory(x, { now }).clusters[0].classification, "STALE"); });
 test("detects node and pod count drift", () => { const x = structuredClone(base); x.liveClusters[0].nodeCount = 4; assert.equal(reconcileInventory(x, { now }).clusters[0].classification, "DRIFT"); });
@@ -27,7 +27,7 @@ test("Airtable export normalization returns only allowlisted cluster fields", ()
     "Kubeconfig": [{ url: "must-not-be-exported" }],
     "Secure Onboarding Token": "must-not-be-exported"
   });
-  assert.deepEqual(Object.keys(normalized).sort(), ["clusterName", "environment", "lastSeenAt", "nodeCount", "onboardingDate", "podCount", "status"].sort());
+  assert.deepEqual(Object.keys(normalized).sort(), ["clusterName", "environment", "lastSeenAt", "linkedNodeCount", "nodeCount", "onboardingDate", "recordCreatedAt", "podCount", "status"].sort());
   assert.equal(normalized.clusterName, "review-cluster");
 });
 
@@ -38,9 +38,20 @@ test("uses linked-node Last Seen rather than onboarding date for freshness", () 
   assert.equal(reconcileInventory(input, { now }).clusters[0].classification, "MATCH");
 });
 
-test("freshness gate blocks the current all-stale snapshot", () => {
-  const stale = structuredClone(base);
-  stale.clusters[0].lastSeenAt = "2024-06-10T14:20:00.000Z";
-  const result = reconcileInventory(stale, { now });
-  assert.throws(() => assertFreshInventory(result), /No fresh Airtable cluster records/);
+test("fresh inventory import can pass while old node telemetry remains explicitly stale", () => {
+  const snapshot = structuredClone(base);
+  snapshot.clusters[0].lastSeenAt = "2024-06-10T14:20:00.000Z";
+  const result = reconcileInventory(snapshot, { now });
+  assert.equal(result.summary.freshSourceRecords, 1);
+  assert.equal(result.summary.staleTelemetryRecords, 1);
+  assert.equal(result.summary.clustersMissingNodeLinks, 0);
+  assert.equal(assertFreshInventory(result), result);
+});
+
+test("freshness gate blocks an old Airtable inventory import", () => {
+  const snapshot = structuredClone(base);
+  snapshot.clusters[0].recordCreatedAt = "2024-06-10T14:20:00.000Z";
+  const result = reconcileInventory(snapshot, { now });
+  assert.equal(result.summary.freshSourceRecords, 0);
+  assert.throws(() => assertFreshInventory(result), /No recent Airtable cluster inventory rows/);
 });
