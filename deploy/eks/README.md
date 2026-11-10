@@ -9,7 +9,7 @@ This directory contains the non-production EKS infrastructure template and Airta
 - The workflow reads the cluster inventory directly from Airtable using a read-only `AIRTABLE_API_TOKEN` environment secret, then validates it before planning/creating EKS. The token is never written to the export. It uses GitHub OIDC for AWS, not long-lived AWS access keys.
 - Set environment variables `AWS_ROLE_ARN`, `AWS_REGION=ap-south-1`, `AWS_ACCOUNT_ID`, and `EKS_CLOUDFORMATION_EXECUTION_ROLE_ARN` on the protected environment. Restrict the OIDC role to passing only this dedicated CloudFormation execution role.
 - The OIDC role needs only the CloudFormation change-set/describe/execute/delete actions, `sts:GetCallerIdentity`, `ec2:DescribeSubnets`, and `iam:PassRole` to the dedicated CloudFormation execution role. The OIDC trust policy must restrict audience to `sts.amazonaws.com` and subject to `repo:ABHILASH9519/cloudsentinels:environment:minor-review`. The CloudFormation execution role must trust `cloudformation.amazonaws.com` and use narrowly scoped EKS/VPC describe and `iam:PassRole` permissions.
-- Every operation requires `review_approved=true`; create and destroy also require exact confirmation strings.
+- Every operation requires `review_approved=true`; execute and destroy also require exact confirmation strings.
 - No push, pull-request, schedule, or reusable-workflow trigger exists.
 - The template consumes owner-approved VPC/private subnet IDs and pre-reviewed EKS cluster/node IAM role ARNs. It does not create a VPC or IAM roles.
 - Public API endpoint access requires a narrow CIDR allowlist; private endpoint access is also enabled. Never use `0.0.0.0/0`.
