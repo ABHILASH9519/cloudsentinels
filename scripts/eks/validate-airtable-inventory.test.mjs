@@ -9,3 +9,8 @@ test("detects node and pod count drift", () => { const x = structuredClone(base)
 test("marks fresh source-only records", () => { const x = structuredClone(base); x.liveClusters = []; assert.equal(reconcileInventory(x, { now }).clusters[0].classification, "SOURCE_ONLY"); });
 test("rejects credential-bearing fields", () => { assert.throws(() => assertNoSecrets({ clusters: [], secureOnboardingToken: "redacted" }), /Sensitive field/); });
 test("rejects duplicate names and malformed counts", () => { const x = structuredClone(base); x.clusters.push(structuredClone(x.clusters[0])); assert.throws(() => reconcileInventory(x, { now }), /Duplicate cluster/); const y = structuredClone(base); y.clusters[0].nodeCount = -1; assert.throws(() => reconcileInventory(y, { now }), /nodeCount/); });
+
+test("accepts a planned human-readable Airtable cluster label and marks missing date stale", () => {
+  const input = { source: "Cloud-Sentinel", clusters: [{ clusterName: "CloudSentinels Showcase K3s (planned)", environment: "Development", status: "Provisioning", onboardingDate: null, nodeCount: 0, podCount: 0 }] };
+  assert.equal(reconcileInventory(input, { now }).clusters[0].classification, "STALE");
+});
