@@ -1,0 +1,33 @@
+name: EKS inventory and template validation
+
+on:
+  push:
+    paths:
+      - "scripts/eks/**"
+      - "deploy/eks/**"
+      - ".github/workflows/eks-review-day.yml"
+      - ".github/workflows/eks-inventory-validation.yml"
+  pull_request:
+    paths:
+      - "scripts/eks/**"
+      - "deploy/eks/**"
+      - ".github/workflows/eks-review-day.yml"
+      - ".github/workflows/eks-inventory-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test inventory validation and reconciliation
+        run: node --test scripts/eks/validate-airtable-inventory.test.mjs
+      - name: Install CloudFormation linter
+        run: python -m pip install --disable-pip-version-check cfn-lint
+      - name: Lint EKS CloudFormation template
+        run: cfn-lint deploy/eks/review-day-cluster.yaml
