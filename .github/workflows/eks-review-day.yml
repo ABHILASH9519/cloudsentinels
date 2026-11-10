@@ -109,6 +109,7 @@ jobs:
         env:
           OPERATION: ${{ inputs.operation }}
           REVIEW_APPROVED: ${{ inputs.review_approved }}
+          EXPECTED_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
           CHANGE_SET_NAME: ${{ inputs.change_set_name }}
           CONFIRM_EXECUTE: ${{ inputs.confirm_execute }}
           CONFIRM_DESTROY: ${{ inputs.confirm_destroy }}
@@ -191,11 +192,21 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           VPC_ID: ${{ inputs.vpc_id }}
           SUBNETS: ${{ inputs.private_subnet_ids }}
+          CLUSTER_ROLE: ${{ inputs.cluster_role_arn }}
+          NODE_ROLE: ${{ inputs.node_role_arn }}
         run: |
           set -euo pipefail
           ACTUAL_ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
           [[ -n "$EXPECTED_ACCOUNT_ID" && "$ACTUAL_ACCOUNT" == "$EXPECTED_ACCOUNT_ID" ]] || { echo "AWS account does not match AWS_ACCOUNT_ID"; exit 1; }
           if [[ "$OPERATION" != "plan" ]]; then exit 0; fi
+          for role_spec in "$CLUSTER_ROLE:eks.amazonaws.com" "$NODE_ROLE:ec2.amazonaws.com"; do
+            role_arn="${role_spec%%:*}"
+            service="${role_spec#*:}"
+            role_name="${role_arn##*/}"
+            aws iam get-role --role-name "$role_name" --query 'Role.AssumeRolePolicyDocument' --output json |
+              jq -e --arg service "$service" 'any(.Statement[]?; .Effect == "Allow" and ((.Principal.Service == $service) or ((.Principal.Service | type) == "array" and (.Principal.Service | index($service)) != null)))' >/dev/null ||
+              { echo "IAM role $role_name does not trust $service"; exit 1; }
+          done
           IFS=',' read -r -a SUBNET_ARRAY <<< "$SUBNETS"
           SUBNET_COUNT=${#SUBNET_ARRAY[@]}
           [[ "$SUBNET_COUNT" -ge 2 ]] || { echo "At least two private subnets are required"; exit 1; }
