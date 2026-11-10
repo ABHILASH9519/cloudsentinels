@@ -35,15 +35,18 @@ export function reconcileInventory(input, options = {}) {
     if (!STATUSES.has(cluster.status)) throw new Error(name + ": invalid status");
     validCount(cluster.nodeCount, "nodeCount", name);
     validCount(cluster.podCount, "podCount", name);
-    const date = cluster.lastSeenAt ? new Date(cluster.lastSeenAt) : null;
-    const ageDays = date && Number.isFinite(date.getTime()) ? Math.floor((now - date) / 86400000) : null;
+    const telemetryDate = cluster.lastSeenAt ? new Date(cluster.lastSeenAt) : null;
+    const telemetryAgeDays = telemetryDate && Number.isFinite(telemetryDate.getTime()) ? Math.floor((now - telemetryDate) / 86400000) : null;
+    const sourceDate = cluster.recordCreatedAt ? new Date(cluster.recordCreatedAt) : null;
+    const sourceRecordAgeDays = sourceDate && Number.isFinite(sourceDate.getTime()) ? Math.floor((now - sourceDate) / 86400000) : null;
+    const sourceFresh = sourceRecordAgeDays !== null && sourceRecordAgeDays >= 0 && sourceRecordAgeDays <= staleAfterDays;
     const current = live.get(name);
     let classification;
-    if (ageDays === null || ageDays > staleAfterDays || ageDays < 0) classification = "STALE";
+    if (telemetryAgeDays === null || telemetryAgeDays > staleAfterDays || telemetryAgeDays < 0) classification = "STALE";
     else if (!current) classification = "SOURCE_ONLY";
     else if (current.nodeCount !== cluster.nodeCount || current.podCount !== cluster.podCount) classification = "DRIFT";
     else classification = "MATCH";
-    return { clusterName: name, environment: cluster.environment, classification, lastSeenAt: cluster.lastSeenAt ?? null, sourceNodeCount: cluster.nodeCount, sourcePodCount: cluster.podCount, liveNodeCount: current?.nodeCount ?? null, livePodCount: current?.podCount ?? null, ageDays };
+    return { clusterName: name, environment: cluster.environment, classification, recordCreatedAt: cluster.recordCreatedAt ?? null, sourceRecordAgeDays, sourceFresh, lastSeenAt: cluster.lastSeenAt ?? null, telemetryAgeDays, linkedNodeCount: cluster.linkedNodeCount ?? 0, healthStatus: cluster.healthStatus ?? null, cpuUsagePercent: cluster.cpuUsagePercent ?? null, sourceNodeCount: cluster.nodeCount, sourcePodCount: cluster.podCount, liveNodeCount: current?.nodeCount ?? null, livePodCount: current?.podCount ?? null };
   });
   for (const current of input.liveClusters ?? []) {
     if (typeof current.clusterName !== "string" || !NAME.test(current.clusterName)) throw new Error("Live cluster name must be DNS-compatible");
@@ -53,10 +56,15 @@ export function reconcileInventory(input, options = {}) {
   }
   const labels = ["MATCH", "SOURCE_ONLY", "CLUSTER_ONLY", "DRIFT", "STALE"];
   const summary = Object.fromEntries(labels.map(label => [label, results.filter(item => item.classification === label).length]));
-  return { generatedAt: now.toISOString(), summary, clusters: results };
+  return {
+    generatedAt: now.toISOString(),
+    summary: { ...summary, freshSourceRecords: results.filter(item => item.sourceFresh).length, staleTelemetryRecords: results.filter(item => item.classification === "STALE").length, clustersMissingNodeLinks: results.filter(item => (item.linkedNodeCount ?? 0) === 0).length },
+    dataQuality: { sourceRecordFreshnessIsNotRuntimeTelemetry: true, note: "Airtable record creation time proves a recent inventory import only; Last Seen is the separate node telemetry signal." },
+    clusters: results
+  };
 }
 export function assertFreshInventory(result) {
-  if (result.summary.MATCH + result.summary.SOURCE_ONLY + result.summary.DRIFT === 0) throw new Error("No fresh Airtable cluster records; update linked Nodes.Last Seen before planning EKS");
+  if (result.summary.freshSourceRecords === 0) throw new Error("No recent Airtable cluster inventory rows; refresh the cluster inventory before planning EKS");
   return result;
 }
 function main() {
