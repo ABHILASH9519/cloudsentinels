@@ -22,13 +22,15 @@ export function reconcileInventory(input, options = {}) {
   if (!Number.isInteger(staleAfterDays) || staleAfterDays < 1) throw new Error("staleAfterDays must be positive");
   const now = options.now ? new Date(options.now) : new Date();
   if (!Number.isFinite(now.getTime())) throw new Error("Invalid comparison date");
+  if (input.liveClusters !== undefined && !Array.isArray(input.liveClusters)) throw new Error("liveClusters must be an array");
   const live = new Map((input.liveClusters ?? []).map(item => [item.clusterName, item]));
   const seen = new Set();
   const results = input.clusters.map(cluster => {
     const name = cluster.clusterName;
-    if (typeof name !== "string" || !NAME.test(name)) throw new Error("Cluster name must be lowercase DNS-compatible");
-    if (seen.has(name)) throw new Error("Duplicate cluster name: " + name);
-    seen.add(name);
+    if (typeof name !== "string" || name.trim().length === 0 || name.length > 128 || /[\\u0000-\\u001f]/.test(name)) throw new Error("Cluster name must be non-empty printable text (max 128 chars)");
+    const sourceKey = name.trim().toLowerCase();
+    if (seen.has(sourceKey)) throw new Error("Duplicate cluster name: " + name);
+    seen.add(sourceKey);
     if (!ENVIRONMENTS.has(cluster.environment)) throw new Error(name + ": invalid environment");
     if (!STATUSES.has(cluster.status)) throw new Error(name + ": invalid status");
     validCount(cluster.nodeCount, "nodeCount", name);
@@ -47,7 +49,7 @@ export function reconcileInventory(input, options = {}) {
     if (typeof current.clusterName !== "string" || !NAME.test(current.clusterName)) throw new Error("Live cluster name must be DNS-compatible");
     validCount(current.nodeCount, "live nodeCount", current.clusterName);
     validCount(current.podCount, "live podCount", current.clusterName);
-    if (!seen.has(current.clusterName)) results.push({ clusterName: current.clusterName, environment: null, classification: "CLUSTER_ONLY", sourceNodeCount: null, sourcePodCount: null, liveNodeCount: current.nodeCount, livePodCount: current.podCount, ageDays: null });
+    if (!seen.has(current.clusterName.trim().toLowerCase())) results.push({ clusterName: current.clusterName, environment: null, classification: "CLUSTER_ONLY", sourceNodeCount: null, sourcePodCount: null, liveNodeCount: current.nodeCount, livePodCount: current.podCount, ageDays: null });
   }
   const labels = ["MATCH", "SOURCE_ONLY", "CLUSTER_ONLY", "DRIFT", "STALE"];
   const summary = Object.fromEntries(labels.map(label => [label, results.filter(item => item.classification === label).length]));
