@@ -147,11 +147,24 @@ export async function resolveProcedure(domainEvent) {
     };
   }
 
+  const validProcedureMetadata =
+    typeof procedure.procedureId === "string" &&
+    procedure.procedureId.trim().length > 0 &&
+    procedure.procedureId.length <= 128 &&
+    Number.isSafeInteger(procedure.version) &&
+    procedure.version > 0 &&
+    typeof procedure.enabled === "boolean";
+  const approvalPolicySatisfied =
+    !["high", "critical"].includes(procedure.risk) ||
+    procedure.requiresApproval === true;
+
   if (
+    !validProcedureMetadata ||
     typeof procedure.action !== "string" ||
     !ALLOWED_ACTIONS.has(procedure.action) ||
     !ALLOWED_RISKS.has(procedure.risk) ||
-    typeof procedure.requiresApproval !== "boolean"
+    typeof procedure.requiresApproval !== "boolean" ||
+    !approvalPolicySatisfied
   ) {
     return {
       ...classification,
@@ -159,7 +172,7 @@ export async function resolveProcedure(domainEvent) {
       recommendedAction: null,
       risk: "high",
       requiresApproval: true,
-      reason: "The matching procedure is malformed or requests an unsupported action.",
+      reason: "The matching procedure is malformed, requests an unsupported action, or violates the risk approval policy.",
       clusterName: target,
       procedureId: procedure.procedureId ?? null,
       procedureVersion: procedure.version ?? null,
