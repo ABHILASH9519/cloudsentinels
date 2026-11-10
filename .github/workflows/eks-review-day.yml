@@ -199,14 +199,15 @@ jobs:
           ACTUAL_ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
           [[ -n "$EXPECTED_ACCOUNT_ID" && "$ACTUAL_ACCOUNT" == "$EXPECTED_ACCOUNT_ID" ]] || { echo "AWS account does not match AWS_ACCOUNT_ID"; exit 1; }
           if [[ "$OPERATION" != "plan" ]]; then exit 0; fi
-          for role_spec in "$CLUSTER_ROLE:eks.amazonaws.com" "$NODE_ROLE:ec2.amazonaws.com"; do
-            role_arn="${role_spec%%:*}"
-            service="${role_spec#*:}"
+          check_role_trust() {
+            local role_arn="$1" service="$2" role_name
             role_name="${role_arn##*/}"
             aws iam get-role --role-name "$role_name" --query 'Role.AssumeRolePolicyDocument' --output json |
               jq -e --arg service "$service" 'any(.Statement[]?; .Effect == "Allow" and ((.Principal.Service == $service) or ((.Principal.Service | type) == "array" and (.Principal.Service | index($service)) != null)))' >/dev/null ||
               { echo "IAM role $role_name does not trust $service"; exit 1; }
-          done
+          }
+          check_role_trust "$CLUSTER_ROLE" "eks.amazonaws.com"
+          check_role_trust "$NODE_ROLE" "ec2.amazonaws.com"
           IFS=',' read -r -a SUBNET_ARRAY <<< "$SUBNETS"
           SUBNET_COUNT=${#SUBNET_ARRAY[@]}
           [[ "$SUBNET_COUNT" -ge 2 ]] || { echo "At least two private subnets are required"; exit 1; }
