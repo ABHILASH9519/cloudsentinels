@@ -231,3 +231,50 @@ test("disabled registry procedures remain observe-only", async (t) => {
   assert.equal(result.status, "OBSERVED");
   assert.equal(result.recommendedAction, null);
 });
+
+
+test("blocks high-risk procedures that attempt to bypass approval", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      procedureId: "node-recovery-v1",
+      version: 1,
+      enabled: true,
+      action: "replace-or-recover-node",
+      risk: "critical",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "CustomNodeFailure",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "BLOCKED_INVALID_PROCEDURE");
+  assert.equal(result.recommendedAction, null);
+  assert.equal(result.requiresApproval, true);
+  assert.match(result.reason, /risk approval policy/i);
+});
+
+test("blocks procedures missing required registry metadata", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      version: 0,
+      enabled: true,
+      action: "restart-pod",
+      risk: "low",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "MalformedProcedureSignal",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "BLOCKED_INVALID_PROCEDURE");
+  assert.equal(result.recommendedAction, null);
+  assert.equal(result.requiresApproval, true);
+});
