@@ -8,7 +8,7 @@ This directory contains the non-production EKS infrastructure template and Airta
 - The workflow is bound to the protected GitHub environment `minor-review`. Configure required reviewers and restrict deployment branches in repository Settings before use.
 - The workflow reads the cluster inventory directly from Airtable using a read-only `AIRTABLE_API_TOKEN` environment secret, then validates it before planning/creating EKS. The token is never written to the export. It uses GitHub OIDC for AWS, not long-lived AWS access keys.
 - Set environment variables `AWS_ROLE_ARN`, `AWS_REGION=ap-south-1`, `AWS_ACCOUNT_ID`, and `EKS_CLOUDFORMATION_EXECUTION_ROLE_ARN` on the protected environment. Restrict the OIDC role to passing only this dedicated CloudFormation execution role.
-- The OIDC trust policy must restrict audience to `sts.amazonaws.com` and subject to `repo:ABHILASH9519/cloudsentinels:environment:minor-review`. The CloudFormation execution role must trust `cloudformation.amazonaws.com` and use narrowly scoped EKS/VPC describe and `iam:PassRole` permissions.
+- The OIDC role needs only the CloudFormation change-set/describe/execute/delete actions, `sts:GetCallerIdentity`, `ec2:DescribeSubnets`, and `iam:PassRole` to the dedicated CloudFormation execution role. The OIDC trust policy must restrict audience to `sts.amazonaws.com` and subject to `repo:ABHILASH9519/cloudsentinels:environment:minor-review`. The CloudFormation execution role must trust `cloudformation.amazonaws.com` and use narrowly scoped EKS/VPC describe and `iam:PassRole` permissions.
 - Every operation requires `review_approved=true`; create and destroy also require exact confirmation strings.
 - No push, pull-request, schedule, or reusable-workflow trigger exists.
 - The template consumes owner-approved VPC/private subnet IDs and pre-reviewed EKS cluster/node IAM role ARNs. It does not create a VPC or IAM roles.
@@ -68,7 +68,7 @@ The validator rejects secret-bearing keys and malformed records, then labels sou
 2. Configure and test the protected GitHub OIDC environment and least-privilege role.
 3. Select an EKS version supported in the region on the day, VPC with at least two private subnets in distinct AZs, cluster/node IAM roles, instance type, node count, and narrow API CIDRs.
 4. Run workflow operation `plan`; inspect the CloudFormation change set and cost/network impact.
-5. Obtain the required GitHub environment approval. Run operation `create` with `review_approved=true` and exact confirmation `CREATE-CLOUDSENTINELS-EKS`.
+5. Obtain the required GitHub environment approval. Re-dispatch operation `execute` with the exact change-set name from the plan run, `review_approved=true`, and confirmation `EXECUTE-CLOUDSENTINELS-EKS`. The workflow rechecks that the named change set is a ready CREATE plan for the expected stack before execution.
 6. Install and verify EKS managed add-ons (VPC CNI, CoreDNS, kube-proxy, and EBS CSI if storage is needed), then configure CloudSentinels agent/RBAC and authenticated monitoring ingestion.
 7. Deploy only reviewed Helm/Kustomize workloads from their real source repositories. Do not recreate Airtable's historical Pods or Deployments.
 8. Run controlled failure/remediation/verification scenarios and capture audit evidence.
