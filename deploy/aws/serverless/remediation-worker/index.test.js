@@ -72,6 +72,7 @@ function queueEvent(overrides = {}) {
           clusterName: "staging-cluster",
           approvedBy: "zapier-approval-step",
           approvedAt: "2026-11-10T10:00:00.000Z",
+          requiresApproval: true,
           ...overrides,
         },
       }),
@@ -152,4 +153,22 @@ test("records adapter failures and retries the same approved command", async () 
   assert.deepEqual(second, { batchItemFailures: [] });
   assert.equal(invocations.length, 2);
   assert.equal(eventRecord.status, "RECOVERY_VERIFIED");
+});
+
+test("dispatches a low-risk action when the stored policy says approval is not required", async () => {
+  eventRecord.requiresApproval = false;
+  const result = await handler(queueEvent({ requiresApproval: false }));
+
+  assert.deepEqual(result, { batchItemFailures: [] });
+  assert.equal(invocations.length, 1);
+  assert.equal(eventRecord.status, "ACTION_SUBMITTED_UNVERIFIED");
+});
+
+test("rejects a command whose approval flag differs from the stored event", async () => {
+  const result = await handler(queueEvent({ requiresApproval: false }));
+
+  assert.deepEqual(result, {
+    batchItemFailures: [{ itemIdentifier: "sqs-message-1" }],
+  });
+  assert.equal(invocations.length, 0);
 });
