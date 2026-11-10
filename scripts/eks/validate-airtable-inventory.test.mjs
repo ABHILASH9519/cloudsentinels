@@ -27,7 +27,7 @@ test("Airtable export normalization returns only allowlisted cluster fields", ()
     "Kubeconfig": [{ url: "must-not-be-exported" }],
     "Secure Onboarding Token": "must-not-be-exported"
   });
-  assert.deepEqual(Object.keys(normalized).sort(), ["clusterName", "environment", "lastSeenAt", "linkedNodeCount", "nodeCount", "onboardingDate", "recordCreatedAt", "podCount", "reportedEndpoint", "cpuUsagePercent", "memoryUsageMB", "healthStatus"].sort());
+  assert.deepEqual(Object.keys(normalized).sort(), ["clusterName", "environment", "lastSeenAt", "linkedNodeCount", "nodeCount", "onboardingDate", "recordCreatedAt", "podCount", "reportedEndpoint", "cpuUsagePercent", "memoryUsageMB", "healthStatus", "status"].sort());
   assert.equal(normalized.clusterName, "review-cluster");
 });
 
