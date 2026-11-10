@@ -97,3 +97,45 @@ test("treats duplicate DynamoDB events as successfully handled", async (t) => {
 
   assert.deepEqual(response, { batchItemFailures: [] });
 });
+
+test("rejects event ids that exceed the DynamoDB key limit", async () => {
+  const response = await handler({
+    Records: [{
+      messageId: "oversized-id",
+      body: JSON.stringify({ id: "x".repeat(129), "detail-type": "Unknown" }),
+    }],
+  });
+
+  assert.deepEqual(response, {
+    batchItemFailures: [{ itemIdentifier: "oversized-id" }],
+  });
+});
+
+test("does not coerce object-shaped cluster targets into fake names", () => {
+  const result = classifyEvent({
+    "detail-type": "PodCrashLoopBackOff",
+    detail: { clusterName: { name: "not-a-valid-target" } },
+  });
+
+  assert.equal(result.status, "BLOCKED_NO_CLUSTER_TARGET");
+  assert.equal(result.clusterName, null);
+});
+
+test("returns a failed SQS item when DynamoDB is unavailable", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    throw new Error("simulated DynamoDB outage");
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const response = await handler({
+    Records: [{
+      messageId: "db-outage",
+      body: JSON.stringify({ id: "event-db-outage", "detail-type": "Unknown" }),
+    }],
+  });
+
+  assert.deepEqual(response, {
+    batchItemFailures: [{ itemIdentifier: "db-outage" }],
+  });
+});
