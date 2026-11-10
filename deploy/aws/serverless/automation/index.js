@@ -48,7 +48,9 @@ export function classifyEvent(domainEvent) {
   const detail = domainEvent.detail && typeof domainEvent.detail === "object"
     ? domainEvent.detail
     : {};
-  const rule = remediationRules[rawEventType];
+  const rule = Object.hasOwn(remediationRules, rawEventType)
+    ? remediationRules[rawEventType]
+    : undefined;
   if (!rule) {
     return {
       eventType,
