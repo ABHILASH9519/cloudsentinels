@@ -7,6 +7,12 @@ The repository currently contains two implementation tracks:
 - **Existing application:** React/TypeScript frontend with a Motoko backend on the Internet Computer. The capabilities and limitations below describe this working application.
 - **AWS-native architecture (in development):** a separate React/AWS integration path, API/Lambda runtime, EventBridge and SQS event processing, plus an optional Zapier relay. These changes are being developed on feature branches and must not be mistaken for a deployed production migration.
 
+## AWS four-layer architecture track
+
+The current AWS architecture package, including the editable four-layer diagram, component readiness matrix, event contract, trust boundaries, deployment order, and EKS deferral boundary, is documented in [the four-layer architecture](docs/architecture/four-layer-self-healing-architecture.md) and [platform architecture readiness](docs/architecture/platform-architecture-readiness.md). The AWS serverless templates and manual preview deployment workflow are in `deploy/aws/serverless/` and `.github/workflows/aws-deploy-preview.yml`.
+
+**Status:** AWS architecture CI is passing. Live AWS deployment still requires a dedicated non-root GitHub OIDC role and protected environment. Cluster telemetry ingestion, the local/online agent, AI provider integration, live Zapier delivery, and the Kubernetes execution adapter remain explicit integration gates. EKS provisioning is intentionally deferred until the minor review and separate approval.
+
 The AWS automation processor classifies and records events. A signed Zapier command path now validates approval policy and dispatches approved commands to a separately configured remediation adapter. The adapter itself, cluster-specific resource mapping and scoped Kubernetes permissions must still be deployed and tested; live cluster remediation remains disabled by default.
 
 
