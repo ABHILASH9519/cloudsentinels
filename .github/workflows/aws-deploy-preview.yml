@@ -26,6 +26,9 @@ jobs:
       RUNTIME_STACK_NAME: cloudsentinels-runtime
       CORE_STACK_NAME: cloudsentinels-core
       STAGE_NAME: v1
+      ZAPIER_COMMAND_SECRET_ARN: ${{ vars.ZAPIER_COMMAND_SECRET_ARN }}
+      REMEDIATION_ADAPTER_FUNCTION_ARN: ${{ vars.REMEDIATION_ADAPTER_FUNCTION_ARN }}
+      REMEDIATION_EXECUTION_ENABLED: ${{ vars.REMEDIATION_EXECUTION_ENABLED || 'false' }}
 
     steps:
       - name: Check out deployment branch
@@ -47,6 +50,18 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           node --test
+
+      - name: Test signed Zapier command receiver
+        working-directory: deploy/aws/serverless/zapier-command
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+
+      - name: Test remediation adapter dispatcher
+        working-directory: deploy/aws/serverless/remediation-worker
+        run: |
+          npm install --no-audit --no-fund
+          npm test
 
       - name: Set up AWS SAM
         uses: aws-actions/setup-sam@v2
@@ -122,7 +137,10 @@ jobs:
               "ApplicationTableName=$TABLE_NAME" \
               "CognitoIssuer=$COGNITO_ISSUER" \
               "UserPoolClientId=$USER_POOL_CLIENT_ID" \
-              "StageName=$STAGE_NAME"
+              "StageName=$STAGE_NAME" \
+              "ZapierCommandSecretArn=$ZAPIER_COMMAND_SECRET_ARN" \
+              "RemediationAdapterFunctionArn=$REMEDIATION_ADAPTER_FUNCTION_ARN" \
+              "RemediationExecutionEnabled=$REMEDIATION_EXECUTION_ENABLED"
 
       - name: Verify deployed API health
         shell: bash
