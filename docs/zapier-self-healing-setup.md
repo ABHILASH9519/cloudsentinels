@@ -22,7 +22,7 @@ flowchart LR
   N --> O[Cluster action and health verification]
 ```
 
-The existing Zapier relay sends allow-listed CloudSentinels events to a Zapier Catch Hook. The new command endpoint handles the reverse direction: Zapier sends a signed approval command to AWS. The worker invokes a separately deployed adapter Lambda; it does not contain Kubernetes credentials or bypass the adapter's own RBAC and policy checks.
+The existing Zapier relay sends allow-listed CloudSentinels events to a Zapier Catch Hook. Before forwarding, it reads the processor's persisted event record so Zapier receives the authoritative recommended action, risk and approval requirement; if the processor has not written the record yet, the relay returns the SQS item for retry. The new command endpoint handles the reverse direction: Zapier sends a signed approval command to AWS. The worker invokes a separately deployed adapter Lambda; it does not contain Kubernetes credentials or bypass the adapter's own RBAC and policy checks.
 
 ## AWS configuration
 
