@@ -29,4 +29,7 @@ jobs:
       - name: Lint persistent CloudFormation template
         run: pip install cfn-lint && cfn-lint deploy/aws/serverless/core-template.yaml deploy/aws/serverless/runtime-template.yaml
       - name: Check Lambda syntax
-        run: node --check deploy/aws/serverless/function/index.js
+        run: |
+          node --check deploy/aws/serverless/function/index.js
+          node --check deploy/aws/serverless/automation/index.js
+          node --check deploy/aws/serverless/zapier-relay/index.js
