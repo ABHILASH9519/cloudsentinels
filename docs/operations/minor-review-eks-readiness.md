@@ -27,14 +27,20 @@ The target region currently planned is `ap-south-1` (Mumbai), subject to confirm
 The feature branch now contains:
 
 - `deploy/eks/review-day-cluster.yaml`: CloudFormation for an EKS control plane and bounded managed node group in owner-approved private subnets.
-- `scripts/eks/fetch-airtable-inventory.mjs`: read-only Airtable exporter for cluster records and linked-node `Last Seen` timestamps; kubeconfig/token/attachment fields are never requested.
-- `scripts/eks/validate-airtable-inventory.mjs`: credential-key rejection and `MATCH`/`SOURCE_ONLY`/`CLUSTER_ONLY`/`DRIFT`/`STALE` reconciliation.
+- `scripts/eks/fetch-airtable-inventory.mjs`: read-only Airtable exporter for cluster health/utilization, source-record creation time, and linked-node `Last Seen` timestamps; kubeconfig/token/attachment fields are never requested.
+- `scripts/eks/validate-airtable-inventory.mjs`: credential-key rejection, source-import freshness, independent telemetry freshness reporting, and `MATCH`/`SOURCE_ONLY`/`CLUSTER_ONLY`/`DRIFT`/`STALE` reconciliation.
 - `.github/workflows/eks-review-day.yml`: manual-only `plan`, `execute`, and `destroy` operations using protected environment + OIDC; plan and execute are separate runs.
 - `.github/workflows/eks-inventory-validation.yml`: Node tests and CloudFormation lint without AWS credentials.
+- `deploy/eks/airtable-inventory.snapshot.json`: sanitized snapshot of the latest 20 cluster rows plus related-table freshness metadata.
+- `deploy/eks/review-day-scenarios.json`: seven controlled review scenarios derived from the new cluster health summary; observe/approval-only, not executable workload manifests.
 
 The live Airtable snapshot checked on 2026-11-10 has 16 cluster records and 15 linked nodes. All 15 node `Last Seen` values are from 7–10 June 2024; the planned showcase cluster has no linked-node activity. Thus all 16 cluster records are stale under the 90-day gate. The workflow refuses to create a plan until at least one linked cluster has fresh node activity. Cluster `Onboarding Date` is not treated as a freshness signal. Historical counts are reference data only.
 
 The GitHub OIDC provider and EKS-specific roles are not configured in AWS yet, and the protected `minor-review` environment variables/secrets still require setup. The `workflow_dispatch` workflow becomes available only after it is present on the repository default branch through the approved merge/release process. Keep this PR draft/unmerged until reviewed.
+
+## Airtable-driven review scenarios
+
+The snapshot identifies `prod-ap-south-04` as a reported Active/Healthy Mumbai production reference (58% CPU, 9 nodes, 240 pods), but its endpoint is unverified and no linked node records exist. Do not connect to it or provision from its counts. Use the seven scenarios in `deploy/eks/review-day-scenarios.json` to brief the review: healthy baseline, warning QA, degraded production, critical staging, retired/inactive exclusions, and a provisioning exclusion. Recreate only controlled failures inside the newly approved review EKS cluster. Critical and high-risk cases remain approval-gated.
 
 ## Before provisioning on review day
 
