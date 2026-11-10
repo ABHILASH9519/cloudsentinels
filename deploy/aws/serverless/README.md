@@ -21,7 +21,7 @@ The pause does not delete data, user accounts, API Gateway, Lambda code, or Clou
 - **API:** API Gateway HTTP API JWT authorizer validates Cognito issuer and client audience.
 - **Application backend:** Node.js Lambda reads the verified Cognito `sub` claim from API Gateway context; it does not trust a user ID supplied by the browser.
 - **Data:** DynamoDB single table with per-user partition keys `PK=USER#<sub>`; table uses on-demand billing and server-side encryption.
-- **Automation:** EventBridge routes API and cluster-agent events to SQS. An SQS-triggered Lambda records idempotent automation runs and classifies supported Kubernetes signals. It is deliberately non-destructive until a cluster target, Kubernetes adapter, scoped RBAC, and approval policy are configured.
+- **Automation:** EventBridge routes API and cluster-agent events to SQS. The automation processor classifies supported Kubernetes signals. Zapier can receive event notifications, apply filters and human approval, then return a timestamped HMAC-signed command to the AWS API. AWS validates the pending event and queues the approved command. A separate worker invokes a configured remediation adapter only when the adapter ARN and explicit execution opt-in are both set.
 - **Safety:** The core Cognito User Pool and DynamoDB table have CloudFormation `Retain` policies. The runtime can be paused without deleting either.
 
 ## Requirements
@@ -90,7 +90,7 @@ The core stack is intentionally retained. Do not delete it as a normal stop acti
 
 ## Optional workflow automation
 
-See [n8n / Zapier automation](../../automation/README.md) for the EventBridge → SQS → n8n integration, local start/stop commands, event contracts and safety guidance. The automation services are separate from the API runtime and can be run only when needed.
+See [n8n / Zapier automation](../../automation/README.md) for the EventBridge → SQS event path, and [Zapier self-healing setup](../../../docs/zapier-self-healing-setup.md) for the Catch Hook → human approval → signed AWS command workflow and adapter contract. The command endpoint can queue approvals without enabling cluster changes; live remediation remains off until a real adapter is deployed and explicitly enabled.
 
 ## Current API
 
