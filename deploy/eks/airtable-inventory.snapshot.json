@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "source": "Airtable Cloud-Sentinel",
   "baseId": "app3xn3iXAsm7MgA7",
-  "exportedAt": "2026-11-10T15:36:15.000Z",
+  "exportedAt": "2026-11-10T15:39:08.485Z",
   "sourceNotes": [
     "All 20 Kubernetes Clusters records were created on 2026-11-10T15:36:15Z; record creation time is inventory import provenance, not live telemetry.",
     "Cluster table records do not currently link to any Nodes records; the Nodes table records also have no Cluster links.",
