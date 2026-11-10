@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { assertNoSecrets, reconcileInventory } from "./validate-airtable-inventory.mjs";
+import { normalizeClusterRecord } from "./fetch-airtable-inventory.mjs";
 const now = "2026-11-10T00:00:00.000Z";
 const base = { source: "Cloud-Sentinel", clusters: [{ clusterName: "review-cluster", environment: "Development", status: "Active", onboardingDate: "2026-11-01T00:00:00.000Z", nodeCount: 2, podCount: 8 }], liveClusters: [{ clusterName: "review-cluster", nodeCount: 2, podCount: 8 }, { clusterName: "unlisted-cluster", nodeCount: 1, podCount: 3 }] };
 test("matches fresh source inventory and finds cluster-only resources", () => { const r = reconcileInventory(base, { now }); assert.equal(r.summary.MATCH, 1); assert.equal(r.summary.CLUSTER_ONLY, 1); });
@@ -13,4 +14,19 @@ test("rejects duplicate names and malformed counts", () => { const x = structure
 test("accepts a planned human-readable Airtable cluster label and marks missing date stale", () => {
   const input = { source: "Cloud-Sentinel", clusters: [{ clusterName: "CloudSentinels Showcase K3s (planned)", environment: "Development", status: "Provisioning", onboardingDate: null, nodeCount: 0, podCount: 0 }] };
   assert.equal(reconcileInventory(input, { now }).clusters[0].classification, "STALE");
+});
+
+test("Airtable export normalization returns only allowlisted cluster fields", () => {
+  const normalized = normalizeClusterRecord({
+    "Cluster Name": "review-cluster",
+    "Environment": "Development",
+    "Status": "Active",
+    "Node Count": 2,
+    "Pod Count": 8,
+    "Onboarding Date": "2026-11-01T00:00:00.000Z",
+    "Kubeconfig": [{ url: "must-not-be-exported" }],
+    "Secure Onboarding Token": "must-not-be-exported"
+  });
+  assert.deepEqual(Object.keys(normalized).sort(), ["clusterName", "environment", "nodeCount", "onboardingDate", "podCount", "status"].sort());
+  assert.equal(normalized.clusterName, "review-cluster");
 });
