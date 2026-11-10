@@ -55,13 +55,17 @@ export function reconcileInventory(input, options = {}) {
   const summary = Object.fromEntries(labels.map(label => [label, results.filter(item => item.classification === label).length]));
   return { generatedAt: now.toISOString(), summary, clusters: results };
 }
+export function assertFreshInventory(result) {
+  if (result.summary.MATCH + result.summary.SOURCE_ONLY + result.summary.DRIFT === 0) throw new Error("No fresh Airtable cluster records; update linked Nodes.Last Seen before planning EKS");
+  return result;
+}
 function main() {
   const args = process.argv.slice(2), at = args.indexOf("--input");
   if (at < 0 || !args[at + 1]) throw new Error("Usage: node scripts/eks/validate-airtable-inventory.mjs --input <safe-export.json> [--stale-after-days 90]");
   const staleAt = args.indexOf("--stale-after-days"), staleAfterDays = staleAt >= 0 ? Number(args[staleAt + 1]) : 90;
   const input = JSON.parse(fs.readFileSync(args[at + 1], "utf8"));
   const result = reconcileInventory(input, { staleAfterDays });
-  if (args.includes("--require-fresh") && result.summary.MATCH + result.summary.SOURCE_ONLY + result.summary.DRIFT === 0) throw new Error("No fresh Airtable cluster records; update linked Nodes.Last Seen before planning EKS");
+  if (args.includes("--require-fresh")) assertFreshInventory(result);
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 }
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {
