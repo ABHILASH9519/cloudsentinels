@@ -124,3 +124,10 @@ Use the returned secret ARN as `ZapierWebhookSecretArn` in the SAM deployment. I
 After deployment, send a synthetic low-risk test incident and verify: EventBridge matched it, the dedicated relay queue received it, the Lambda logged an accepted webhook response, and the Zap performed the expected destination action. Confirm duplicate event IDs do not create duplicate tickets (use Zapier-side dedupe keyed by `eventId`).
 
 The HMAC headers are provided for downstream verification. A Zapier Catch Hook does not automatically validate this signature; if signature verification is required, add a verification step or place an authenticated verifier endpoint in front of the Zap. Keep the Catch Hook URL private regardless.
+
+
+## Runtime deployment note
+
+A live synthetic EventBridge test exposed an existing Lambda packaging defect in the deployed Automation Processor: Node.js 22 was loading `automation/index.js` as CommonJS even though it uses ES-module imports. This caused `Runtime.UserCodeSyntaxError: Cannot use import statement outside a module`, leaving the SQS message unprocessed and no automation record in DynamoDB.
+
+This branch now includes `automation/package.json` with `"type": "module"` and pinned AWS SDK v3 runtime dependencies, plus the equivalent package manifest for the new Zapier relay. The API function already had its own ES-module package manifest. The fix is committed but **must be deployed to the existing runtime stack** before treating event processing as healthy. CI now runs `sam build` to install each function's dependencies and catch packaging issues before deployment.
