@@ -4,5 +4,6 @@
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.900.0"
-  }
+  },
+  "version": "1.0.0"
 }
