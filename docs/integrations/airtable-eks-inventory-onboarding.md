@@ -53,7 +53,7 @@ Do not export Airtable attachment URLs, API credentials, environment secrets, to
 - Non-provisioning CI validation: `.github/workflows/eks-inventory-validation.yml`.
 - Operating instructions and OIDC requirements: `deploy/eks/README.md`.
 
-The exporter reads only allowlisted cluster fields from the Airtable API and omits kubeconfig/token/attachment fields entirely. The validator accepts that normalized JSON export and optional live-cluster snapshot. It rejects secret-bearing keys and emits only reconciliation labels/counts. Airtable inventory does not supply VPC/subnets, IAM role ARNs, EKS version, instance type, CIDR access, or workload manifests; those must be separately approved. The workflow's `plan` operation creates a change set only; `create` is protected by the `minor-review` environment and exact confirmation. The workflow file must reach the default branch before GitHub makes `workflow_dispatch` available.
+The exporter reads only allowlisted cluster fields from the Airtable API and omits kubeconfig/token/attachment fields entirely. The validator accepts that normalized JSON export and optional live-cluster snapshot. It rejects secret-bearing keys and emits only reconciliation labels/counts. Airtable inventory does not supply VPC/subnets, IAM role ARNs, EKS version, instance type, CIDR access, or workload manifests; those must be separately approved. The workflow's `plan` operation creates a change set only; a separate `execute` operation rechecks the named change set, requires a second protected-environment approval, and requires exact confirmation before execution. The workflow file must reach the default branch before GitHub makes `workflow_dispatch` available.
 
 ## EKS status
 
