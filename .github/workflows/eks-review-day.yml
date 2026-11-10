@@ -157,7 +157,7 @@ jobs:
           set -euo pipefail
           [[ -n "$AIRTABLE_API_TOKEN" ]] || { echo "Set read-only AIRTABLE_API_TOKEN on minor-review environment"; exit 1; }
           node scripts/eks/fetch-airtable-inventory.mjs --output "$RUNNER_TEMP/airtable-inventory.safe.json"
-          node scripts/eks/validate-airtable-inventory.mjs --input "$RUNNER_TEMP/airtable-inventory.safe.json" --stale-after-days 90
+          node scripts/eks/validate-airtable-inventory.mjs --input "$RUNNER_TEMP/airtable-inventory.safe.json" --stale-after-days 90 --require-fresh
 
       - name: Configure AWS credentials through OIDC
         uses: aws-actions/configure-aws-credentials@v4
