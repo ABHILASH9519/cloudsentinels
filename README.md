@@ -10,6 +10,12 @@ The repository currently contains two implementation tracks:
 The AWS automation processor currently classifies and records events. It does **not** execute Kubernetes remediation. Approval handling, a cluster adapter, scoped cluster permissions and end-to-end operational tests are still required before any remediation can be enabled.
 
 
+## Zapier-triggered AWS remediation workflow
+
+The AWS feature branch adds a signed command path from Zapier back into AWS. Zapier can receive incident events, apply filters and a human approval step, then send a signed command to the AWS API. AWS verifies the signature, checks the event's pending-approval state and recommended action, and queues the approved command for a separately deployed remediation adapter.
+
+See [Zapier self-healing setup](docs/zapier-self-healing-setup.md) for the end-to-end Zap configuration and adapter contract. Live cluster actions remain disabled by default; a real adapter, non-production EKS validation, and explicit execution opt-in are required before the worker is provisioned.
+
 ## Current capabilities in source
 
 - Internet Identity sign-in and caller-scoped user profiles
