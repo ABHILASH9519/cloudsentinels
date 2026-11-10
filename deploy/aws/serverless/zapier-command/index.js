@@ -117,6 +117,8 @@ async function publishApprovedCommand(command, eventRecord) {
         clusterName: eventRecord.clusterName,
         approvedBy: command.approvedBy,
         approvedAt: new Date().toISOString(),
+        requiresApproval: eventRecord.requiresApproval === true,
+        risk: eventRecord.risk ?? "unknown",
       }),
     }],
   }));
@@ -151,14 +153,23 @@ export async function handler(event) {
     const result = await db.send(new GetCommand({ TableName: tableName, Key: key }));
     const record = result.Item;
     if (!record) return response(404, { error: "Automation event was not found." });
-    if (record.requiresApproval !== true || record.recommendedAction !== command.action) {
-      return response(409, { error: "Command does not match an approval-required action for this event." });
+    if (
+      typeof record.requiresApproval !== "boolean" ||
+      record.recommendedAction !== command.action
+    ) {
+      return response(409, { error: "Command does not match the event's stored remediation policy." });
+    }
+    if (record.requiresApproval && command.approvedBy.toLowerCase() === "zapier-auto-policy") {
+      return response(403, { error: "This high-risk action requires a human approval identity." });
     }
     if (typeof record.clusterName !== "string" || !record.clusterName) {
       return response(409, { error: "Event has no registered cluster target." });
     }
 
-    if (record.status === "PENDING_APPROVAL") {
+    const pendingStatus = record.requiresApproval
+      ? "PENDING_APPROVAL"
+      : "PENDING_CLUSTER_ADAPTER";
+    if (record.status === pendingStatus) {
       await db.send(new UpdateCommand({
         TableName: tableName,
         Key: key,
@@ -167,8 +178,8 @@ export async function handler(event) {
         ExpressionAttributeNames: { "#status": "status" },
         ExpressionAttributeValues: {
           ":approved": "APPROVED_AWAITING_EXECUTOR",
-          ":pending": "PENDING_APPROVAL",
-          ":requiresApproval": true,
+          ":pending": pendingStatus,
+          ":requiresApproval": record.requiresApproval,
           ":action": command.action,
           ":commandId": command.commandId,
           ":approvedBy": command.approvedBy.slice(0, 128),
