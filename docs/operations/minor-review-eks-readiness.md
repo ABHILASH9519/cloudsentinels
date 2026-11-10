@@ -22,6 +22,20 @@ The target region currently planned is `ap-south-1` (Mumbai), subject to confirm
 - Zapier receiver/relay unit tests passed in CI. This proves the code paths under test, not delivery to a live Zapier account or a configured production Zap.
 - The latest AWS architecture validation run passed the SAM, CloudFormation, Lambda syntax, API, remediation, automation processor, and Zapier receiver/relay checks.
 
+## Prepared review-day provisioning package
+
+The feature branch now contains:
+
+- `deploy/eks/review-day-cluster.yaml`: CloudFormation for an EKS control plane and bounded managed node group in owner-approved private subnets.
+- `scripts/eks/fetch-airtable-inventory.mjs`: read-only Airtable exporter for cluster records and linked-node `Last Seen` timestamps; kubeconfig/token/attachment fields are never requested.
+- `scripts/eks/validate-airtable-inventory.mjs`: credential-key rejection and `MATCH`/`SOURCE_ONLY`/`CLUSTER_ONLY`/`DRIFT`/`STALE` reconciliation.
+- `.github/workflows/eks-review-day.yml`: manual-only `plan`, `execute`, and `destroy` operations using protected environment + OIDC; plan and execute are separate runs.
+- `.github/workflows/eks-inventory-validation.yml`: Node tests and CloudFormation lint without AWS credentials.
+
+The live Airtable snapshot checked on 2026-11-10 has 16 cluster records and 15 linked nodes. All 15 node `Last Seen` values are from 7–10 June 2024; the planned showcase cluster has no linked-node activity. Thus all 16 cluster records are stale under the 90-day gate. The workflow refuses to create a plan until at least one linked cluster has fresh node activity. Cluster `Onboarding Date` is not treated as a freshness signal. Historical counts are reference data only.
+
+The GitHub OIDC provider and EKS-specific roles are not configured in AWS yet, and the protected `minor-review` environment variables/secrets still require setup. The `workflow_dispatch` workflow becomes available only after it is present on the repository default branch through the approved merge/release process. Keep this PR draft/unmerged until reviewed.
+
 ## Before provisioning on review day
 
 All items below are gates, not assumptions:
