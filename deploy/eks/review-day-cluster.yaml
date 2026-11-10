@@ -77,18 +77,15 @@ Resources:
       ClusterName: !Ref CloudSentinelsReviewCluster
       PrincipalArn: !Ref ClusterAdminRoleArn
       Type: STANDARD
+      AccessPolicies:
+        - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+          AccessScope:
+            Type: cluster
       Tags:
-        project: cloudsentinels
-        environment: minor-review
-  CloudSentinelsReviewOperatorAdminPolicy:
-    Type: AWS::EKS::AccessPolicyAssociation
-    Properties:
-      ClusterName: !Ref CloudSentinelsReviewCluster
-      PrincipalArn: !Ref ClusterAdminRoleArn
-      PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
-      AccessScope:
-        Type: cluster
-    DependsOn: CloudSentinelsReviewOperatorAccessEntry
+        - Key: project
+          Value: cloudsentinels
+        - Key: environment
+          Value: minor-review
   CloudSentinelsReviewNodeGroup:
     Type: AWS::EKS::Nodegroup
     Properties:
