@@ -41,11 +41,14 @@ const remediationRules = {
 };
 
 export function classifyEvent(domainEvent) {
-  const eventType = domainEvent["detail-type"] ?? "Unknown";
+  const rawEventType = domainEvent["detail-type"];
+  const eventType = typeof rawEventType === "string" && rawEventType
+    ? rawEventType.slice(0, 80)
+    : "Unknown";
   const detail = domainEvent.detail && typeof domainEvent.detail === "object"
     ? domainEvent.detail
     : {};
-  const rule = remediationRules[eventType];
+  const rule = remediationRules[rawEventType];
   if (!rule) {
     return {
       eventType,
@@ -58,7 +61,10 @@ export function classifyEvent(domainEvent) {
     };
   }
 
-  const clusterName = detail.clusterName ?? detail.clusterArn ?? detail.cluster ?? null;
+  const rawClusterName = detail.clusterName ?? detail.clusterArn ?? detail.cluster ?? null;
+  const clusterName = typeof rawClusterName === "string" && rawClusterName.trim()
+    ? rawClusterName.trim().slice(0, 256)
+    : null;
   if (!clusterName) {
     return {
       eventType,
@@ -80,14 +86,17 @@ export function classifyEvent(domainEvent) {
     reason: rule.requiresApproval
       ? "A cluster target is present, but this action requires an explicit approval workflow."
       : "A cluster target is present, but no Kubernetes remediation adapter is enabled.",
-    clusterName: String(clusterName).slice(0, 256),
+    clusterName,
   };
 }
 
 async function recordEvent(domainEvent) {
   if (!tableName) throw new Error("TABLE_NAME is not configured.");
-  if (!domainEvent || typeof domainEvent.id !== "string" || !domainEvent.id) {
+  if (!domainEvent || typeof domainEvent.id !== "string" || !domainEvent.id.trim()) {
     throw new Error("The EventBridge message is missing its event id.");
+  }
+  if (domainEvent.id.length > 128) {
+    throw new Error("The EventBridge event id exceeds the 128-character limit.");
   }
 
   const classification = classifyEvent(domainEvent);
@@ -96,9 +105,13 @@ async function recordEvent(domainEvent) {
     PK: "SYSTEM#AUTOMATION",
     SK: `EVENT#${domainEvent.id}`,
     id: domainEvent.id,
-    source: String(domainEvent.source ?? "unknown").slice(0, 128),
+    source: typeof domainEvent.source === "string"
+      ? domainEvent.source.slice(0, 128)
+      : "unknown",
     eventType: classification.eventType,
-    eventTime: domainEvent.time ?? now,
+    eventTime: typeof domainEvent.time === "string" && domainEvent.time.length <= 40
+      ? domainEvent.time
+      : now,
     createdAt: now,
     status: classification.status,
     recommendedAction: classification.recommendedAction,
