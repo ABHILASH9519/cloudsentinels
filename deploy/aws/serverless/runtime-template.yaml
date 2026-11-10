@@ -130,19 +130,7 @@ Resources:
         source:
           - cloudsentinels.api
           - cloudsentinels.cluster-agent
-        detail-type:
-          - IncidentCreated
-          - IncidentUpdated
-          - IncidentDeleted
-          - AlertCreated
-          - AlertUpdated
-          - MetricRecorded
-          - PodCrashLoopBackOff
-          - NodeNotReady
-          - CpuThresholdExceeded
-          - MemoryPressure
-          - DeploymentUnhealthy
-          - ApiLatencyHigh
+          - cloudsentinels.local-agent
       Targets:
         - Id: AutomationEventsQueueTarget
           Arn: !GetAtt AutomationEventsQueue.Arn
