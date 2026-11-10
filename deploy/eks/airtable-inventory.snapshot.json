@@ -342,5 +342,106 @@
       "latestRecordCreatedAt": "2026-05-13T20:34:48.000Z",
       "latestCreatedAt": "2024-06-20T17:00:00.000Z"
     }
+  },
+  "rollup": {
+    "clustersByEnvironment": {
+      "Development": 4,
+      "Other": 3,
+      "Production": 6,
+      "QA": 3,
+      "Staging": 4
+    },
+    "clustersByStatus": {
+      "Active": 13,
+      "Degraded": 3,
+      "Inactive": 1,
+      "Provisioning": 2,
+      "Retired": 1
+    },
+    "clustersByHealth": {
+      "Critical": 1,
+      "Healthy": 12,
+      "Offline": 2,
+      "Unknown": 2,
+      "Warning": 3
+    },
+    "totals": {
+      "clusterRecords": 20,
+      "reportedNodes": 113,
+      "reportedPods": 2855
+    },
+    "production": {
+      "clusters": 6,
+      "reportedNodes": 63,
+      "reportedPods": 1850,
+      "healthy": 5,
+      "degraded": [
+        "prod-eu-west-03"
+      ]
+    },
+    "attention": [
+      {
+        "clusterName": "legacy-dr-01",
+        "environment": "Other",
+        "status": "Retired",
+        "healthStatus": "Offline",
+        "cpuUsagePercent": 0
+      },
+      {
+        "clusterName": "staging-04",
+        "environment": "Staging",
+        "status": "Provisioning",
+        "healthStatus": "Unknown",
+        "cpuUsagePercent": 22
+      },
+      {
+        "clusterName": "qa-02",
+        "environment": "QA",
+        "status": "Degraded",
+        "healthStatus": "Warning",
+        "cpuUsagePercent": 79
+      },
+      {
+        "clusterName": "prod-eu-west-03",
+        "environment": "Production",
+        "status": "Degraded",
+        "healthStatus": "Warning",
+        "cpuUsagePercent": 88
+      },
+      {
+        "clusterName": "staging-03",
+        "environment": "Staging",
+        "status": "Degraded",
+        "healthStatus": "Critical",
+        "cpuUsagePercent": 91
+      },
+      {
+        "clusterName": "perf-test-01",
+        "environment": "Other",
+        "status": "Active",
+        "healthStatus": "Warning",
+        "cpuUsagePercent": 83
+      },
+      {
+        "clusterName": "sandbox-01",
+        "environment": "Other",
+        "status": "Provisioning",
+        "healthStatus": "Unknown",
+        "cpuUsagePercent": 10
+      },
+      {
+        "clusterName": "dev-03",
+        "environment": "Development",
+        "status": "Inactive",
+        "healthStatus": "Offline",
+        "cpuUsagePercent": 0
+      }
+    ],
+    "excludedFromActiveBaseline": [
+      "legacy-dr-01",
+      "staging-04",
+      "sandbox-01",
+      "dev-03"
+    ]
   }
 }
