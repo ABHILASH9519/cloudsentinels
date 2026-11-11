@@ -85,6 +85,9 @@ Resources:
           KeyType: RANGE
       SSESpecification:
         SSEEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
 
 Outputs:
   UserPoolId:

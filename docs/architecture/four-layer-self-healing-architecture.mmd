@@ -1,0 +1,47 @@
+flowchart TB
+  subgraph L1["LAYER 1 — CLUSTER / EXECUTION PLANE"]
+    direction LR
+    subgraph ONLINE["ONLINE CLUSTERS"]
+      direction TB
+      EC2["Kubernetes with worker servers<br/>EKS + EC2 node groups"]
+      SL["Serverless workloads<br/>EKS + Fargate profiles"]
+    end
+    subgraph OFFLINE["OFFLINE / EDGE"]
+      CLI["Local Kubernetes / K3s / Kind<br/>CloudSentinels CLI + local agent"]
+    end
+  end
+  subgraph L2["LAYER 2 — CONNECTIVITY & IDENTITY"]
+    direction LR
+    API["CloudSentinels API<br/>User APIs implemented • cluster ingress pending"]
+    AUTH["Authentication gateway<br/>Cognito JWT • OIDC • scoped RBAC"]
+    ADAPTER["Cluster adapters (implementation pending)<br/>Online Kubernetes API • offline CLI"]
+    API <--> AUTH
+    ADAPTER <--> API
+  end
+  subgraph L3["LAYER 3 — CLOUDSENTINELS INTELLIGENCE"]
+    direction LR
+    DETECT["Incident detection<br/>Events • metrics • logs • K8s watch"]
+    AI["AI analysis (provider integration pending)<br/>Correlation • root cause • risk"]
+    ORCH["Remediation orchestration<br/>Policy • approval • idempotency"]
+    DETECT --> AI --> ORCH
+  end
+  subgraph L4["LAYER 4 — AUTOMATION / PROCEDURE FABRIC"]
+    direction LR
+    BUS["EventBridge + SQS<br/>Retries • DLQ"]
+    REG["Versioned procedure registry<br/>Extend by event type + version"]
+    ZAP["Zapier workflows<br/>Tickets • notifications • approvals"]
+    EXEC["Execution adapters (not deployed)<br/>Kubernetes API • AWS API • local CLI"]
+    VERIFY["Verification + audit<br/>Health checks • rollback • incident closure"]
+    BUS --> REG --> EXEC --> VERIFY
+    REG <--> ZAP
+    VERIFY --> DETECT
+  end
+  EC2 <--> ADAPTER
+  SL <--> ADAPTER
+  CLI <--> ADAPTER
+  ADAPTER --> DETECT
+  ORCH --> BUS
+  AIR["Airtable inventory<br/>Sanitized cluster • node • pod • deployment metadata"] -.-> API
+  SAFE["Cross-cutting: Secrets Manager / KMS • least privilege • approval gates"]
+  SAFE --- AUTH
+  SAFE --- ORCH

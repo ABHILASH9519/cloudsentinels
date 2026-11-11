@@ -89,6 +89,8 @@ function validateCommand(value) {
   }
   const fields = [
     ["eventId", 128],
+    ["eventTime", 40],
+    ["ownerId", 128],
     ["commandId", 128],
     ["action", 80],
     ["approvedBy", 128],
@@ -98,6 +100,7 @@ function validateCommand(value) {
       return `${field} is required and must be at most ${max} characters.`;
     }
   }
+  if (!Number.isFinite(Date.parse(value.eventTime))) return "eventTime must be a valid ISO timestamp.";
   if (!ALLOWED_ACTIONS.has(value.action)) return "Requested action is not allow-listed.";
   if (value.approvalStatus !== "approved") return "An explicit approved status is required.";
   return null;
@@ -112,6 +115,8 @@ async function publishApprovedCommand(command, eventRecord) {
       Time: new Date(),
       Detail: JSON.stringify({
         eventId: command.eventId,
+        eventTime: command.eventTime,
+        ownerId: command.ownerId,
         commandId: command.commandId,
         action: command.action,
         clusterName: eventRecord.clusterName,
@@ -131,6 +136,12 @@ export async function handler(event) {
   if ((event.requestContext?.http?.method ?? "POST") !== "POST") {
     return response(405, { error: "Method not allowed." });
   }
+  if (
+    process.env.REMEDIATION_EXECUTION_ENABLED !== "true" ||
+    !process.env.REMEDIATION_ADAPTER_FUNCTION_ARN
+  ) {
+    return response(503, { error: "Remediation execution is disabled until a reviewed adapter is configured." });
+  }
   const body = rawBody(event);
   if (body.length > 8192) return response(413, { error: "Request body is too large." });
   if (!body) return response(400, { error: "Request body is required." });
@@ -149,11 +160,17 @@ export async function handler(event) {
     if (validationError) return response(400, { error: validationError });
     if (!tableName || !eventBusName) throw new Error("AWS command receiver configuration is incomplete.");
 
-    const key = { PK: "SYSTEM#AUTOMATION", SK: `EVENT#${command.eventId}` };
+    const key = {
+      PK: `USER#${command.ownerId}`,
+      SK: `AUTOMATION#${command.eventTime}#${command.eventId}`,
+    };
     const result = await db.send(new GetCommand({ TableName: tableName, Key: key }));
     const record = result.Item;
     if (!record) return response(404, { error: "Automation event was not found." });
     if (
+      record.id !== command.eventId ||
+      record.ownerId !== command.ownerId ||
+      record.eventTime !== command.eventTime ||
       typeof record.requiresApproval !== "boolean" ||
       record.recommendedAction !== command.action
     ) {

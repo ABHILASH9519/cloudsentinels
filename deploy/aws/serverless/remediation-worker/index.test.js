@@ -10,23 +10,37 @@ const originalLambdaSend = LambdaClient.prototype.send;
 const originalDbSend = DynamoDBDocumentClient.prototype.send;
 
 let eventRecord;
+let alertRecord;
 let invocations;
 let updates;
+let alertUpdates;
 let adapterResponse;
+let requestedKey;
 
 function resetState() {
   eventRecord = {
-    PK: "SYSTEM#AUTOMATION",
-    SK: "EVENT#event-123",
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-123",
     id: "event-123",
+    ownerId: "user-123",
+    eventTime: "2026-11-10T10:00:00.000Z",
     status: "APPROVED_AWAITING_EXECUTOR",
     commandId: "command-abc",
     recommendedAction: "rollback-deployment",
     clusterName: "staging-cluster",
     requiresApproval: true,
+    resourceId: "9",
+  };
+  alertRecord = {
+    PK: "USER#user-123",
+    SK: "ALERT#0000000000000009",
+    id: "9",
+    status: "active",
   };
   invocations = [];
   updates = [];
+  alertUpdates = [];
+  requestedKey = undefined;
   adapterResponse = {
     accepted: true,
     executionId: "execution-123",
@@ -35,16 +49,24 @@ function resetState() {
 }
 
 DynamoDBDocumentClient.prototype.send = async function (command) {
-  if (command.constructor.name === "GetCommand") return { Item: eventRecord };
+  if (command.constructor.name === "GetCommand") {
+    requestedKey = command.input.Key;
+    return { Item: eventRecord };
+  }
   if (command.constructor.name === "UpdateCommand") {
-    updates.push(command.input);
     const values = command.input.ExpressionAttributeValues;
+    if (command.input.Key.SK.startsWith("ALERT#")) {
+      alertUpdates.push(command.input);
+      alertRecord = { ...alertRecord, status: values[":resolved"] };
+      return {};
+    }
+    updates.push(command.input);
     eventRecord = {
       ...eventRecord,
       status: values[":status"],
       ...Object.fromEntries(
         Object.entries(values)
-          .filter(([key]) => ![":status", ":updatedAt", ":commandId"].includes(key))
+          .filter(([key]) => ![":status", ":updatedAt", ":commandId", ":expectedStatus"].includes(key))
           .map(([key, value]) => [key.slice(1), value]),
       ),
     };
@@ -67,6 +89,8 @@ function queueEvent(overrides = {}) {
         "detail-type": "RemediationCommandApproved",
         detail: {
           eventId: "event-123",
+          eventTime: "2026-11-10T10:00:00.000Z",
+          ownerId: "user-123",
           commandId: "command-abc",
           action: "rollback-deployment",
           clusterName: "staging-cluster",
@@ -91,10 +115,15 @@ test("dispatches an approved command to the configured adapter", async () => {
 
   assert.deepEqual(result, { batchItemFailures: [] });
   assert.equal(invocations.length, 1);
+  assert.deepEqual(requestedKey, {
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-123",
+  });
   assert.equal(invocations[0].FunctionName, process.env.REMEDIATION_ADAPTER_FUNCTION_ARN);
   assert.equal(updates.length, 2);
   assert.equal(eventRecord.status, "ACTION_SUBMITTED_UNVERIFIED");
   assert.equal(eventRecord.recoveryVerified, false);
+  assert.equal(alertRecord.status, "active");
 });
 
 test("records verified recovery only when the adapter explicitly confirms it", async () => {
@@ -104,6 +133,16 @@ test("records verified recovery only when the adapter explicitly confirms it", a
   assert.deepEqual(result, { batchItemFailures: [] });
   assert.equal(eventRecord.status, "RECOVERY_VERIFIED");
   assert.equal(eventRecord.recoveryVerified, true);
+  assert.equal(alertRecord.status, "resolved");
+  assert.equal(alertUpdates.length, 1);
+});
+
+test("acknowledges duplicate in-flight delivery without invoking the adapter twice", async () => {
+  eventRecord.status = "EXECUTING";
+  const result = await handler(queueEvent());
+  assert.deepEqual(result, { batchItemFailures: [] });
+  assert.equal(invocations.length, 0);
+  assert.equal(updates.length, 0);
 });
 
 test("does not dispatch an event that is not approved", async () => {

@@ -3,7 +3,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity,
   AlertTriangle,
+  ArrowUpRight,
   CheckCircle2,
+  CircleDot,
+  Clock3,
+  Radio,
+  RefreshCw,
+  ShieldCheck,
   TrendingUp,
 } from "lucide-react";
 import {
@@ -21,249 +27,310 @@ import {
 import { SeverityBadge } from "../components/SeverityBadge";
 import { useDashboardSummary, useGetActiveAlerts } from "../hooks/useQueries";
 
-const PIE_COLORS = ["#22d3ee", "#f59e0b", "#10b981", "#ef4444", "#a855f7"];
+const PIE_COLORS = ["#67e8f9", "#fbbf24", "#4ade80", "#fb7185", "#a78bfa"];
+
+function formatUpdatedAt(date: Date) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
+}
 
 export function DashboardPage() {
-  const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
-  const { data: activeAlerts, isLoading: alertsLoading } = useGetActiveAlerts();
+  const {
+    data: summary,
+    isLoading: summaryLoading,
+    isError: summaryError,
+    error: summaryFailure,
+    refetch: refetchSummary,
+    dataUpdatedAt,
+  } = useDashboardSummary();
+  const {
+    data: activeAlerts,
+    isLoading: alertsLoading,
+    isError: alertsError,
+    error: alertsFailure,
+    refetch: refetchAlerts,
+  } = useGetActiveAlerts();
 
   const totalIncidents =
-    summary?.incidentsByStatus?.reduce((a, [, v]) => a + Number(v), 0) ?? 0;
+    summary?.incidentsByStatus?.reduce((total, [, value]) => total + Number(value), 0) ?? 0;
   const openCount = Number(
-    summary?.incidentsByStatus?.find(([k]) => k === "open")?.[1] ?? 0,
+    summary?.incidentsByStatus?.find(([key]) => key === "open")?.[1] ?? 0,
   );
   const criticalCount = Number(
-    summary?.incidentsBySeverity?.find(([k]) => k === "critical")?.[1] ?? 0,
+    summary?.incidentsBySeverity?.find(([key]) => key === "critical")?.[1] ?? 0,
   );
   const activeAlertsCount = Number(summary?.activeAlertsCount ?? 0);
 
   const statusChartData =
     summary?.incidentsByStatus?.map(([name, value]) => ({
-      name,
+      name: name.replace(/_/g, " "),
       value: Number(value),
     })) ?? [];
   const severityChartData =
     summary?.incidentsBySeverity?.map(([name, value]) => ({
-      name,
+      name: name.replace(/_/g, " "),
       value: Number(value),
     })) ?? [];
 
+  const apiState = summaryLoading
+    ? "Synchronizing"
+    : summaryError
+      ? "Connection issue"
+      : "Telemetry received";
+  const apiStateClass = summaryError
+    ? "dashboard-state dashboard-state-error"
+    : summaryLoading
+      ? "dashboard-state dashboard-state-loading"
+      : "dashboard-state dashboard-state-live";
+
   const stats = [
     {
-      label: "Total Incidents",
+      label: "Total incidents",
       value: totalIncidents,
+      note: "Across all recorded states",
       icon: AlertTriangle,
-      color: "text-blue-400",
+      tone: "cyan",
+      accent: "var(--dash-cyan)",
     },
     {
-      label: "Open",
+      label: "Open incidents",
       value: openCount,
+      note: "Require investigation",
       icon: TrendingUp,
-      color: "text-amber-400",
+      tone: "amber",
+      accent: "var(--dash-amber)",
     },
     {
-      label: "Active Alerts",
+      label: "Active alerts",
       value: activeAlertsCount,
+      note: "Currently reported by API",
       icon: Activity,
-      color: "text-red-400",
+      tone: "rose",
+      accent: "var(--dash-rose)",
     },
     {
-      label: "Critical",
+      label: "Critical incidents",
       value: criticalCount,
-      icon: CheckCircle2,
-      color: "text-orange-400",
+      note: "Highest severity",
+      icon: ShieldCheck,
+      tone: "violet",
+      accent: "var(--dash-violet)",
     },
   ];
 
   return (
-    <div className="mission-page p-6 space-y-6">
-      <section className="orbital-hero">
-        <div className="orbital-copy">
-          <div className="orbital-eyebrow"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,.9)]" /> Orbital operations / Mission control</div>
-          <h1 className="orbital-title">CloudSentinels<br />Autonomous cluster defense.</h1>
-          <p className="orbital-description">AI-powered self-healing for Kubernetes and live cluster systems. Observe infrastructure signals, investigate anomalies, and coordinate safe recovery from one command environment.</p>
-        </div>
-        <div className="orbital-coordinates">
-          <div>Control plane<strong> AWS native</strong></div>
-          <div>Operating mode<strong> Observe · Analyze · Recover</strong></div>
-        </div>
-      </section>
+    <div className="mission-page dashboard-page">
+      <div className="dashboard-shell">
+        <section className="dashboard-heading">
+          <div>
+            <div className="dashboard-eyebrow"><span /> CLOUD OPERATIONS / OVERVIEW</div>
+            <h1>Mission control<span>.</span></h1>
+            <p>One view of your infrastructure signals, incidents, and response activity.</p>
+          </div>
+          <output className={apiStateClass} aria-live="polite">
+            <span className="dashboard-state-dot" />
+            <span>{apiState}</span>
+            <span className="dashboard-state-divider" />
+            <span className="dashboard-state-meta">AWS CONTROL PLANE</span>
+          </output>
+        </section>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="telemetry-glass border-cyan-200/10">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted-foreground">
-                  {stat.label}
-                </span>
-                <stat.icon className={`w-4 h-4 ${stat.color}`} />
+        <section className="dashboard-orbit-panel">
+          <div className="dashboard-orbit-copy">
+            <div className="dashboard-orbit-kicker"><Radio className="h-3.5 w-3.5" /> AUTONOMOUS DEFENSE SYSTEM</div>
+            <h2>See the signal.<br /><em>Stay ahead of the incident.</em></h2>
+            <p>CloudSentinels brings monitoring, incident intelligence, and self-healing workflows into one operational view.</p>
+            <div className="dashboard-orbit-meta">
+              <span><span className="dashboard-mini-dot" /> OBSERVE</span>
+              <span><span className="dashboard-mini-dot" /> ANALYZE</span>
+              <span><span className="dashboard-mini-dot" /> RESPOND</span>
+            </div>
+          </div>
+          <div className="dashboard-orbit-art" aria-hidden="true">
+            <div className="dashboard-orbit-ring dashboard-orbit-ring-outer" />
+            <div className="dashboard-orbit-ring dashboard-orbit-ring-middle" />
+            <div className="dashboard-orbit-ring dashboard-orbit-ring-inner" />
+            <div className="dashboard-planet">
+              <span className="dashboard-planet-glow" />
+            </div>
+            <div className="dashboard-orbit-satellite"><span /></div>
+            <div className="dashboard-orbit-crosshair dashboard-orbit-crosshair-one" />
+            <div className="dashboard-orbit-crosshair dashboard-orbit-crosshair-two" />
+          </div>
+          <div className="dashboard-orbit-footer">
+            <span>CS / SYSTEM TELEMETRY</span>
+            <span>REGION · AP-SOUTH-1</span>
+            <span>MODE · CONTINUOUS OBSERVATION</span>
+          </div>
+        </section>
+
+        <section className="dashboard-section-heading">
+          <div>
+            <div className="dashboard-section-kicker">SYSTEM SNAPSHOT</div>
+            <h2>Infrastructure at a glance</h2>
+          </div>
+          <div className="dashboard-updated">
+            <Clock3 className="h-3.5 w-3.5" />
+            {dataUpdatedAt ? `Updated ${formatUpdatedAt(new Date(dataUpdatedAt))}` : "Waiting for first sync"}
+          </div>
+        </section>
+
+        {summaryError && (
+          <div role="alert" className="dashboard-error">
+            <div>
+              <p className="font-semibold">Unable to retrieve dashboard telemetry</p>
+              <p>{summaryFailure instanceof Error ? summaryFailure.message : "The API request failed. Check the connection and try again."}</p>
+            </div>
+            <button type="button" onClick={() => void refetchSummary()}><RefreshCw className="h-4 w-4" /> Retry sync</button>
+          </div>
+        )}
+
+        <section className="dashboard-stats-grid" aria-label="Incident metrics">
+          {stats.map((stat, index) => (
+            <Card key={stat.label} className={`dashboard-stat-card dashboard-stat-${stat.tone}`} style={{ animationDelay: `${index * 70}ms` }}>
+              <CardContent className="dashboard-stat-content">
+                <div className="dashboard-stat-topline">
+                  <span>{stat.label}</span>
+                  <span className="dashboard-stat-icon"><stat.icon className="h-[17px] w-[17px]" /></span>
+                </div>
+                {summaryLoading ? (
+                  <Skeleton className="mt-4 h-10 w-20 bg-white/10" />
+                ) : summaryError ? (
+                  <div className="dashboard-stat-unavailable">Unavailable</div>
+                ) : (
+                  <div className="dashboard-stat-value">{stat.value.toLocaleString()}</div>
+                )}
+                <div className="dashboard-stat-bottom">
+                  <span className="dashboard-stat-marker" />
+                  <span>{stat.note}</span>
+                </div>
+                <div className="dashboard-stat-glow" aria-hidden="true" />
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+
+        <section className="dashboard-section-heading dashboard-analytics-heading">
+          <div>
+            <div className="dashboard-section-kicker">INCIDENT INTELLIGENCE</div>
+            <h2>Understand what is happening</h2>
+          </div>
+          <div className="dashboard-section-aside"><CircleDot className="h-3.5 w-3.5" /> DATA FROM CONNECTED API</div>
+        </section>
+
+        <section className="dashboard-charts-grid">
+          <Card className="dashboard-panel">
+            <CardHeader className="dashboard-panel-header">
+              <div>
+                <div className="dashboard-panel-kicker">01 / DISTRIBUTION</div>
+                <CardTitle>Incidents by status</CardTitle>
+                <p>How reported incidents are progressing</p>
               </div>
+              <span className="dashboard-panel-symbol"><Activity className="h-4 w-4" /></span>
+            </CardHeader>
+            <CardContent className="dashboard-chart-content">
               {summaryLoading ? (
-                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-[220px] w-full bg-white/5" />
+              ) : summaryError ? (
+                <div className="dashboard-chart-empty text-rose-300">Status data unavailable</div>
+              ) : statusChartData.length === 0 ? (
+                <div className="dashboard-chart-empty">No incidents recorded yet</div>
               ) : (
-                <div className={`text-3xl font-display font-700 ${stat.color}`}>
-                  {stat.value}
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={statusChartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                    <XAxis dataKey="name" tick={{ fill: "#9aabba", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fill: "#718598", fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: "rgba(103,232,249,.06)" }} contentStyle={{ background: "#0b1727", border: "1px solid rgba(148,190,213,.2)", borderRadius: 10, color: "#e8f5fc", fontSize: 12 }} />
+                    <Bar dataKey="value" name="Incidents" fill="#67d9e8" radius={[5, 5, 0, 0]} maxBarSize={46} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="dashboard-panel">
+            <CardHeader className="dashboard-panel-header">
+              <div>
+                <div className="dashboard-panel-kicker">02 / SEVERITY</div>
+                <CardTitle>Threat distribution</CardTitle>
+                <p>Incidents grouped by severity level</p>
+              </div>
+              <span className="dashboard-panel-symbol"><ShieldCheck className="h-4 w-4" /></span>
+            </CardHeader>
+            <CardContent className="dashboard-chart-content">
+              {summaryLoading ? (
+                <Skeleton className="h-[220px] w-full bg-white/5" />
+              ) : summaryError ? (
+                <div className="dashboard-chart-empty text-rose-300">Severity data unavailable</div>
+              ) : severityChartData.length === 0 ? (
+                <div className="dashboard-chart-empty">No severity data available</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie data={severityChartData} dataKey="value" nameKey="name" cx="50%" cy="48%" innerRadius={54} outerRadius={82} paddingAngle={3} stroke="none">
+                      {severityChartData.map((entry, index) => (
+                        <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ background: "#0b1727", border: "1px solid rgba(148,190,213,.2)", borderRadius: 10, color: "#e8f5fc", fontSize: 12 }} />
+                    <Legend verticalAlign="bottom" iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 10, color: "#9aabba", paddingTop: 4 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="dashboard-alerts-section">
+          <Card className="dashboard-panel dashboard-alerts-panel">
+            <CardHeader className="dashboard-panel-header dashboard-alerts-header">
+              <div>
+                <div className="dashboard-panel-kicker">03 / LIVE FEED</div>
+                <CardTitle>Active alerts</CardTitle>
+                <p>Signals requiring attention from connected services</p>
+              </div>
+              <div className="dashboard-alert-count">
+                <span className={alertsError ? "dashboard-alert-count-dot is-error" : "dashboard-alert-count-dot"} />
+                {alertsLoading ? "SYNCING" : alertsError ? "UNAVAILABLE" : `${activeAlerts?.length ?? 0} REPORTED`}
+              </div>
+            </CardHeader>
+            <CardContent className="dashboard-alerts-content">
+              {alertsLoading ? (
+                <div className="space-y-2">{["a", "b", "c"].map((key) => <Skeleton key={key} className="h-14 bg-white/5" />)}</div>
+              ) : alertsError ? (
+                <div role="alert" className="dashboard-alert-empty dashboard-alert-error">
+                  <div><p>Alerts could not be loaded</p><span>{alertsFailure instanceof Error ? alertsFailure.message : "The alerts API request failed."}</span></div>
+                  <button type="button" onClick={() => void refetchAlerts()}><RefreshCw className="h-4 w-4" /> Retry alerts</button>
+                </div>
+              ) : !activeAlerts || activeAlerts.length === 0 ? (
+                <div className="dashboard-alert-empty">
+                  <span className="dashboard-empty-icon"><CheckCircle2 className="h-5 w-5" /></span>
+                  <div><p>No active alerts</p><span>No alert records were returned by the API.</span></div>
+                  <span className="dashboard-all-clear">ALL CLEAR</span>
+                </div>
+              ) : (
+                <div className="dashboard-alert-list">
+                  {activeAlerts.slice(0, 6).map((alert, index) => (
+                    <div key={alert.id.toString()} data-ocid={`alerts.item.${index + 1}`} className="dashboard-alert-row">
+                      <div className="dashboard-alert-leading"><span className="dashboard-alert-index">{String(index + 1).padStart(2, "0")}</span><SeverityBadge severity={alert.severity} /></div>
+                      <div className="dashboard-alert-main"><span className="dashboard-alert-title">{alert.title}</span><span className="dashboard-alert-source">{alert.source}</span></div>
+                      <ArrowUpRight className="dashboard-alert-arrow h-4 w-4" />
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
           </Card>
-        ))}
+        </section>
+
+        <footer className="dashboard-footer">
+          <span>CLOUDSENTINELS / AUTONOMOUS INFRASTRUCTURE DEFENSE</span>
+          <span>TELEMETRY IS SUBJECT TO API AVAILABILITY</span>
+        </footer>
       </div>
-
-      {/* Charts */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="bg-card border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Incidents by Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {summaryLoading ? (
-              <Skeleton className="h-48" />
-            ) : statusChartData.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                No data yet
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart
-                  data={statusChartData}
-                  margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
-                >
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fill: "#6b7280", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fill: "#6b7280", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "oklch(0.16 0.018 240)",
-                      border: "1px solid oklch(0.22 0.02 240)",
-                      borderRadius: 6,
-                      color: "#e5e7eb",
-                    }}
-                  />
-                  <Bar
-                    dataKey="value"
-                    fill="oklch(0.72 0.18 195)"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Incidents by Severity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {summaryLoading ? (
-              <Skeleton className="h-48" />
-            ) : severityChartData.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                No data yet
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={180}>
-                <PieChart>
-                  <Pie
-                    data={severityChartData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    label={({ name, percent }) =>
-                      `${name} ${(percent * 100).toFixed(0)}%`
-                    }
-                    labelLine={false}
-                  >
-                    {severityChartData.map((entry, i) => (
-                      <Cell
-                        key={entry.name}
-                        fill={PIE_COLORS[i % PIE_COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: "oklch(0.16 0.018 240)",
-                      border: "1px solid oklch(0.22 0.02 240)",
-                      borderRadius: 6,
-                      color: "#e5e7eb",
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11, color: "#6b7280" }} />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Active Alerts */}
-      <Card className="bg-card border-border">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-red-400 pulse-dot" />
-            Active Alerts
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {alertsLoading ? (
-            <div className="space-y-2">
-              {["a", "b", "c"].map((k) => (
-                <Skeleton key={k} className="h-10" />
-              ))}
-            </div>
-          ) : !activeAlerts || activeAlerts.length === 0 ? (
-            <div
-              className="text-center py-8 text-muted-foreground text-sm"
-              data-ocid="monitoring.alerts.empty_state"
-            >
-              No active alerts — all systems nominal
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {activeAlerts.slice(0, 5).map((alert, i) => (
-                <div
-                  key={alert.id.toString()}
-                  data-ocid={`alerts.item.${i + 1}`}
-                  className="flex items-center justify-between p-3 rounded-md bg-muted/30 border border-border"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <SeverityBadge severity={alert.severity} />
-                    <span className="text-sm text-foreground truncate">
-                      {alert.title}
-                    </span>
-                  </div>
-                  <span className="text-xs text-muted-foreground font-mono shrink-0 ml-2">
-                    {alert.source}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Loading state */}
-      {(summaryLoading || alertsLoading) && (
-        <div data-ocid="dashboard.loading_state" className="hidden" />
-      )}
     </div>
   );
 }

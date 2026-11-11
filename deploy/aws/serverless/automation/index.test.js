@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 process.env.TABLE_NAME = "cloudsentinels-test-table";
-const { classifyEvent, handler } = await import("./index.js");
+const { classifyEvent, resolveProcedure, handler } = await import("./index.js");
 
 test("classifies known events without claiming remediation ran", () => {
   const result = classifyEvent({
@@ -37,7 +37,7 @@ test("records a valid event with an idempotency condition", async (t) => {
   const originalSend = DynamoDBDocumentClient.prototype.send;
   const calls = [];
   DynamoDBDocumentClient.prototype.send = async function (command) {
-    calls.push(command.input);
+    calls.push({ name: command.constructor.name, input: command.input });
     return {};
   };
   t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
@@ -55,11 +55,15 @@ test("records a valid event with an idempotency condition", async (t) => {
   });
 
   assert.deepEqual(response, { batchItemFailures: [] });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].TableName, "cloudsentinels-test-table");
-  assert.equal(calls[0].Item.id, "event-123");
-  assert.equal(calls[0].Item.status, "PENDING_APPROVAL");
-  assert.equal(calls[0].ConditionExpression,
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].name, "QueryCommand");
+  assert.equal(calls[0].input.TableName, "cloudsentinels-test-table");
+  assert.equal(calls[0].input.ExpressionAttributeValues[":pk"], "SYSTEM#PROCEDURES");
+  assert.equal(calls[1].name, "PutCommand");
+  assert.equal(calls[1].input.TableName, "cloudsentinels-test-table");
+  assert.equal(calls[1].input.Item.id, "event-123");
+  assert.equal(calls[1].input.Item.status, "PENDING_APPROVAL");
+  assert.equal(calls[1].input.ConditionExpression,
     "attribute_not_exists(PK) AND attribute_not_exists(SK)");
 });
 
@@ -81,7 +85,8 @@ test("returns only failed SQS message identifiers for malformed records", async 
 
 test("treats duplicate DynamoDB events as successfully handled", async (t) => {
   const originalSend = DynamoDBDocumentClient.prototype.send;
-  DynamoDBDocumentClient.prototype.send = async function () {
+  DynamoDBDocumentClient.prototype.send = async function (command) {
+    if (command.constructor.name === "QueryCommand") return { Items: [] };
     const error = new Error("already exists");
     error.name = "ConditionalCheckFailedException";
     throw error;
@@ -152,4 +157,180 @@ test("bounds unknown event type values before storing them", () => {
   const result = classifyEvent({ "detail-type": "x".repeat(200) });
   assert.equal(result.eventType.length, 80);
   assert.equal(result.status, "OBSERVED");
+});
+
+
+test("resolves new event types from the versioned procedure registry", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function (command) {
+    assert.equal(command.constructor.name, "QueryCommand");
+    assert.equal(command.input.ExpressionAttributeValues[":pk"], "SYSTEM#PROCEDURES");
+    assert.equal(command.input.ExpressionAttributeValues[":prefix"], "PROCEDURE#CustomPodSignal#");
+    return { Items: [{
+      procedureId: "pod-restart-v3",
+      version: 3,
+      enabled: true,
+      action: "restart-pod",
+      risk: "low",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "CustomPodSignal",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "PENDING_CLUSTER_ADAPTER");
+  assert.equal(result.recommendedAction, "restart-pod");
+  assert.equal(result.procedureId, "pod-restart-v3");
+  assert.equal(result.procedureVersion, 3);
+});
+
+test("blocks procedure registry entries that request unsupported actions", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      procedureId: "unsafe-shell-v1",
+      version: 1,
+      enabled: true,
+      action: "run-arbitrary-shell",
+      risk: "critical",
+      requiresApproval: true,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "CustomUnsafeSignal",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "BLOCKED_INVALID_PROCEDURE");
+  assert.equal(result.recommendedAction, null);
+  assert.equal(result.requiresApproval, true);
+});
+
+test("disabled registry procedures remain observe-only", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      procedureId: "disabled-v1",
+      version: 1,
+      enabled: false,
+      action: "restart-pod",
+      risk: "low",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "PodCrashLoopBackOff",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "OBSERVED");
+  assert.equal(result.recommendedAction, null);
+});
+
+
+test("blocks high-risk procedures that attempt to bypass approval", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      procedureId: "node-recovery-v1",
+      version: 1,
+      enabled: true,
+      action: "replace-or-recover-node",
+      risk: "critical",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "CustomNodeFailure",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "BLOCKED_INVALID_PROCEDURE");
+  assert.equal(result.recommendedAction, null);
+  assert.equal(result.requiresApproval, true);
+  assert.match(result.reason, /risk approval policy/i);
+});
+
+test("blocks procedures missing required registry metadata", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      version: 0,
+      enabled: true,
+      action: "restart-pod",
+      risk: "low",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "MalformedProcedureSignal",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "BLOCKED_INVALID_PROCEDURE");
+  assert.equal(result.recommendedAction, null);
+  assert.equal(result.requiresApproval, true);
+});
+
+
+test("blocks disabled registry records that are missing required metadata", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  DynamoDBDocumentClient.prototype.send = async function () {
+    return { Items: [{
+      enabled: false,
+      action: "restart-pod",
+      risk: "low",
+      requiresApproval: false,
+    }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const result = await resolveProcedure({
+    "detail-type": "IncompleteDisabledProcedure",
+    detail: { clusterName: "demo-cluster" },
+  });
+  assert.equal(result.status, "BLOCKED_INVALID_PROCEDURE");
+  assert.equal(result.recommendedAction, null);
+  assert.equal(result.requiresApproval, true);
+});
+
+test("stores API-originated automation events in the owner's partition", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  let storedItem;
+  DynamoDBDocumentClient.prototype.send = async function (command) {
+    if (command.constructor.name === "QueryCommand") return { Items: [] };
+    storedItem = command.input.Item;
+    return {};
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const response = await handler({
+    Records: [{
+      messageId: "owner-event",
+      body: JSON.stringify({
+        id: "event-owned-123",
+        source: "cloudsentinels.api",
+        "detail-type": "IncidentCreated",
+        time: "2026-11-11T10:00:00.000Z",
+        detail: {
+          userId: "cognito-user-42",
+          resource: { id: "incident-7", severity: "high" },
+        },
+      }),
+    }],
+  });
+
+  assert.deepEqual(response, { batchItemFailures: [] });
+  assert.equal(storedItem.PK, "USER#cognito-user-42");
+  assert.equal(storedItem.ownerId, "cognito-user-42");
+  assert.match(storedItem.SK, /^AUTOMATION#2026-11-11T10:00:00\.000Z#event-owned-123$/);
+  assert.equal(storedItem.resourceId, "incident-7");
+  assert.equal(storedItem.severity, "high");
 });

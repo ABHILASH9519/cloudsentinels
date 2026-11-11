@@ -42,8 +42,7 @@ export function AIInsightsPage() {
             No AI Analysis Yet
           </h2>
           <p className="text-sm text-muted-foreground max-w-sm">
-            Create incidents and populate AI fields via the Incident Detail page
-            or your Python backend pushing analysis results.
+            Open an incident, choose the AI Analysis tab, and select Generate analysis to request a redacted, user-triggered Amazon Bedrock diagnosis.
           </p>
         </div>
       ) : (

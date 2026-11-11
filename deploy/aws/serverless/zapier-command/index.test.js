@@ -8,6 +8,8 @@ import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 process.env.TABLE_NAME = "cloudsentinels-command-test";
 process.env.EVENT_BUS_NAME = "cloudsentinels-test-bus";
 process.env.ZAPIER_COMMAND_SECRET_ARN = "arn:aws:secretsmanager:ap-south-1:123456789012:secret:zapier-command-test";
+process.env.REMEDIATION_EXECUTION_ENABLED = "true";
+process.env.REMEDIATION_ADAPTER_FUNCTION_ARN = "arn:aws:lambda:ap-south-1:123456789012:function:test-adapter";
 
 const signingSecret = "a-test-signing-secret-that-is-long-enough-for-hmac";
 const { handler } = await import("./index.js");
@@ -19,12 +21,15 @@ let record;
 let updates;
 let published;
 let secretReads;
+let requestedKey;
 
 function resetState() {
   record = {
-    PK: "SYSTEM#AUTOMATION",
-    SK: "EVENT#event-123",
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-123",
     id: "event-123",
+    ownerId: "user-123",
+    eventTime: "2026-11-10T10:00:00.000Z",
     status: "PENDING_APPROVAL",
     requiresApproval: true,
     recommendedAction: "rollback-deployment",
@@ -33,10 +38,14 @@ function resetState() {
   updates = [];
   published = [];
   secretReads = 0;
+  requestedKey = undefined;
 }
 
 DynamoDBDocumentClient.prototype.send = async function (command) {
-  if (command.constructor.name === "GetCommand") return { Item: record };
+  if (command.constructor.name === "GetCommand") {
+    requestedKey = command.input.Key;
+    return { Item: record };
+  }
   if (command.constructor.name === "UpdateCommand") {
     updates.push(command.input);
     record = {
@@ -62,6 +71,8 @@ SecretsManagerClient.prototype.send = async function () {
 function signedRequest(overrides = {}, { timestamp = Math.floor(Date.now() / 1000) } = {}) {
   const body = JSON.stringify({
     eventId: "event-123",
+    eventTime: "2026-11-10T10:00:00.000Z",
+    ownerId: "user-123",
     commandId: "command-abc",
     action: "rollback-deployment",
     approvalStatus: "approved",
@@ -96,9 +107,16 @@ test("accepts a signed approval for a matching pending remediation", async () =>
   assert.equal(record.status, "APPROVED_AWAITING_EXECUTOR");
   assert.equal(record.commandId, "command-abc");
   assert.equal(updates.length, 1);
+  assert.deepEqual(requestedKey, {
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-123",
+  });
   assert.equal(published.length, 1);
   assert.equal(published[0].Entries[0].Source, "cloudsentinels.zapier");
   assert.equal(published[0].Entries[0].DetailType, "RemediationCommandApproved");
+  const approvedDetail = JSON.parse(published[0].Entries[0].Detail);
+  assert.equal(approvedDetail.ownerId, "user-123");
+  assert.equal(approvedDetail.eventTime, "2026-11-10T10:00:00.000Z");
 });
 
 test("rejects an invalid HMAC without reading or changing an event", async () => {
@@ -179,6 +197,16 @@ test("requires a human approval identity for high-risk commands", async () => {
   const result = await handler(signedRequest({ approvedBy: "zapier-auto-policy" }));
 
   assert.equal(result.statusCode, 403);
+  assert.equal(updates.length, 0);
+  assert.equal(published.length, 0);
+});
+
+test("does not accept approval commands while remediation execution is disabled", async (t) => {
+  const enabled = process.env.REMEDIATION_EXECUTION_ENABLED;
+  process.env.REMEDIATION_EXECUTION_ENABLED = "false";
+  t.after(() => { process.env.REMEDIATION_EXECUTION_ENABLED = enabled; });
+  const result = await handler(signedRequest());
+  assert.equal(result.statusCode, 503);
   assert.equal(updates.length, 0);
   assert.equal(published.length, 0);
 });

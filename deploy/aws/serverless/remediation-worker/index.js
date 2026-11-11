@@ -2,7 +2,7 @@ import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
-const lambda = new LambdaClient({});
+const lambda = new LambdaClient({ maxAttempts: 1 });
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const tableName = process.env.TABLE_NAME;
 const adapterFunctionArn = process.env.REMEDIATION_ADAPTER_FUNCTION_ARN;
@@ -27,7 +27,7 @@ function parseRecord(record) {
   ) {
     throw new Error("Unsupported remediation queue message.");
   }
-  for (const field of ["eventId", "commandId", "action", "clusterName", "approvedBy"]) {
+  for (const field of ["eventId", "eventTime", "ownerId", "commandId", "action", "clusterName", "approvedBy"]) {
     if (typeof detail[field] !== "string" || !detail[field].trim()) {
       throw new Error(`Remediation command is missing ${field}.`);
     }
@@ -39,21 +39,53 @@ function parseRecord(record) {
   return detail;
 }
 
-async function setStatus(key, commandId, status, extra = {}) {
+async function setStatus(key, commandId, expectedStatus, status, extra = {}) {
   await db.send(new UpdateCommand({
     TableName: tableName,
     Key: key,
     UpdateExpression: "SET #status = :status, updatedAt = :updatedAt" +
       Object.keys(extra).map((field) => `, ${field} = :${field}`).join(""),
-    ConditionExpression: "commandId = :commandId",
+    ConditionExpression: "commandId = :commandId AND #status = :expectedStatus",
     ExpressionAttributeNames: { "#status": "status" },
     ExpressionAttributeValues: {
       ":status": status,
       ":updatedAt": new Date().toISOString(),
       ":commandId": commandId,
+      ":expectedStatus": expectedStatus,
       ...Object.fromEntries(Object.entries(extra).map(([field, value]) => [`:${field}`, value])),
     },
   }));
+}
+
+
+async function resolveLinkedAlert(ownerId, resourceId) {
+  if (typeof resourceId !== "string" || !resourceId.trim()) return;
+  const now = new Date().toISOString();
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: {
+        PK: `USER#${ownerId}`,
+        SK: `ALERT#${resourceId.padStart(16, "0")}`,
+      },
+      UpdateExpression: "SET #status = :resolved, resolvedAt = :resolvedAt, updatedAt = :updatedAt",
+      ConditionExpression: "attribute_exists(PK) AND (#status = :active OR #status = :acknowledged)",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: {
+        ":resolved": "resolved",
+        ":resolvedAt": now,
+        ":updatedAt": now,
+        ":active": "active",
+        ":acknowledged": "acknowledged",
+      },
+    }));
+  } catch (error) {
+    if (error?.name === "ConditionalCheckFailedException") return;
+    console.error("Verified remediation could not update its linked alert", {
+      resourceId,
+      errorName: error?.name ?? "Error",
+    });
+  }
 }
 
 async function execute(detail) {
@@ -61,11 +93,17 @@ async function execute(detail) {
     throw new Error("Remediation worker is missing its table or adapter configuration.");
   }
 
-  const key = { PK: "SYSTEM#AUTOMATION", SK: `EVENT#${detail.eventId}` };
+  const key = {
+    PK: `USER#${detail.ownerId}`,
+    SK: `AUTOMATION#${detail.eventTime}#${detail.eventId}`,
+  };
   const result = await db.send(new GetCommand({ TableName: tableName, Key: key }));
   const eventRecord = result.Item;
   if (
     !eventRecord ||
+    eventRecord.id !== detail.eventId ||
+    eventRecord.ownerId !== detail.ownerId ||
+    eventRecord.eventTime !== detail.eventTime ||
     eventRecord.commandId !== detail.commandId ||
     eventRecord.recommendedAction !== detail.action ||
     eventRecord.clusterName !== detail.clusterName ||
@@ -73,18 +111,19 @@ async function execute(detail) {
   ) {
     throw new Error("Remediation command no longer matches an approved event record.");
   }
-  if (["RECOVERY_VERIFIED", "ACTION_SUBMITTED_UNVERIFIED"].includes(eventRecord.status)) {
+  if (["RECOVERY_VERIFIED", "ACTION_SUBMITTED_UNVERIFIED", "EXECUTING"].includes(eventRecord.status)) {
+    // EXECUTING is a lease-less in-flight marker: acknowledge duplicate SQS
+    // deliveries rather than dispatching the same potentially destructive
+    // adapter command twice. A stuck execution requires explicit operator review.
     return;
   }
-  if (!["APPROVED_AWAITING_EXECUTOR", "EXECUTING", "EXECUTION_FAILED"].includes(eventRecord.status)) {
+  if (!["APPROVED_AWAITING_EXECUTOR", "EXECUTION_FAILED"].includes(eventRecord.status)) {
     throw new Error("Remediation event is not in an executable state.");
   }
 
-  if (eventRecord.status === "APPROVED_AWAITING_EXECUTOR") {
-    await setStatus(key, detail.commandId, "EXECUTING", {
-      executionStartedAt: new Date().toISOString(),
-    });
-  }
+  await setStatus(key, detail.commandId, eventRecord.status, "EXECUTING", {
+    executionStartedAt: new Date().toISOString(),
+  });
 
   let adapterResult;
   try {
@@ -116,7 +155,7 @@ async function execute(detail) {
       throw new Error("Remediation adapter did not accept the command.");
     }
   } catch (error) {
-    await setStatus(key, detail.commandId, "EXECUTION_FAILED", {
+    await setStatus(key, detail.commandId, "EXECUTING", "EXECUTION_FAILED", {
       executionFailedAt: new Date().toISOString(),
       lastExecutionError: String(error?.message ?? "Adapter failure").slice(0, 300),
     });
@@ -124,9 +163,13 @@ async function execute(detail) {
   }
 
   const recoveryVerified = adapterResult.recoveryVerified === true;
+  if (recoveryVerified) {
+    await resolveLinkedAlert(detail.ownerId, eventRecord.resourceId);
+  }
   await setStatus(
     key,
     detail.commandId,
+    "EXECUTING",
     recoveryVerified ? "RECOVERY_VERIFIED" : "ACTION_SUBMITTED_UNVERIFIED",
     {
       recoveryVerified,

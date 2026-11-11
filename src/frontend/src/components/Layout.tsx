@@ -3,8 +3,17 @@ import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "@tanstack/react-router";
 import {
-  Activity, AlertTriangle, BrainCircuit, LayoutDashboard, LogOut, Menu,
-  Settings, Shield, X, Orbit, Command,
+  Activity,
+  AlertTriangle,
+  BrainCircuit,
+  Command,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Orbit,
+  Settings,
+  Shield,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import { useAwsAuth } from "../aws/AwsAuth";

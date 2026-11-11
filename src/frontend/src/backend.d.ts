@@ -58,6 +58,25 @@ export interface Alert {
     timestamp: bigint;
     severity: string;
 }
+export interface AutomationEvent {
+    id: string;
+    ownerId: string | null;
+    source: string;
+    eventType: string;
+    eventTime: string;
+    createdAt: string;
+    status: string;
+    recommendedAction: string | null;
+    procedureId: string | null;
+    procedureVersion: number | null;
+    risk: string;
+    requiresApproval: boolean;
+    clusterName: string | null;
+    resourceId: string | null;
+    severity: string | null;
+    reason: string;
+    recoveryVerified: boolean;
+}
 export enum UserRole {
     admin = "admin",
     user = "user",
@@ -67,10 +86,12 @@ export interface backendInterface {
     addAlert(title: string, severity: string, source: string, message: string): Promise<AlertId>;
     addComment(incidentId: IncidentId, author: string, text: string): Promise<CommentId>;
     addMetric(name: string, value: number, unit: string, source: string): Promise<MetricPointId>;
+    analyzeIncident(id: IncidentId): Promise<Incident>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createIncident(title: string, severity: string, source: string, rawLog: string): Promise<IncidentId>;
     deleteIncident(id: IncidentId): Promise<void>;
     getActiveAlerts(): Promise<Array<Alert>>;
+    getAutomationEvents(): Promise<Array<AutomationEvent>>;
     getAlerts(): Promise<Array<Alert>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;

@@ -1,0 +1,447 @@
+{
+  "schemaVersion": 1,
+  "source": "Airtable Cloud-Sentinel",
+  "baseId": "app3xn3iXAsm7MgA7",
+  "exportedAt": "2026-11-10T15:39:08.485Z",
+  "sourceNotes": [
+    "All 20 Kubernetes Clusters records were created on 2026-11-10T15:36:15Z; record creation time is inventory import provenance, not live telemetry.",
+    "Cluster table records do not currently link to any Nodes records; the Nodes table records also have no Cluster links.",
+    "Node Last Seen, Pod Last Restart, Anomaly Detected, and Incident Created timestamps remain historical June 2024 data. Child tables must not be treated as current runtime evidence.",
+    "API Endpoint values and resource counts are reported Airtable metadata only; endpoints have not been independently authenticated or validated."
+  ],
+  "clusters": {
+    "tableId": "tblkCeiGBpVuHgpvy",
+    "recordCount": 20,
+    "records": [
+      {
+        "sourceRecordId": "rec4R7Hj5aHASMTXd",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "dev-01",
+        "environment": "Development",
+        "status": "Active",
+        "reportedEndpoint": "https://api.dev01.k8s.company.com",
+        "nodeCount": 3,
+        "podCount": 55,
+        "cpuUsagePercent": 35,
+        "memoryUsageMB": 4096,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-05T09:00:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "rec6dGAXfJZg882WY",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "qa-03",
+        "environment": "QA",
+        "status": "Active",
+        "reportedEndpoint": "https://api.qa03.k8s.company.com",
+        "nodeCount": 4,
+        "podCount": 75,
+        "cpuUsagePercent": 44,
+        "memoryUsageMB": 8192,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-02T09:50:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "rec760FZkfGt2AjEh",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "legacy-dr-01",
+        "environment": "Other",
+        "status": "Retired",
+        "reportedEndpoint": "https://api.legacy01.k8s.company.com",
+        "nodeCount": 0,
+        "podCount": 0,
+        "cpuUsagePercent": 0,
+        "memoryUsageMB": 0,
+        "healthStatus": "Offline",
+        "onboardingDate": "2026-09-15T12:00:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "rec9lUGFnR6nsr1f1",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "staging-04",
+        "environment": "Staging",
+        "status": "Provisioning",
+        "reportedEndpoint": "https://api.stg04.k8s.company.com",
+        "nodeCount": 3,
+        "podCount": 30,
+        "cpuUsagePercent": 22,
+        "memoryUsageMB": 6144,
+        "healthStatus": "Unknown",
+        "onboardingDate": "2026-11-10T07:00:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recJeIPSUsNQO3vFP",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "prod-eu-central-05",
+        "environment": "Production",
+        "status": "Active",
+        "reportedEndpoint": "https://api.prod-euc5.k8s.company.com",
+        "nodeCount": 11,
+        "podCount": 330,
+        "cpuUsagePercent": 67,
+        "memoryUsageMB": 26624,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-09T14:00:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recLZDSz0nw5QLPvo",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "qa-02",
+        "environment": "QA",
+        "status": "Degraded",
+        "reportedEndpoint": "https://api.qa02.k8s.company.com",
+        "nodeCount": 4,
+        "podCount": 80,
+        "cpuUsagePercent": 79,
+        "memoryUsageMB": 8192,
+        "healthStatus": "Warning",
+        "onboardingDate": "2026-11-09T16:10:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recUNTneilKLijNna",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "qa-01",
+        "environment": "QA",
+        "status": "Active",
+        "reportedEndpoint": "https://api.qa01.k8s.company.com",
+        "nodeCount": 5,
+        "podCount": 100,
+        "cpuUsagePercent": 48,
+        "memoryUsageMB": 10240,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-06T10:30:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recV8SNmyrx2eGopC",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "staging-02",
+        "environment": "Staging",
+        "status": "Active",
+        "reportedEndpoint": "https://api.stg02.k8s.company.com",
+        "nodeCount": 5,
+        "podCount": 120,
+        "cpuUsagePercent": 52,
+        "memoryUsageMB": 10240,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-06T13:30:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recVlocTg70qUdIIB",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "prod-eu-west-03",
+        "environment": "Production",
+        "status": "Degraded",
+        "reportedEndpoint": "https://api.prod-euw3.k8s.company.com",
+        "nodeCount": 10,
+        "podCount": 290,
+        "cpuUsagePercent": 88,
+        "memoryUsageMB": 24576,
+        "healthStatus": "Warning",
+        "onboardingDate": "2026-11-10T06:45:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recVyR9IsVqYbI6xT",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "prod-ap-south-04",
+        "environment": "Production",
+        "status": "Active",
+        "reportedEndpoint": "https://api.prod-aps4.k8s.company.com",
+        "nodeCount": 9,
+        "podCount": 240,
+        "cpuUsagePercent": 58,
+        "memoryUsageMB": 20480,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-08T11:20:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recaoetmodshBmjMW",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "staging-03",
+        "environment": "Staging",
+        "status": "Degraded",
+        "reportedEndpoint": "https://api.stg03.k8s.company.com",
+        "nodeCount": 4,
+        "podCount": 95,
+        "cpuUsagePercent": 91,
+        "memoryUsageMB": 8192,
+        "healthStatus": "Critical",
+        "onboardingDate": "2026-11-10T03:15:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recbuNn5R2GO0VC2W",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "prod-us-east-01",
+        "environment": "Production",
+        "status": "Active",
+        "reportedEndpoint": "https://api.prod-use1.k8s.company.com",
+        "nodeCount": 14,
+        "podCount": 420,
+        "cpuUsagePercent": 64,
+        "memoryUsageMB": 32768,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-09T08:30:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "reccPpSOqJn3RTTax",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "perf-test-01",
+        "environment": "Other",
+        "status": "Active",
+        "reportedEndpoint": "https://api.perf01.k8s.company.com",
+        "nodeCount": 8,
+        "podCount": 200,
+        "cpuUsagePercent": 83,
+        "memoryUsageMB": 16384,
+        "healthStatus": "Warning",
+        "onboardingDate": "2026-11-08T07:30:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "reccTBBQqCcON4BDq",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "staging-01",
+        "environment": "Staging",
+        "status": "Active",
+        "reportedEndpoint": "https://api.stg01.k8s.company.com",
+        "nodeCount": 6,
+        "podCount": 140,
+        "cpuUsagePercent": 46,
+        "memoryUsageMB": 12288,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-07T10:00:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recf6UtJSOd4IMwo7",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "dev-02",
+        "environment": "Development",
+        "status": "Active",
+        "reportedEndpoint": "https://api.dev02.k8s.company.com",
+        "nodeCount": 2,
+        "podCount": 40,
+        "cpuUsagePercent": 29,
+        "memoryUsageMB": 4096,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-04T15:40:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recguOx5hSt5q3kBf",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "sandbox-01",
+        "environment": "Other",
+        "status": "Provisioning",
+        "reportedEndpoint": "https://api.sbx01.k8s.company.com",
+        "nodeCount": 1,
+        "podCount": 5,
+        "cpuUsagePercent": 10,
+        "memoryUsageMB": 2048,
+        "healthStatus": "Unknown",
+        "onboardingDate": "2026-11-10T05:00:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recibZicpKqgQQNDV",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "prod-sa-east-06",
+        "environment": "Production",
+        "status": "Active",
+        "reportedEndpoint": "https://api.prod-sae6.k8s.company.com",
+        "nodeCount": 7,
+        "podCount": 210,
+        "cpuUsagePercent": 61,
+        "memoryUsageMB": 16384,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-09T18:25:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "reco1fMAgxtkthNEP",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "prod-us-west-02",
+        "environment": "Production",
+        "status": "Active",
+        "reportedEndpoint": "https://api.prod-usw2.k8s.company.com",
+        "nodeCount": 12,
+        "podCount": 360,
+        "cpuUsagePercent": 71,
+        "memoryUsageMB": 28672,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-09T09:10:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "recrUlKt5h76IyDpm",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "dev-04",
+        "environment": "Development",
+        "status": "Active",
+        "reportedEndpoint": "https://api.dev04.k8s.company.com",
+        "nodeCount": 3,
+        "podCount": 65,
+        "cpuUsagePercent": 41,
+        "memoryUsageMB": 6144,
+        "healthStatus": "Healthy",
+        "onboardingDate": "2026-11-03T08:20:00.000Z",
+        "linkedNodeNames": []
+      },
+      {
+        "sourceRecordId": "rectG2ML1HP1UfSVM",
+        "recordCreatedAt": "2026-11-10T15:36:15.000Z",
+        "clusterName": "dev-03",
+        "environment": "Development",
+        "status": "Inactive",
+        "reportedEndpoint": "https://api.dev03.k8s.company.com",
+        "nodeCount": 2,
+        "podCount": 0,
+        "cpuUsagePercent": 0,
+        "memoryUsageMB": 0,
+        "healthStatus": "Offline",
+        "onboardingDate": "2026-10-28T12:00:00.000Z",
+        "linkedNodeNames": []
+      }
+    ]
+  },
+  "relatedTableFreshness": {
+    "nodes": {
+      "recordCount": 15,
+      "latestRecordCreatedAt": "2026-05-13T20:34:43.000Z",
+      "latestLastSeenAt": "2024-06-10T14:29:00.000Z",
+      "recordsWithClusterLink": 0
+    },
+    "pods": {
+      "recordCount": 15,
+      "latestRecordCreatedAt": "2026-05-13T20:34:43.000Z",
+      "latestLastRestartAt": "2024-06-10T08:15:00.000Z"
+    },
+    "deployments": {
+      "recordCount": 15,
+      "latestRecordCreatedAt": "2026-05-13T20:34:44.000Z",
+      "recordsWithClusterLink": 0
+    },
+    "anomalies": {
+      "recordCount": 15,
+      "latestRecordCreatedAt": "2026-05-13T20:34:46.000Z",
+      "latestDetectedAt": "2024-06-10T14:23:00.000Z"
+    },
+    "incidents": {
+      "recordCount": 15,
+      "latestRecordCreatedAt": "2026-05-13T20:34:48.000Z",
+      "latestCreatedAt": "2024-06-20T17:00:00.000Z"
+    }
+  },
+  "rollup": {
+    "clustersByEnvironment": {
+      "Development": 4,
+      "Other": 3,
+      "Production": 6,
+      "QA": 3,
+      "Staging": 4
+    },
+    "clustersByStatus": {
+      "Active": 13,
+      "Degraded": 3,
+      "Inactive": 1,
+      "Provisioning": 2,
+      "Retired": 1
+    },
+    "clustersByHealth": {
+      "Critical": 1,
+      "Healthy": 12,
+      "Offline": 2,
+      "Unknown": 2,
+      "Warning": 3
+    },
+    "totals": {
+      "clusterRecords": 20,
+      "reportedNodes": 113,
+      "reportedPods": 2855
+    },
+    "production": {
+      "clusters": 6,
+      "reportedNodes": 63,
+      "reportedPods": 1850,
+      "healthy": 5,
+      "degraded": [
+        "prod-eu-west-03"
+      ]
+    },
+    "attention": [
+      {
+        "clusterName": "legacy-dr-01",
+        "environment": "Other",
+        "status": "Retired",
+        "healthStatus": "Offline",
+        "cpuUsagePercent": 0
+      },
+      {
+        "clusterName": "staging-04",
+        "environment": "Staging",
+        "status": "Provisioning",
+        "healthStatus": "Unknown",
+        "cpuUsagePercent": 22
+      },
+      {
+        "clusterName": "qa-02",
+        "environment": "QA",
+        "status": "Degraded",
+        "healthStatus": "Warning",
+        "cpuUsagePercent": 79
+      },
+      {
+        "clusterName": "prod-eu-west-03",
+        "environment": "Production",
+        "status": "Degraded",
+        "healthStatus": "Warning",
+        "cpuUsagePercent": 88
+      },
+      {
+        "clusterName": "staging-03",
+        "environment": "Staging",
+        "status": "Degraded",
+        "healthStatus": "Critical",
+        "cpuUsagePercent": 91
+      },
+      {
+        "clusterName": "perf-test-01",
+        "environment": "Other",
+        "status": "Active",
+        "healthStatus": "Warning",
+        "cpuUsagePercent": 83
+      },
+      {
+        "clusterName": "sandbox-01",
+        "environment": "Other",
+        "status": "Provisioning",
+        "healthStatus": "Unknown",
+        "cpuUsagePercent": 10
+      },
+      {
+        "clusterName": "dev-03",
+        "environment": "Development",
+        "status": "Inactive",
+        "healthStatus": "Offline",
+        "cpuUsagePercent": 0
+      }
+    ],
+    "excludedFromActiveBaseline": [
+      "legacy-dr-01",
+      "staging-04",
+      "sandbox-01",
+      "dev-03"
+    ]
+  }
+}

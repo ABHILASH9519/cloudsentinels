@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import demoDataset from "../../../../sample-data/demo-observability.json";
 import type {
   Alert,
+  AutomationEvent,
   Comment,
   DashboardSummary,
   Incident,
@@ -91,6 +92,19 @@ export function useGetActiveAlerts() {
   });
 }
 
+export function useGetAutomationEvents() {
+  const { actor, isFetching } = useActor();
+  return useQuery<AutomationEvent[]>({
+    queryKey: ["automation", "events"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAutomationEvents();
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 15000,
+  });
+}
+
 export function useGetRecentMetrics(count: bigint) {
   const { actor, isFetching } = useActor();
   return useQuery<MetricPoint[]>({
@@ -150,6 +164,23 @@ export function useUpdateIncidentStatus() {
       qc.invalidateQueries({ queryKey: ["incident", vars.id.toString()] });
       qc.invalidateQueries({ queryKey: ["incidents"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+export function useAnalyzeIncident() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: bigint) => {
+      if (!actor) throw new Error("No actor");
+      return actor.analyzeIncident(id);
+    },
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["incident", id.toString()] });
+      qc.invalidateQueries({ queryKey: ["incidents"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["automation", "events"] });
     },
   });
 }

@@ -137,7 +137,14 @@ export async function completeSignIn() {
       return null;
     }
   })();
-  if (!idPayload || idPayload.nonce !== expectedNonce) {
+  if (
+    !idPayload ||
+    idPayload.nonce !== expectedNonce ||
+    typeof tokenSet.access_token !== "string" ||
+    typeof tokenSet.id_token !== "string" ||
+    typeof tokenSet.expires_in !== "number" ||
+    tokenSet.expires_in <= 0
+  ) {
     throw new Error(
       "Cognito ID-token nonce validation failed. Please sign in again.",
     );
@@ -197,8 +204,11 @@ export function decodeIdToken(): Record<string, unknown> | null {
   const token = getTokens()?.id_token;
   if (!token) return null;
   try {
-    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(atob(payload)) as Record<string, unknown>;
+    const segment = token.split(".")[1];
+    if (!segment) return null;
+    const payload = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
   } catch {
     return null;
   }

@@ -16,6 +16,15 @@ Parameters:
     Type: String
   UserPoolClientId:
     Type: String
+  ClusterAgentSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional Secrets Manager JSON map of cluster IDs to ownerId, clusterName, and signingSecret.
+  BedrockModelId:
+    Type: String
+    Default: in.anthropic.claude-sonnet-5
+    AllowedValues: [in.anthropic.claude-sonnet-5]
+    Description: India-geographic Amazon Bedrock inference profile used for user-triggered incident analysis.
   StageName:
     Type: String
     Default: v1
@@ -35,15 +44,27 @@ Parameters:
     Type: String
     Default: "false"
     AllowedValues: ["true", "false"]
-    Description: Must be explicitly enabled together with an adapter ARN before commands are dispatched.
+    Description: Must be explicitly enabled together with an adapter before commands are dispatched.
+  UseBuiltInDryRunAdapter:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Use the built-in non-mutating adapter for safe approval-pipeline tests.
 
 Conditions:
   HasZapierWebhookSecret: !Not [!Equals [!Ref ZapierWebhookSecretArn, ""]]
   HasZapierCommandSecret: !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
+  HasClusterAgentSecret: !Not [!Equals [!Ref ClusterAgentSecretArn, ""]]
+  UseBuiltInDryRunAdapterActive: !And
+    - !Equals [!Ref UseBuiltInDryRunAdapter, "true"]
+    - !Equals [!Ref RemediationExecutionEnabled, "true"]
+    - !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
   CanExecuteRemediation: !And
     - !Equals [!Ref RemediationExecutionEnabled, "true"]
-    - !Not [!Equals [!Ref RemediationAdapterFunctionArn, ""]]
     - !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
+    - !Or
+      - !Not [!Equals [!Ref RemediationAdapterFunctionArn, ""]]
+      - !Equals [!Ref UseBuiltInDryRunAdapter, "true"]
 
 Globals:
   Function:
@@ -130,19 +151,7 @@ Resources:
         source:
           - cloudsentinels.api
           - cloudsentinels.cluster-agent
-        detail-type:
-          - IncidentCreated
-          - IncidentUpdated
-          - IncidentDeleted
-          - AlertCreated
-          - AlertUpdated
-          - MetricRecorded
-          - PodCrashLoopBackOff
-          - NodeNotReady
-          - CpuThresholdExceeded
-          - MemoryPressure
-          - DeploymentUnhealthy
-          - ApiLatencyHigh
+          - cloudsentinels.local-agent
       Targets:
         - Id: AutomationEventsQueueTarget
           Arn: !GetAtt AutomationEventsQueue.Arn
@@ -285,7 +294,7 @@ Resources:
     Condition: HasZapierCommandSecret
     Properties:
       QueueName: cloudsentinels-remediation-commands
-      VisibilityTimeout: 120
+      VisibilityTimeout: 720
       MessageRetentionPeriod: 345600
       SqsManagedSseEnabled: true
       RedrivePolicy:
@@ -356,6 +365,8 @@ Resources:
       Environment:
         Variables:
           ZAPIER_COMMAND_SECRET_ARN: !Ref ZapierCommandSecretArn
+          REMEDIATION_EXECUTION_ENABLED: !Ref RemediationExecutionEnabled
+          REMEDIATION_ADAPTER_FUNCTION_ARN: !If [UseBuiltInDryRunAdapterActive, !GetAtt DryRunAdapter.Arn, !Ref RemediationAdapterFunctionArn]
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApplicationTableName
@@ -375,17 +386,26 @@ Resources:
             Path: /automation/commands
             Method: POST
 
+  DryRunAdapter:
+    Type: AWS::Serverless::Function
+    Condition: UseBuiltInDryRunAdapterActive
+    Properties:
+      CodeUri: remediation-adapter/
+      Handler: index.handler
+      Timeout: 5
+      MemorySize: 128
+
   RemediationCommandWorker:
     Type: AWS::Serverless::Function
     Condition: CanExecuteRemediation
     Properties:
       CodeUri: remediation-worker/
       Handler: index.handler
-      Timeout: 30
-      MemorySize: 256
+      Timeout: 120
+      MemorySize: 512
       Environment:
         Variables:
-          REMEDIATION_ADAPTER_FUNCTION_ARN: !Ref RemediationAdapterFunctionArn
+          REMEDIATION_ADAPTER_FUNCTION_ARN: !If [UseBuiltInDryRunAdapterActive, !GetAtt DryRunAdapter.Arn, !Ref RemediationAdapterFunctionArn]
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApplicationTableName
@@ -394,7 +414,7 @@ Resources:
             - Effect: Allow
               Action:
                 - lambda:InvokeFunction
-              Resource: !Ref RemediationAdapterFunctionArn
+              Resource: !If [UseBuiltInDryRunAdapterActive, !GetAtt DryRunAdapter.Arn, !Ref RemediationAdapterFunctionArn]
       Events:
         ApprovedRemediationCommands:
           Type: SQS
@@ -410,11 +430,35 @@ Resources:
     Properties:
       CodeUri: function/
       Handler: index.handler
+      Timeout: 29
+      MemorySize: 512
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApplicationTableName
         - EventBridgePutEventsPolicy:
             EventBusName: !Ref CloudSentinelsEventBus
+        - !If
+          - HasClusterAgentSecret
+          - Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref ClusterAgentSecretArn
+          - !Ref AWS::NoValue
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
+                - !Sub "arn:${AWS::Partition}:bedrock:ap-south-1::foundation-model/anthropic.claude-sonnet-5"
+                - !Sub "arn:${AWS::Partition}:bedrock:ap-south-2::foundation-model/anthropic.claude-sonnet-5"
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          CLUSTER_AGENT_SECRET_ARN: !Ref ClusterAgentSecretArn
       Events:
         Health:
           Type: HttpApi
@@ -454,6 +498,14 @@ Resources:
             Method: ANY
             Auth:
               Authorizer: CognitoJwtAuthorizer
+        IncidentAnalyze:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /incidents/{id}/analyze
+            Method: POST
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
         Alerts:
           Type: HttpApi
           Properties:
@@ -478,6 +530,23 @@ Resources:
             Method: ANY
             Auth:
               Authorizer: CognitoJwtAuthorizer
+
+        AutomationEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /automation/events
+            Method: GET
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+        ClusterTelemetry:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /telemetry/events
+            Method: POST
+            Auth:
+              Authorizer: NONE
         Comments:
           Type: HttpApi
           Properties:
@@ -623,6 +692,81 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
 
+  AutomationQueueOldestMessageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-automation-queue-oldest-message-age
+      AlarmDescription: Automation events are waiting longer than the target processing window.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AutomationEventsQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 60
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ZapierRelayProcessingDeadLetterQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasZapierWebhookSecret
+    Properties:
+      AlarmName: cloudsentinels-zapier-processing-dlq-visible-messages
+      AlarmDescription: One or more Zapier relay messages exhausted processing retries.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ZapierRelayProcessingDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  RemediationCommandsDeadLetterQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasZapierCommandSecret
+    Properties:
+      AlarmName: cloudsentinels-remediation-commands-dlq-visible-messages
+      AlarmDescription: One or more approved remediation commands exhausted processing retries.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt RemediationCommandsDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  RemediationCommandWorkerErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CanExecuteRemediation
+    Properties:
+      AlarmName: cloudsentinels-remediation-worker-errors
+      AlarmDescription: The approved remediation command worker reported one or more invocation errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref RemediationCommandWorker
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
   ZapierDeliveryDeadLetterQueueAlarm:
     Type: AWS::CloudWatch::Alarm
     Condition: HasZapierWebhookSecret
@@ -680,6 +824,9 @@ Outputs:
   RemediationCommandWorkerFunctionName:
     Condition: CanExecuteRemediation
     Value: !Ref RemediationCommandWorker
+  RemediationAdapterArn:
+    Condition: CanExecuteRemediation
+    Value: !If [UseBuiltInDryRunAdapterActive, !GetAtt DryRunAdapter.Arn, !Ref RemediationAdapterFunctionArn]
   ZapierRelayDeliveryDlqUrl:
     Condition: HasZapierWebhookSecret
     Value: !Ref ZapierRelayDeliveryDeadLetterQueue

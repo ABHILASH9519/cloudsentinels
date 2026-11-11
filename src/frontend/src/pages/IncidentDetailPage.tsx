@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { SeverityBadge } from "../components/SeverityBadge";
 import {
   useAddComment,
+  useAnalyzeIncident,
   useDeleteIncident,
   useGetComments,
   useGetIncident,
@@ -54,6 +55,7 @@ export function IncidentDetailPage() {
   const { data: comments } = useGetComments(incidentId);
   const updateStatus = useUpdateIncidentStatus();
   const updateAI = useUpdateIncidentAIFields();
+  const analyzeIncident = useAnalyzeIncident();
   const deleteIncident = useDeleteIncident();
   const addComment = useAddComment();
 
@@ -91,6 +93,15 @@ export function IncidentDetailPage() {
       toast.success("Status updated");
     } catch {
       toast.error("Failed to update status");
+    }
+  };
+
+  const handleAIAnalyze = async () => {
+    try {
+      await analyzeIncident.mutateAsync(incidentId);
+      toast.success("Amazon Bedrock analysis completed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "AI analysis failed");
     }
   };
 
@@ -274,6 +285,32 @@ export function IncidentDetailPage() {
 
         {/* AI Analysis */}
         <TabsContent value="ai" className="mt-4 space-y-4">
+          <Card className="bg-card border-border">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">AI incident analysis</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Generate evidence-based summary, likely cause, and safe next steps with Amazon Bedrock.
+                </p>
+              </div>
+              <Button
+                onClick={handleAIAnalyze}
+                disabled={analyzeIncident.isPending}
+                data-ocid="incident_detail.ai.generate_button"
+                className="shrink-0 bg-primary/90 hover:bg-primary text-primary-foreground"
+              >
+                {analyzeIncident.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Brain className="mr-2 h-4 w-4" />
+                )}
+                Generate analysis
+              </Button>
+            </CardContent>
+          </Card>
+          <p className="text-[11px] text-muted-foreground">
+            The incident title, source, severity, and a redacted log excerpt are sent to the configured India-region Bedrock inference profile. Each generation may incur AWS model charges. Suggestions do not execute remediation.
+          </p>
           {incident.aiSummary && (
             <Card className="bg-card border-border">
               <CardHeader className="pb-2">

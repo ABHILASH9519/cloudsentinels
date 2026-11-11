@@ -36,6 +36,7 @@ import {
   useAddAlert,
   useAddMetric,
   useGetActiveAlerts,
+  useGetAutomationEvents,
   useGetRecentMetrics,
   useImportDemoData,
   useUpdateAlertStatus,
@@ -46,6 +47,11 @@ const LINE_COLORS = ["#22d3ee", "#10b981", "#f59e0b", "#ef4444", "#a855f7"];
 export function MonitoringPage() {
   const { data: alerts, isLoading: alertsLoading } = useGetActiveAlerts();
   const { data: metrics, isLoading: metricsLoading } = useGetRecentMetrics(50n);
+  const {
+    data: automationEvents,
+    isLoading: automationLoading,
+    isError: automationError,
+  } = useGetAutomationEvents();
   const addAlert = useAddAlert();
   const addMetric = useAddMetric();
   const updateAlertStatus = useUpdateAlertStatus();
@@ -481,6 +487,75 @@ export function MonitoringPage() {
                 ))}
               </LineChart>
             </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Automation activity */}
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between gap-3 text-sm font-medium text-muted-foreground">
+            <span>Automation activity</span>
+            <span className="font-mono text-[10px] text-cyan-300">
+              {automationEvents?.length ?? 0} RECENT EVENTS
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {automationLoading ? (
+            <div className="space-y-2" data-ocid="monitoring.automation.loading_state">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16" />)}
+            </div>
+          ) : automationError ? (
+            <div className="py-8 text-center text-sm text-rose-300" role="alert">
+              Automation activity could not be loaded. Check the API connection and retry after the runtime is updated.
+            </div>
+          ) : !automationEvents || automationEvents.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground" data-ocid="monitoring.automation.empty_state">
+              No automation events yet. New incidents and alerts will appear here after the automation processor is running.
+            </div>
+          ) : (
+            <div className="space-y-2" data-ocid="monitoring.automation.list">
+              {automationEvents.map((event, index) => (
+                <div
+                  key={event.id}
+                  data-ocid={`monitoring.automation.item.${index + 1}`}
+                  className="flex flex-col gap-2 rounded-md border border-border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-xs text-foreground">{event.eventType}</span>
+                      <StatusBadge status={event.status} />
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {event.risk} risk
+                      </span>
+                      {event.requiresApproval && (
+                        <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-300">
+                          Approval required
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">{event.reason}</p>
+                    {event.clusterName && (
+                      <p className="text-[10px] font-mono text-muted-foreground">
+                        cluster · {event.clusterName}
+                      </p>
+                    )}
+                    {event.recommendedAction && (
+                      <p className="text-[11px] text-cyan-200">
+                        Recommended: {event.recommendedAction}
+                        {event.clusterName ? ` · ${event.clusterName}` : ""}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
+                    <span>{event.recoveryVerified ? "Recovery verified" : "Not yet verified"}</span>
+                    <span>·</span>
+                    <time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString()}</time>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

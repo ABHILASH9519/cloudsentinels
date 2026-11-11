@@ -14,11 +14,16 @@ const originalDbSend = DynamoDBDocumentClient.prototype.send;
 const originalFetch = globalThis.fetch;
 let fetchResponse;
 let requests = [];
+let requestedKey;
 const eventRecords = new Map();
 
 function storeEvent(eventId, attributes = {}) {
-  eventRecords.set(`EVENT#${eventId}`, {
+  const eventTime = attributes.eventTime ?? "2026-11-10T10:00:00.000Z";
+  const ownerId = attributes.ownerId ?? "user-123";
+  eventRecords.set(`AUTOMATION#${eventTime}#${eventId}`, {
     id: eventId,
+    ownerId,
+    eventTime,
     risk: "informational",
     requiresApproval: false,
     ...attributes,
@@ -35,6 +40,7 @@ SecretsManagerClient.prototype.send = async function () {
 };
 
 DynamoDBDocumentClient.prototype.send = async function (command) {
+  requestedKey = command.input.Key;
   return { Item: eventRecords.get(command.input.Key.SK) };
 };
 
@@ -45,6 +51,7 @@ globalThis.fetch = async (url, options) => {
 
 test.beforeEach(() => {
   requests = [];
+  requestedKey = undefined;
   eventRecords.clear();
   fetchResponse = { ok: true, status: 200 };
 });
@@ -66,6 +73,7 @@ test("forwards allow-listed event fields and signs the exact request body", asyn
         time: "2026-11-10T10:00:00.000Z",
         "detail-type": "IncidentCreated",
         detail: {
+          userId: "user-123",
           severity: "high",
           incidentId: "incident-9",
           clusterName: "demo",
@@ -83,7 +91,15 @@ test("forwards allow-listed event fields and signs the exact request body", asyn
   const payload = JSON.parse(options.body);
   assert.equal(payload.eventId, "event-1");
   assert.equal(payload.eventType, "IncidentCreated");
+  assert.equal(payload.ownerId, "user-123");
+  assert.equal(payload.eventTime, "2026-11-10T10:00:00.000Z");
+  assert.deepEqual(requestedKey, {
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-1",
+  });
   assert.equal(payload.severity, "high");
+  assert.equal(payload.incidentId, "incident-9");
+  assert.equal(payload.resourceId, undefined);
   assert.equal("secret" in payload, false);
   assert.equal("accessToken" in payload, false);
 
@@ -157,8 +173,9 @@ test("adds the configured high-risk action and approval requirement for Zapier",
       body: JSON.stringify({
         id: "event-node-1",
         source: "cloudsentinels.cluster-agent",
+        time: "2026-11-10T10:00:00.000Z",
         "detail-type": "NodeNotReady",
-        detail: { clusterName: "staging-cluster" },
+        detail: { userId: "user-123", clusterName: "staging-cluster" },
       }),
     }],
   });
@@ -182,8 +199,9 @@ test("marks low-risk policy actions as eligible for automatic Zapier filtering",
       body: JSON.stringify({
         id: "event-pod-1",
         source: "cloudsentinels.cluster-agent",
+        time: "2026-11-10T10:00:00.000Z",
         "detail-type": "PodCrashLoopBackOff",
-        detail: { clusterArn: "arn:aws:eks:ap-south-1:123456789012:cluster/staging-cluster" },
+        detail: { userId: "user-123", clusterArn: "arn:aws:eks:ap-south-1:123456789012:cluster/staging-cluster" },
       }),
     }],
   });
@@ -202,8 +220,9 @@ test("retries instead of notifying Zapier before the processor persists the even
       body: JSON.stringify({
         id: "event-not-ready",
         source: "cloudsentinels.cluster-agent",
+        time: "2026-11-10T10:00:00.000Z",
         "detail-type": "NodeNotReady",
-        detail: { clusterName: "staging-cluster" },
+        detail: { userId: "user-123", clusterName: "staging-cluster" },
       }),
     }],
   });

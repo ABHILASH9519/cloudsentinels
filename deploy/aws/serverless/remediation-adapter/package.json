@@ -1,0 +1,8 @@
+{
+  "name": "cloudsentinels-remediation-dry-run-adapter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

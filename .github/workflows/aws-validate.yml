@@ -1,13 +1,21 @@
 name: AWS architecture checks
 on:
   push:
-    branches: [feat/aws-native-architecture, feat/n8n-event-automation, feat/acceptance-observability-oidc]
+    branches: [feat/aws-native-architecture, feat/n8n-event-automation, feat/acceptance-observability-oidc, feat/four-layer-self-healing-architecture]
   pull_request:
-    branches: [main]
+    branches: [main, feat/n8n-event-automation]
     paths:
       - "deploy/aws/serverless/**"
       - "deploy/automation/**"
+      - "deploy/kubernetes/**"
+      - "deploy/agent/**"
+      - "docs/architecture/**"
+      - "docs/integrations/**"
       - "src/frontend/src/aws/**"
+      - "src/frontend/src/hooks/**"
+      - "src/frontend/src/pages/**"
+      - "src/frontend/src/backend.d.ts"
+      - "src/frontend/src/index.css"
       - "src/frontend/src/App.tsx"
       - "src/frontend/src/main.tsx"
       - "src/frontend/src/hooks/useActor.ts"
@@ -24,6 +32,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Test read-only cluster telemetry agent
+        run: python3 -m unittest discover -s deploy/agent -p 'test_*.py'
       - name: Validate SAM template
         run: sam validate --lint --template-file deploy/aws/serverless/runtime-template.yaml
       - name: Build SAM functions and install per-function dependencies
@@ -37,6 +47,12 @@ jobs:
           node --check deploy/aws/serverless/zapier-relay/index.js
           node --check deploy/aws/serverless/zapier-command/index.js
           node --check deploy/aws/serverless/remediation-worker/index.js
+          node --check deploy/aws/serverless/remediation-adapter/index.js
+      - name: Run dry-run remediation adapter tests
+        working-directory: deploy/aws/serverless/remediation-adapter
+        run: |
+          npm install --no-audit --no-fund
+          npm test
       - name: Run remediation worker tests
         working-directory: deploy/aws/serverless/remediation-worker
         run: |
