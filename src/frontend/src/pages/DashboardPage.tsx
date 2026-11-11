@@ -24,8 +24,20 @@ import { useDashboardSummary, useGetActiveAlerts } from "../hooks/useQueries";
 const PIE_COLORS = ["#22d3ee", "#f59e0b", "#10b981", "#ef4444", "#a855f7"];
 
 export function DashboardPage() {
-  const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
-  const { data: activeAlerts, isLoading: alertsLoading } = useGetActiveAlerts();
+  const {
+    data: summary,
+    isLoading: summaryLoading,
+    isError: summaryError,
+    error: summaryFailure,
+    refetch: refetchSummary,
+  } = useDashboardSummary();
+  const {
+    data: activeAlerts,
+    isLoading: alertsLoading,
+    isError: alertsError,
+    error: alertsFailure,
+    refetch: refetchAlerts,
+  } = useGetActiveAlerts();
 
   const totalIncidents =
     summary?.incidentsByStatus?.reduce((a, [, v]) => a + Number(v), 0) ?? 0;
@@ -89,6 +101,20 @@ export function DashboardPage() {
         </div>
       </section>
 
+      {summaryError && (
+        <div role="alert" className="flex flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-destructive">Dashboard data could not be loaded</p>
+            <p className="mt-1 break-words text-xs text-muted-foreground">
+              {summaryFailure instanceof Error ? summaryFailure.message : "The API request failed. Check your connection and try again."}
+            </p>
+          </div>
+          <button type="button" className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted" onClick={() => void refetchSummary()}>
+            Retry dashboard
+          </button>
+        </div>
+      )}
+
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
@@ -102,6 +128,8 @@ export function DashboardPage() {
               </div>
               {summaryLoading ? (
                 <Skeleton className="h-8 w-16" />
+              ) : summaryError ? (
+                <div className="text-sm font-semibold text-destructive">Unavailable</div>
               ) : (
                 <div className={`text-3xl font-display font-700 ${stat.color}`}>
                   {stat.value}
@@ -123,9 +151,13 @@ export function DashboardPage() {
           <CardContent>
             {summaryLoading ? (
               <Skeleton className="h-48" />
+            ) : summaryError ? (
+              <div className="h-48 flex items-center justify-center text-destructive text-sm">
+                Status data unavailable
+              </div>
             ) : statusChartData.length === 0 ? (
               <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                No data yet
+                No incidents recorded yet
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={180}>
@@ -172,9 +204,13 @@ export function DashboardPage() {
           <CardContent>
             {summaryLoading ? (
               <Skeleton className="h-48" />
+            ) : summaryError ? (
+              <div className="h-48 flex items-center justify-center text-destructive text-sm">
+                Severity data unavailable
+              </div>
             ) : severityChartData.length === 0 ? (
               <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                No data yet
+                No incidents recorded yet
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={180}>
@@ -228,6 +264,18 @@ export function DashboardPage() {
               {["a", "b", "c"].map((k) => (
                 <Skeleton key={k} className="h-10" />
               ))}
+            </div>
+          ) : alertsError ? (
+            <div role="alert" className="flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-destructive">Alerts could not be loaded</p>
+                <p className="mt-1 break-words text-xs text-muted-foreground">
+                  {alertsFailure instanceof Error ? alertsFailure.message : "The alerts API request failed."}
+                </p>
+              </div>
+              <button type="button" className="shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted" onClick={() => void refetchAlerts()}>
+                Retry alerts
+              </button>
             </div>
           ) : !activeAlerts || activeAlerts.length === 0 ? (
             <div
