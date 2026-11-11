@@ -21,14 +21,13 @@ flowchart TD
   F -->|High risk| G[Pending human approval]
   F -->|No target / unknown| H[Blocked or observed]
   F -->|Eligible action| G[Pending approval or policy gate]
-  D -. selected, sanitized event .-> J[Outbound integration relay - planned]
+  D -. selected, sanitized event .-> J[Optional sanitized outbound relay]
   J --> K[Zapier Catch Hook]
   K --> L[Filter / Paths]
   L --> M[Slack or Microsoft Teams]
   L --> N[Jira / Linear ticket]
   L --> O[Email escalation]
-  L --> P[Human approval step]
-  G --> P[Human approval or approved low-risk policy]
+  L --> P[Human approval or approved low-risk policy]
   P --> Q[Signed POST /automation/commands]
   Q --> R[Remediation command SQS]
   R --> S[Policy-gated remediation worker]
@@ -57,16 +56,18 @@ The relay sends only the following allow-listed fields (unknown fields are dropp
 ```json
 {
   "schemaVersion": "1",
-  "eventId": "evt_01J...",
+  "eventId": "<EventBridge event id>",
   "ownerId": "<opaque-cognito-sub>",
   "eventTime": "2026-11-10T08:00:00.000Z",
-  "eventType": "automation.state_changed",
+  "eventType": "PodCrashLoopBackOff",
+  "source": "cloudsentinels.api",
   "occurredAt": "2026-11-10T08:00:00.000Z",
-  "severity": "critical",
-  "incidentId": "inc_...",
-  "clusterRef": "cluster-prod-01",
-  "status": "PENDING_APPROVAL",
-  "recommendedAction": "rollback-deployment",
+  "severity": "high",
+  "resourceId": "<alert-id>",
+  "clusterRef": "demo-cluster",
+  "status": "PENDING_CLUSTER_ADAPTER",
+  "risk": "high",
+  "recommendedAction": "inspect-workload-and-rollback-if-approved",
   "requiresApproval": true,
   "recoveryVerified": false
 }
