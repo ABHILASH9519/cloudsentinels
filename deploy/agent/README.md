@@ -44,8 +44,8 @@ Requirements: Python 3.10+, `kubectl`, a working kubeconfig with permission to l
 export CLOUDSENTINELS_API_URL="https://<api-id>.execute-api.ap-south-1.amazonaws.com/v1"
 export CLOUDSENTINELS_CLUSTER_ID="demo-cluster"
 export CLOUDSENTINELS_SIGNING_SECRET="<secret-from-secrets-manager>"
-python3 deploy/agent/cluster-agent.py --once
-python3 deploy/agent/cluster-agent.py
+python3 deploy/agent/cluster_agent.py --once
+python3 deploy/agent/cluster_agent.py
 ```
 
 The collector polls every 30 seconds by default. It keeps a SQLite retry spool locally and remembers acknowledged event IDs for 30 days. Set `POLL_INTERVAL_SECONDS` or use `--poll-interval` to change the interval. Use `--spool` to choose the local database path.
