@@ -510,6 +510,10 @@ export async function handler(event) {
       }
       const incident = await getItem(userId, "INCIDENT", id);
       if (!incident) return response(404, { error: "Incident not found." });
+      const lastAnalysisAt = Date.parse(incident.aiAnalyzedAt ?? "");
+      if (Number.isFinite(lastAnalysisAt) && Date.now() - lastAnalysisAt < 30_000) {
+        return response(429, { error: "Please wait 30 seconds before generating another analysis for this incident." });
+      }
       let analysis;
       try {
         analysis = await generateIncidentAnalysis(incident);
