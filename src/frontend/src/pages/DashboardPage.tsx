@@ -130,12 +130,12 @@ export function DashboardPage() {
             <h1>Mission control<span>.</span></h1>
             <p>One view of your infrastructure signals, incidents, and response activity.</p>
           </div>
-          <div className={apiStateClass} role="status" aria-live="polite">
+          <output className={apiStateClass} aria-live="polite">
             <span className="dashboard-state-dot" />
             <span>{apiState}</span>
             <span className="dashboard-state-divider" />
             <span className="dashboard-state-meta">AWS CONTROL PLANE</span>
-          </div>
+          </output>
         </section>
 
         <section className="dashboard-orbit-panel">
