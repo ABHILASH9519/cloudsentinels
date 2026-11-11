@@ -90,8 +90,15 @@ function parseBody(event) {
   const raw = rawBody(event);
   if (!raw) return {};
   try {
-    return JSON.parse(raw);
-  } catch {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      const error = new Error("Request body must be a JSON object.");
+      error.statusCode = 400;
+      throw error;
+    }
+    return parsed;
+  } catch (parseError) {
+    if (Number(parseError?.statusCode) === 400) throw parseError;
     const error = new Error("Request body must be valid JSON.");
     error.statusCode = 400;
     throw error;
@@ -213,6 +220,18 @@ const clusterEventTypes = new Set([
   "ApiLatencyHigh",
 ]);
 const allowedSeverities = new Set(["critical", "high", "medium", "low"]);
+const incidentStatuses = new Set(["open", "in_progress", "resolved"]);
+const alertStatuses = new Set(["active", "acknowledged", "resolved"]);
+
+function cleanSeverity(value) {
+  const severity = cleanText(value, "severity", 20, true).trim().toLowerCase();
+  if (!allowedSeverities.has(severity)) {
+    const error = new Error("severity must be critical, high, medium, or low.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return severity;
+}
 
 async function handleClusterTelemetry(event) {
   if (!process.env.CLUSTER_AGENT_SECRET_ARN) {
@@ -377,13 +396,38 @@ async function getItem(userId, type, id) {
   return result.Item ?? null;
 }
 
-async function updateItem(userId, type, id, body) {
+async function updateItem(userId, type, id, body, { system = false } = {}) {
   const current = await getItem(userId, type, id);
   if (!current) return null;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    const error = new Error("Request body must be a JSON object.");
+    error.statusCode = 400;
+    throw error;
+  }
   const allowed = type === "INCIDENT"
-    ? ["status", "aiSummary", "rootCause", "suggestedFix", "assignee", "title", "severity", "aiAnalyzedAt", "aiModelId"]
+    ? ["status", "aiSummary", "rootCause", "suggestedFix", "assignee", "title", "severity"]
     : ["status"];
+  if (system && type === "INCIDENT") allowed.push("aiAnalyzedAt", "aiModelId");
   const patch = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
+  if (Object.keys(patch).length === 0) {
+    const error = new Error("No supported fields were provided for update.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (patch.status !== undefined) {
+    const statuses = type === "INCIDENT" ? incidentStatuses : alertStatuses;
+    if (typeof patch.status !== "string" || !statuses.has(patch.status)) {
+      const error = new Error("status is not valid for this resource.");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+  if (patch.severity !== undefined) patch.severity = cleanSeverity(patch.severity);
+  if (patch.title !== undefined) patch.title = cleanText(patch.title, "title", 200, true);
+  if (patch.assignee !== undefined) patch.assignee = cleanText(patch.assignee, "assignee", 120);
+  for (const field of ["aiSummary", "rootCause", "suggestedFix"]) {
+    if (patch[field] !== undefined) patch[field] = cleanText(patch[field], field, 5000);
+  }
   const names = { "#updatedAt": "updatedAt" };
   const values = { ":updatedAt": new Date().toISOString() };
   const sets = ["#updatedAt = :updatedAt"];
@@ -486,7 +530,7 @@ export async function handler(event) {
         ...analysis,
         aiAnalyzedAt: new Date().toISOString(),
         aiModelId: process.env.BEDROCK_MODEL_ID,
-      });
+      }, { system: true });
       await publishDomainEvent("IncidentAIAnalyzed", userId, { id: updated.id, severity: updated.severity });
       return response(200, updated);
     }
@@ -496,7 +540,7 @@ export async function handler(event) {
       if (method === "POST") {
         const item = await createItem(userId, "INCIDENT", {
           title: cleanText(body.title, "title", 200, true),
-          severity: cleanText(body.severity, "severity", 20, true),
+          severity: cleanSeverity(body.severity),
           status: "open",
           source: cleanText(body.source ?? "", "source", 100),
           rawLog: cleanText(body.rawLog ?? "", "rawLog", 20000),
