@@ -44,7 +44,12 @@ Parameters:
     Type: String
     Default: "false"
     AllowedValues: ["true", "false"]
-    Description: Must be explicitly enabled together with an adapter ARN before commands are dispatched.
+    Description: Must be explicitly enabled together with an adapter before commands are dispatched.
+  UseBuiltInDryRunAdapter:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Use the built-in non-mutating adapter for safe approval-pipeline tests.
 
 Conditions:
   HasZapierWebhookSecret: !Not [!Equals [!Ref ZapierWebhookSecretArn, ""]]
