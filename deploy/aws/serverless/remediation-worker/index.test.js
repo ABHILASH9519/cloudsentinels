@@ -13,6 +13,7 @@ let eventRecord;
 let invocations;
 let updates;
 let adapterResponse;
+let requestedKey;
 
 function resetState() {
   eventRecord = {
@@ -29,6 +30,7 @@ function resetState() {
   };
   invocations = [];
   updates = [];
+  requestedKey = undefined;
   adapterResponse = {
     accepted: true,
     executionId: "execution-123",
@@ -37,7 +39,10 @@ function resetState() {
 }
 
 DynamoDBDocumentClient.prototype.send = async function (command) {
-  if (command.constructor.name === "GetCommand") return { Item: eventRecord };
+  if (command.constructor.name === "GetCommand") {
+    requestedKey = command.input.Key;
+    return { Item: eventRecord };
+  }
   if (command.constructor.name === "UpdateCommand") {
     updates.push(command.input);
     const values = command.input.ExpressionAttributeValues;
@@ -95,6 +100,10 @@ test("dispatches an approved command to the configured adapter", async () => {
 
   assert.deepEqual(result, { batchItemFailures: [] });
   assert.equal(invocations.length, 1);
+  assert.deepEqual(requestedKey, {
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-123",
+  });
   assert.equal(invocations[0].FunctionName, process.env.REMEDIATION_ADAPTER_FUNCTION_ARN);
   assert.equal(updates.length, 2);
   assert.equal(eventRecord.status, "ACTION_SUBMITTED_UNVERIFIED");
