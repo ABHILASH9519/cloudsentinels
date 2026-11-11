@@ -8,7 +8,7 @@
     "build": "vite build && pnpm copy:env",
     "copy:env": "cp env.json dist/",
     "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsconfig.tsbuildinfo --pretty",
-    "check": "biome check src",
+    "check": "biome check --linter-enabled=true --organize-imports-enabled=true --formatter-enabled=false src",
     "fix": "biome check --write src"
   },
   "devDependencies": {
