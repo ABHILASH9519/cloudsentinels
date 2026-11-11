@@ -82,3 +82,26 @@ test("keeps incident creation successful when EventBridge accepts the event", as
   assert.equal(result.statusCode, 201);
   assert.equal(JSON.parse(result.body).title, "Test incident");
 });
+
+test("lists automation activity only from the authenticated user's partition", async (t) => {
+  let queryInput;
+  DynamoDBDocumentClient.prototype.send = async (command) => {
+    queryInput = command.input;
+    return { Items: [{ id: "evt-1", eventType: "IncidentCreated", status: "OBSERVED" }] };
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalDbSend; });
+
+  const result = await handler({
+    rawPath: "/v1/automation/events",
+    requestContext: {
+      http: { method: "GET" },
+      authorizer: { jwt: { claims: { sub: "cognito-user-42" } } },
+    },
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(queryInput.ExpressionAttributeValues[":pk"], "USER#cognito-user-42");
+  assert.equal(queryInput.ExpressionAttributeValues[":prefix"], "AUTOMATION#");
+  assert.equal(queryInput.Limit, 100);
+  assert.equal(JSON.parse(result.body)[0].id, "evt-1");
+});
