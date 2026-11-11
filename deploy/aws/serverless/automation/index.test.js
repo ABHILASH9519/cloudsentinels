@@ -300,3 +300,37 @@ test("blocks disabled registry records that are missing required metadata", asyn
   assert.equal(result.recommendedAction, null);
   assert.equal(result.requiresApproval, true);
 });
+
+test("stores API-originated automation events in the owner's partition", async (t) => {
+  const originalSend = DynamoDBDocumentClient.prototype.send;
+  let storedItem;
+  DynamoDBDocumentClient.prototype.send = async function (command) {
+    if (command.constructor.name === "QueryCommand") return { Items: [] };
+    storedItem = command.input.Item;
+    return {};
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalSend; });
+
+  const response = await handler({
+    Records: [{
+      messageId: "owner-event",
+      body: JSON.stringify({
+        id: "event-owned-123",
+        source: "cloudsentinels.api",
+        "detail-type": "IncidentCreated",
+        time: "2026-11-11T10:00:00.000Z",
+        detail: {
+          userId: "cognito-user-42",
+          resource: { id: "incident-7", severity: "high" },
+        },
+      }),
+    }],
+  });
+
+  assert.deepEqual(response, { batchItemFailures: [] });
+  assert.equal(storedItem.PK, "USER#cognito-user-42");
+  assert.equal(storedItem.ownerId, "cognito-user-42");
+  assert.match(storedItem.SK, /^AUTOMATION#2026-11-11T10:00:00\.000Z#event-owned-123$/);
+  assert.equal(storedItem.resourceId, "incident-7");
+  assert.equal(storedItem.severity, "high");
+});
