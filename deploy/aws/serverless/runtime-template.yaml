@@ -355,7 +355,7 @@ Resources:
         Variables:
           ZAPIER_COMMAND_SECRET_ARN: !Ref ZapierCommandSecretArn
           REMEDIATION_EXECUTION_ENABLED: !Ref RemediationExecutionEnabled
-          REMEDIATION_ADAPTER_FUNCTION_ARN: !Ref RemediationAdapterFunctionArn
+          REMEDIATION_ADAPTER_FUNCTION_ARN: !If [UseBuiltInDryRunAdapterActive, !GetAtt DryRunAdapter.Arn, !Ref RemediationAdapterFunctionArn]
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApplicationTableName
@@ -374,6 +374,15 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /automation/commands
             Method: POST
+
+  DryRunAdapter:
+    Type: AWS::Serverless::Function
+    Condition: UseBuiltInDryRunAdapterActive
+    Properties:
+      CodeUri: remediation-adapter/
+      Handler: index.handler
+      Timeout: 5
+      MemorySize: 128
 
   RemediationCommandWorker:
     Type: AWS::Serverless::Function
@@ -394,7 +403,7 @@ Resources:
             - Effect: Allow
               Action:
                 - lambda:InvokeFunction
-              Resource: !Ref RemediationAdapterFunctionArn
+              Resource: !If [UseBuiltInDryRunAdapterActive, !GetAtt DryRunAdapter.Arn, !Ref RemediationAdapterFunctionArn]
       Events:
         ApprovedRemediationCommands:
           Type: SQS
@@ -804,6 +813,9 @@ Outputs:
   RemediationCommandWorkerFunctionName:
     Condition: CanExecuteRemediation
     Value: !Ref RemediationCommandWorker
+  RemediationAdapterArn:
+    Condition: CanExecuteRemediation
+    Value: !If [UseBuiltInDryRunAdapterActive, !GetAtt DryRunAdapter.Arn, !Ref RemediationAdapterFunctionArn]
   ZapierRelayDeliveryDlqUrl:
     Condition: HasZapierWebhookSecret
     Value: !Ref ZapierRelayDeliveryDeadLetterQueue
