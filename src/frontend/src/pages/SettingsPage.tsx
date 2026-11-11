@@ -12,16 +12,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, User } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useAwsAuth } from "../aws/AwsAuth";
 import { useGetUserProfile, useSaveUserProfile } from "../hooks/useQueries";
 
 export function SettingsPage() {
   const { data: profile, isLoading } = useGetUserProfile();
   const saveProfile = useSaveUserProfile();
-  const { identity } = useInternetIdentity();
+  const { user } = useAwsAuth();
   const [name, setName] = useState("");
-
-  const principal = identity?.getPrincipal().toString();
 
   const handleSave = async () => {
     try {
@@ -68,14 +66,13 @@ export function SettingsPage() {
               />
             </div>
           )}
-          {principal && (
+          {user && (
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
-                Principal ID
-              </Label>
-              <div className="text-xs font-mono text-muted-foreground bg-muted/30 p-2 rounded-md break-all border border-border">
-                {principal}
+              <Label className="text-xs text-muted-foreground">Signed-in account</Label>
+              <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded-md break-all border border-border">
+                {user.email ?? user.id}
               </div>
+              <p className="text-[11px] text-muted-foreground">Authenticated through Amazon Cognito</p>
             </div>
           )}
           <Button
