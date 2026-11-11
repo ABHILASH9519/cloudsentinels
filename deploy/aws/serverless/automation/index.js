@@ -219,17 +219,29 @@ async function recordEvent(domainEvent) {
 
   const classification = await resolveProcedure(domainEvent);
   const now = new Date().toISOString();
+  const detail = domainEvent.detail && typeof domainEvent.detail === "object"
+    ? domainEvent.detail
+    : {};
+  const rawOwnerId = detail.userId;
+  const ownerId = typeof rawOwnerId === "string" && rawOwnerId.trim().length > 0 && rawOwnerId.length <= 128
+    ? rawOwnerId.trim()
+    : null;
+  const eventTime = typeof domainEvent.time === "string" && domainEvent.time.length <= 40
+    ? domainEvent.time
+    : now;
+  const resource = detail.resource && typeof detail.resource === "object"
+    ? detail.resource
+    : {};
   const item = {
-    PK: "SYSTEM#AUTOMATION",
-    SK: `EVENT#${domainEvent.id}`,
+    PK: ownerId ? `USER#${ownerId}` : "SYSTEM#AUTOMATION",
+    SK: ownerId ? `AUTOMATION#${eventTime}#${domainEvent.id}` : `EVENT#${domainEvent.id}`,
     id: domainEvent.id,
+    ownerId,
     source: typeof domainEvent.source === "string"
       ? domainEvent.source.slice(0, 128)
       : "unknown",
     eventType: classification.eventType,
-    eventTime: typeof domainEvent.time === "string" && domainEvent.time.length <= 40
-      ? domainEvent.time
-      : now,
+    eventTime,
     createdAt: now,
     status: classification.status,
     recommendedAction: classification.recommendedAction,
@@ -238,6 +250,10 @@ async function recordEvent(domainEvent) {
     risk: classification.risk,
     requiresApproval: classification.requiresApproval,
     clusterName: classification.clusterName,
+    resourceId: typeof resource.id === "string" || typeof resource.id === "number"
+      ? String(resource.id).slice(0, 128)
+      : null,
+    severity: typeof resource.severity === "string" ? resource.severity.slice(0, 20) : null,
     reason: classification.reason,
     recoveryVerified: false,
   };
