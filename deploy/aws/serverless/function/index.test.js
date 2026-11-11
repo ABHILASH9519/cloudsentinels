@@ -188,5 +188,5 @@ test("returns a clear unavailable response when Bedrock is not configured", asyn
       authorizer: { jwt: { claims: { sub: "test-user" } } },
     },
   });
-  assert.equal(result.statusCode, 404);
+  assert.equal(result.statusCode, 503);
 });
