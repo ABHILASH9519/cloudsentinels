@@ -1,6 +1,11 @@
 # yaml-language-server: $schema=https://github.com/dfinity/icp-cli/raw/refs/heads/main/docs/schemas/canister-yaml-schema.json
 name: frontend
 
+settings:
+  freezing_threshold: 90d
+  log_visibility: controllers
+  status_visibility: controllers
+
 build:
   steps:
     - type: script
