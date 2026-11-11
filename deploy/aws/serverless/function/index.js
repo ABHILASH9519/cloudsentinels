@@ -191,6 +191,20 @@ export async function handler(event) {
     const now = new Date().toISOString();
 
 
+    if (resource === "automation" && id === "events" && segments.length === 2 && method === "GET") {
+      const result = await db.send(new QueryCommand({
+        TableName: table,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+        ExpressionAttributeValues: {
+          ":pk": `USER#${userId}`,
+          ":prefix": "AUTOMATION#",
+        },
+        ScanIndexForward: false,
+        Limit: 100,
+      }));
+      return response(200, result.Items ?? []);
+    }
+
     if (resource === "profile" && segments.length === 1) {
       if (method === "GET") {
         const profile = await db.send(new GetCommand({ TableName: table, Key: { PK: `USER#${userId}`, SK: "PROFILE#SELF" } }));
