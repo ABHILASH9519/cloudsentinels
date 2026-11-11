@@ -50,10 +50,16 @@ Conditions:
   HasZapierWebhookSecret: !Not [!Equals [!Ref ZapierWebhookSecretArn, ""]]
   HasZapierCommandSecret: !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
   HasClusterAgentSecret: !Not [!Equals [!Ref ClusterAgentSecretArn, ""]]
+  UseBuiltInDryRunAdapterActive: !And
+    - !Equals [!Ref UseBuiltInDryRunAdapter, "true"]
+    - !Equals [!Ref RemediationExecutionEnabled, "true"]
+    - !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
   CanExecuteRemediation: !And
     - !Equals [!Ref RemediationExecutionEnabled, "true"]
-    - !Not [!Equals [!Ref RemediationAdapterFunctionArn, ""]]
     - !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
+    - !Or
+      - !Not [!Equals [!Ref RemediationAdapterFunctionArn, ""]]
+      - !Equals [!Ref UseBuiltInDryRunAdapter, "true"]
 
 Globals:
   Function:
