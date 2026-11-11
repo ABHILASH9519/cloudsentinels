@@ -22,9 +22,11 @@ let secretReads;
 
 function resetState() {
   record = {
-    PK: "SYSTEM#AUTOMATION",
-    SK: "EVENT#event-123",
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-123",
     id: "event-123",
+    ownerId: "user-123",
+    eventTime: "2026-11-10T10:00:00.000Z",
     status: "PENDING_APPROVAL",
     requiresApproval: true,
     recommendedAction: "rollback-deployment",
@@ -62,6 +64,8 @@ SecretsManagerClient.prototype.send = async function () {
 function signedRequest(overrides = {}, { timestamp = Math.floor(Date.now() / 1000) } = {}) {
   const body = JSON.stringify({
     eventId: "event-123",
+    eventTime: "2026-11-10T10:00:00.000Z",
+    ownerId: "user-123",
     commandId: "command-abc",
     action: "rollback-deployment",
     approvalStatus: "approved",
@@ -99,6 +103,9 @@ test("accepts a signed approval for a matching pending remediation", async () =>
   assert.equal(published.length, 1);
   assert.equal(published[0].Entries[0].Source, "cloudsentinels.zapier");
   assert.equal(published[0].Entries[0].DetailType, "RemediationCommandApproved");
+  const approvedDetail = JSON.parse(published[0].Entries[0].Detail);
+  assert.equal(approvedDetail.ownerId, "user-123");
+  assert.equal(approvedDetail.eventTime, "2026-11-10T10:00:00.000Z");
 });
 
 test("rejects an invalid HMAC without reading or changing an event", async () => {
