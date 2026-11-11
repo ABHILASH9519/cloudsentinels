@@ -28,6 +28,7 @@ jobs:
       STAGE_NAME: v1
       ZAPIER_WEBHOOK_SECRET_ARN: ${{ vars.ZAPIER_WEBHOOK_SECRET_ARN }}
       ZAPIER_COMMAND_SECRET_ARN: ${{ vars.ZAPIER_COMMAND_SECRET_ARN }}
+      CLUSTER_AGENT_SECRET_ARN: ${{ vars.CLUSTER_AGENT_SECRET_ARN }}
       REMEDIATION_ADAPTER_FUNCTION_ARN: ${{ vars.REMEDIATION_ADAPTER_FUNCTION_ARN }}
       REMEDIATION_EXECUTION_ENABLED: ${{ vars.REMEDIATION_EXECUTION_ENABLED || 'false' }}
 
@@ -39,6 +40,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+
+      - name: Test operations API and Bedrock/telemetry handlers
+        working-directory: deploy/aws/serverless/function
+        run: |
+          npm install --no-audit --no-fund
+          node --test
+
+      - name: Test read-only cluster telemetry agent
+        run: python3 -m unittest discover -s deploy/agent -p 'test_*.py'
 
       - name: Test automation processor
         working-directory: deploy/aws/serverless/automation
