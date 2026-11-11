@@ -21,6 +21,7 @@ let record;
 let updates;
 let published;
 let secretReads;
+let requestedKey;
 
 function resetState() {
   record = {
@@ -37,10 +38,14 @@ function resetState() {
   updates = [];
   published = [];
   secretReads = 0;
+  requestedKey = undefined;
 }
 
 DynamoDBDocumentClient.prototype.send = async function (command) {
-  if (command.constructor.name === "GetCommand") return { Item: record };
+  if (command.constructor.name === "GetCommand") {
+    requestedKey = command.input.Key;
+    return { Item: record };
+  }
   if (command.constructor.name === "UpdateCommand") {
     updates.push(command.input);
     record = {
@@ -102,6 +107,10 @@ test("accepts a signed approval for a matching pending remediation", async () =>
   assert.equal(record.status, "APPROVED_AWAITING_EXECUTOR");
   assert.equal(record.commandId, "command-abc");
   assert.equal(updates.length, 1);
+  assert.deepEqual(requestedKey, {
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-123",
+  });
   assert.equal(published.length, 1);
   assert.equal(published[0].Entries[0].Source, "cloudsentinels.zapier");
   assert.equal(published[0].Entries[0].DetailType, "RemediationCommandApproved");
