@@ -1,4 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import {
@@ -13,19 +15,24 @@ import {
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const eventBridge = new EventBridgeClient({});
 const bedrock = new BedrockRuntimeClient({});
+const secretsManager = new SecretsManagerClient({});
+let clusterAgentSecretCache = null;
+let clusterAgentSecretCacheExpiresAt = 0;
 const table = process.env.TABLE_NAME;
 const eventBusName = process.env.EVENT_BUS_NAME;
 
 async function publishDomainEvent(detailType, userId, resource) {
   if (!eventBusName) return;
   try {
+    const detail = { userId, resource, occurredAt: new Date().toISOString() };
+    if (typeof resource?.clusterName === "string") detail.clusterName = resource.clusterName;
     const result = await eventBridge.send(new PutEventsCommand({
       Entries: [{
         EventBusName: eventBusName,
         Source: "cloudsentinels.api",
         DetailType: detailType,
         Time: new Date(),
-        Detail: JSON.stringify({ userId, resource, occurredAt: new Date().toISOString() }),
+        Detail: JSON.stringify(detail),
       }],
     }));
     if ((result.FailedEntryCount ?? 0) > 0) {
@@ -66,8 +73,8 @@ function callerId(event) {
   return sub;
 }
 
-function parseBody(event) {
-  if (!event.body) return {};
+function rawBody(event) {
+  if (!event.body) return "";
   const raw = event.isBase64Encoded
     ? Buffer.from(event.body, "base64").toString("utf8")
     : event.body;
@@ -76,6 +83,12 @@ function parseBody(event) {
     error.statusCode = 413;
     throw error;
   }
+  return raw;
+}
+
+function parseBody(event) {
+  const raw = rawBody(event);
+  if (!raw) return {};
   try {
     return JSON.parse(raw);
   } catch {
@@ -170,6 +183,159 @@ async function generateIncidentAnalysis(incident) {
   };
 }
 
+
+function requestHeader(event, name) {
+  const headers = event.headers ?? {};
+  const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === name);
+  return key ? headers[key] : undefined;
+}
+
+async function getClusterAgentConfig(clusterId) {
+  const secretArn = process.env.CLUSTER_AGENT_SECRET_ARN;
+  if (!secretArn) return null;
+  if (!clusterAgentSecretCache || Date.now() >= clusterAgentSecretCacheExpiresAt) {
+    const result = await secretsManager.send(new GetSecretValueCommand({ SecretId: secretArn }));
+    if (typeof result.SecretString !== "string") {
+      throw new Error("Cluster agent secret must be stored as a JSON SecretString.");
+    }
+    clusterAgentSecretCache = JSON.parse(result.SecretString);
+    clusterAgentSecretCacheExpiresAt = Date.now() + 60_000;
+  }
+  return clusterAgentSecretCache?.[clusterId] ?? null;
+}
+
+const clusterEventTypes = new Set([
+  "PodCrashLoopBackOff",
+  "NodeNotReady",
+  "CpuThresholdExceeded",
+  "MemoryPressure",
+  "DeploymentUnhealthy",
+  "ApiLatencyHigh",
+]);
+const allowedSeverities = new Set(["critical", "high", "medium", "low"]);
+
+async function handleClusterTelemetry(event) {
+  if (!process.env.CLUSTER_AGENT_SECRET_ARN) {
+    return response(503, { error: "Cluster telemetry ingestion is not configured." });
+  }
+
+  const clusterId = requestHeader(event, "x-cs-cluster-id");
+  const timestamp = requestHeader(event, "x-cs-timestamp");
+  const signature = requestHeader(event, "x-cs-signature");
+  if (
+    typeof clusterId !== "string" || !/^[A-Za-z0-9._-]{1,128}$/.test(clusterId) ||
+    typeof timestamp !== "string" || !/^\\d{10}$/.test(timestamp) ||
+    typeof signature !== "string" || !/^[a-f0-9]{64}$/i.test(signature)
+  ) {
+    return response(401, { error: "Cluster authentication headers are invalid." });
+  }
+  const epochSeconds = Number(timestamp);
+  if (!Number.isSafeInteger(epochSeconds) || Math.abs(Date.now() / 1000 - epochSeconds) > 300) {
+    return response(401, { error: "Cluster request timestamp is outside the allowed window." });
+  }
+
+  let config;
+  try {
+    config = await getClusterAgentConfig(clusterId);
+  } catch (error) {
+    console.error("Cluster agent secret lookup failed", { name: error?.name ?? "Error" });
+    return response(503, { error: "Cluster telemetry authentication is unavailable." });
+  }
+  if (
+    !config ||
+    typeof config.ownerId !== "string" || !config.ownerId.trim() || config.ownerId.length > 128 ||
+    typeof config.clusterName !== "string" || !config.clusterName.trim() || config.clusterName.length > 256 ||
+    typeof config.signingSecret !== "string" || config.signingSecret.length < 32
+  ) {
+    return response(401, { error: "Cluster identity is not registered." });
+  }
+
+  const raw = rawBody(event);
+  const expected = createHmac("sha256", config.signingSecret)
+    .update(`${timestamp}.${raw}`)
+    .digest();
+  const supplied = Buffer.from(signature, "hex");
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+    return response(401, { error: "Cluster request signature is invalid." });
+  }
+
+  const body = parseBody(event);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return response(400, { error: "Telemetry event must be a JSON object." });
+  }
+  const eventId = cleanText(body.eventId, "eventId", 128, true);
+  if (!/^[A-Za-z0-9._-]+$/.test(eventId)) {
+    return response(400, { error: "eventId contains unsupported characters." });
+  }
+  const eventType = cleanText(body.eventType, "eventType", 80, true);
+  if (!clusterEventTypes.has(eventType)) {
+    return response(400, { error: "Unsupported cluster event type." });
+  }
+  const severity = cleanText(body.severity, "severity", 20, true);
+  if (!allowedSeverities.has(severity)) {
+    return response(400, { error: "Unsupported alert severity." });
+  }
+  const title = cleanText(body.title, "title", 200, true);
+  const message = cleanText(body.message ?? "", "message", 5000);
+  const namespace = cleanText(body.namespace ?? "", "namespace", 128);
+  const resourceKind = cleanText(body.resourceKind ?? "", "resourceKind", 80);
+  const resourceName = cleanText(body.resourceName ?? "", "resourceName", 256);
+  const now = new Date().toISOString();
+  const markerKey = {
+    PK: `USER#${config.ownerId}`,
+    SK: `CLUSTER_EVENT#${eventId}`,
+  };
+  const existing = await db.send(new GetCommand({ TableName: table, Key: markerKey }));
+  if (existing.Item?.status === "COMPLETE") {
+    return response(202, { accepted: true, duplicate: true, eventId, alertId: existing.Item.alertId });
+  }
+  if (existing.Item && Date.now() - new Date(existing.Item.createdAt).getTime() < 300_000) {
+    return response(202, { accepted: true, duplicate: true, processing: true, eventId });
+  }
+  if (existing.Item) {
+    await db.send(new DeleteCommand({ TableName: table, Key: markerKey }));
+  }
+  await db.send(new PutCommand({
+    TableName: table,
+    Item: { ...markerKey, eventId, status: "PROCESSING", createdAt: now },
+    ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+  }));
+
+  try {
+    const alert = await createItem(config.ownerId, "ALERT", {
+      title,
+      severity,
+      source: `cluster-agent/${config.clusterName}`,
+      message: [message, namespace && `namespace=${namespace}`, resourceKind && resourceName && `${resourceKind}/${resourceName}`]
+        .filter(Boolean)
+        .join(" · "),
+      status: "active",
+      timestamp: now,
+    });
+    await db.send(new UpdateCommand({
+      TableName: table,
+      Key: markerKey,
+      UpdateExpression: "SET #status = :status, alertId = :alertId, updatedAt = :updatedAt",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: { ":status": "COMPLETE", ":alertId": alert.id, ":updatedAt": new Date().toISOString() },
+    }));
+    await publishDomainEvent(eventType, config.ownerId, {
+      id: alert.id,
+      severity,
+      title,
+      clusterName: config.clusterName,
+      namespace,
+      resourceKind,
+      resourceName,
+      eventId,
+    });
+    return response(202, { accepted: true, duplicate: false, eventId, alertId: alert.id });
+  } catch (error) {
+    await db.send(new DeleteCommand({ TableName: table, Key: markerKey })).catch(() => {});
+    throw error;
+  }
+}
+
 async function listItems(userId, prefix) {
   const result = await db.send(new QueryCommand({
     TableName: table,
@@ -245,6 +411,10 @@ export async function handler(event) {
     if (path.startsWith(stagePrefix)) path = path.slice(stagePrefix.length - 1);
     if (path.endsWith("/health") && method === "GET") {
       return response(200, { status: "ok", service: "cloudsentinels-aws-api" });
+    }
+
+    if (path.endsWith("/telemetry/events") && method === "POST") {
+      return await handleClusterTelemetry(event);
     }
 
     const userId = callerId(event);
