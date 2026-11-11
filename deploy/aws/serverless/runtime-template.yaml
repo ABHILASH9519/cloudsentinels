@@ -16,6 +16,11 @@ Parameters:
     Type: String
   UserPoolClientId:
     Type: String
+  BedrockModelId:
+    Type: String
+    Default: in.anthropic.claude-sonnet-5
+    AllowedValues: [in.anthropic.claude-sonnet-5]
+    Description: India-geographic Amazon Bedrock inference profile used for user-triggered incident analysis.
   StageName:
     Type: String
     Default: v1
@@ -403,6 +408,18 @@ Resources:
             TableName: !Ref ApplicationTableName
         - EventBridgePutEventsPolicy:
             EventBusName: !Ref CloudSentinelsEventBus
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource:
+                - !Sub "arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockModelId}"
+                - !Sub "arn:${AWS::Partition}:bedrock:ap-south-1::foundation-model/anthropic.claude-sonnet-5"
+                - !Sub "arn:${AWS::Partition}:bedrock:ap-south-2::foundation-model/anthropic.claude-sonnet-5"
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
       Events:
         Health:
           Type: HttpApi
@@ -440,6 +457,14 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /incidents/{id}
             Method: ANY
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
+        IncidentAnalyze:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /incidents/{id}/analyze
+            Method: POST
             Auth:
               Authorizer: CognitoJwtAuthorizer
         Alerts:
