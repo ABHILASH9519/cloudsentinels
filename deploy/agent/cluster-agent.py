@@ -133,15 +133,15 @@ def queue_event(connection: sqlite3.Connection, payload: dict) -> bool:
     return cursor.rowcount == 1
 
 
-def sign_request(timestamp: str, raw_body: bytes, signing_secret: str) -> str:
-    message = timestamp.encode("ascii") + b"." + raw_body
+def sign_request(timestamp: str, cluster_id: str, raw_body: bytes, signing_secret: str) -> str:
+    message = timestamp.encode("ascii") + b"." + cluster_id.encode("utf-8") + b"." + raw_body
     return hmac.new(signing_secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
 def post_event(api_url: str, cluster_id: str, signing_secret: str, payload: dict) -> dict:
     raw_body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     timestamp = str(int(time.time()))
-    signature = sign_request(timestamp, raw_body, signing_secret)
+    signature = sign_request(timestamp, cluster_id, raw_body, signing_secret)
     request = urllib.request.Request(
         api_url.rstrip("/") + "/telemetry/events",
         data=raw_body,
