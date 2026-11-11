@@ -224,7 +224,7 @@ async function handleClusterTelemetry(event) {
   const signature = requestHeader(event, "x-cs-signature");
   if (
     typeof clusterId !== "string" || !/^[A-Za-z0-9._-]{1,128}$/.test(clusterId) ||
-    typeof timestamp !== "string" || !/^\\d{10}$/.test(timestamp) ||
+    typeof timestamp !== "string" || !/^\d{10}$/.test(timestamp) ||
     typeof signature !== "string" || !/^[a-f0-9]{64}$/i.test(signature)
   ) {
     return response(401, { error: "Cluster authentication headers are invalid." });
