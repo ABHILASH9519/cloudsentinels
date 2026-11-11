@@ -1,4 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 import { EventBridgeClient, PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import {
   DeleteCommand,
@@ -11,6 +12,7 @@ import {
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const eventBridge = new EventBridgeClient({});
+const bedrock = new BedrockRuntimeClient({});
 const table = process.env.TABLE_NAME;
 const eventBusName = process.env.EVENT_BUS_NAME;
 
@@ -97,6 +99,77 @@ function cleanText(value, field, max, required = false) {
   return value;
 }
 
+function redactSensitiveText(value) {
+  return String(value ?? "")
+    .replace(/\\bAKIA[0-9A-Z]{16}\\b/g, "[REDACTED_AWS_ACCESS_KEY]")
+    .replace(/\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\b/g, "[REDACTED_JWT]")
+    .replace(/\\b(Bearer\\s+)[A-Za-z0-9._~+\\/-]+=*/gi, "$1[REDACTED]")
+    .replace(/\\b(password|passwd|secret|token|api[_-]?key)\\s*[:=]\\s*["']?[^"'\\s,;]+/gi, "$1=[REDACTED]")
+    .replace(/\\b[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b/g, "[REDACTED_EMAIL]");
+}
+
+function modelText(value, field) {
+  if (typeof value !== "string" || !value.trim() || value.length > 5000) {
+    const error = new Error(`Bedrock returned an invalid ${field} field.`);
+    error.statusCode = 502;
+    throw error;
+  }
+  return value.trim();
+}
+
+async function generateIncidentAnalysis(incident) {
+  const modelId = process.env.BEDROCK_MODEL_ID;
+  if (!modelId) {
+    const error = new Error("AI analysis is not configured.");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const safeIncident = {
+    title: redactSensitiveText(incident.title),
+    severity: incident.severity,
+    source: redactSensitiveText(incident.source),
+    rawLog: redactSensitiveText(incident.rawLog).slice(0, 12000),
+  };
+  const result = await bedrock.send(new ConverseCommand({
+    modelId,
+    system: [{
+      text: "You are a production incident analyst. Use only the evidence supplied. Separate observed facts from hypotheses. Do not invent infrastructure state, metrics, or root causes. Suggest safe diagnostic and remediation steps, but never claim to execute them. Return only valid JSON with string fields: summary, rootCause, suggestedFix. Keep each field concise and actionable.",
+    }],
+    messages: [{
+      role: "user",
+      content: [{ text: JSON.stringify(safeIncident) }],
+    }],
+    inferenceConfig: { maxTokens: 900, temperature: 0.1, topP: 0.9 },
+  }));
+
+  const outputText = result.output?.message?.content
+    ?.find((block) => typeof block.text === "string")?.text;
+  if (typeof outputText !== "string") {
+    const error = new Error("Bedrock did not return a text analysis.");
+    error.statusCode = 502;
+    throw error;
+  }
+
+  const normalized = outputText
+    .trim()
+    .replace(/^\`\`\`(?:json)?\\s*/i, "")
+    .replace(/\\s*\`\`\`$/, "");
+  let analysis;
+  try {
+    analysis = JSON.parse(normalized);
+  } catch {
+    const error = new Error("Bedrock returned an invalid JSON analysis.");
+    error.statusCode = 502;
+    throw error;
+  }
+  return {
+    aiSummary: modelText(analysis.summary, "summary"),
+    rootCause: modelText(analysis.rootCause, "root cause"),
+    suggestedFix: modelText(analysis.suggestedFix, "suggested fix"),
+  };
+}
+
 async function listItems(userId, prefix) {
   const result = await db.send(new QueryCommand({
     TableName: table,
@@ -142,7 +215,7 @@ async function updateItem(userId, type, id, body) {
   const current = await getItem(userId, type, id);
   if (!current) return null;
   const allowed = type === "INCIDENT"
-    ? ["status", "aiSummary", "rootCause", "suggestedFix", "assignee", "title", "severity"]
+    ? ["status", "aiSummary", "rootCause", "suggestedFix", "assignee", "title", "severity", "aiAnalyzedAt", "aiModelId"]
     : ["status"];
   const patch = Object.fromEntries(Object.entries(body).filter(([key]) => allowed.includes(key)));
   const names = { "#updatedAt": "updatedAt" };
@@ -215,6 +288,34 @@ export async function handler(event) {
         await db.send(new PutCommand({ TableName: table, Item: profile }));
         return response(200, { name: profile.name });
       }
+    }
+
+    if (resource === "incidents" && id && segments.length === 3 && segments[2] === "analyze" && method === "POST") {
+      const incident = await getItem(userId, "INCIDENT", id);
+      if (!incident) return response(404, { error: "Incident not found." });
+      let analysis;
+      try {
+        analysis = await generateIncidentAnalysis(incident);
+      } catch (error) {
+        console.error("Bedrock incident analysis failed", { name: error?.name ?? "Error" });
+        if (Number(error?.statusCode) === 503) {
+          return response(503, { error: "Amazon Bedrock analysis is not configured." });
+        }
+        if (Number(error?.statusCode) === 502) {
+          return response(502, { error: "Amazon Bedrock returned an invalid analysis." });
+        }
+        if (["AccessDeniedException", "ResourceNotFoundException", "ValidationException"].includes(error?.name)) {
+          return response(503, { error: "The configured Bedrock model is unavailable or not authorized." });
+        }
+        throw error;
+      }
+      const updated = await updateItem(userId, "INCIDENT", id, {
+        ...analysis,
+        aiAnalyzedAt: new Date().toISOString(),
+        aiModelId: process.env.BEDROCK_MODEL_ID,
+      });
+      await publishDomainEvent("IncidentAIAnalyzed", userId, { id: updated.id, severity: updated.severity });
+      return response(200, updated);
     }
 
     if (resource === "incidents" && segments.length === 1) {
