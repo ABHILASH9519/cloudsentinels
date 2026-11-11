@@ -39,18 +39,19 @@ function parseRecord(record) {
   return detail;
 }
 
-async function setStatus(key, commandId, status, extra = {}) {
+async function setStatus(key, commandId, expectedStatus, status, extra = {}) {
   await db.send(new UpdateCommand({
     TableName: tableName,
     Key: key,
     UpdateExpression: "SET #status = :status, updatedAt = :updatedAt" +
       Object.keys(extra).map((field) => `, ${field} = :${field}`).join(""),
-    ConditionExpression: "commandId = :commandId",
+    ConditionExpression: "commandId = :commandId AND #status = :expectedStatus",
     ExpressionAttributeNames: { "#status": "status" },
     ExpressionAttributeValues: {
       ":status": status,
       ":updatedAt": new Date().toISOString(),
       ":commandId": commandId,
+      ":expectedStatus": expectedStatus,
       ...Object.fromEntries(Object.entries(extra).map(([field, value]) => [`:${field}`, value])),
     },
   }));
@@ -79,18 +80,19 @@ async function execute(detail) {
   ) {
     throw new Error("Remediation command no longer matches an approved event record.");
   }
-  if (["RECOVERY_VERIFIED", "ACTION_SUBMITTED_UNVERIFIED"].includes(eventRecord.status)) {
+  if (["RECOVERY_VERIFIED", "ACTION_SUBMITTED_UNVERIFIED", "EXECUTING"].includes(eventRecord.status)) {
+    // EXECUTING is a lease-less in-flight marker: acknowledge duplicate SQS
+    // deliveries rather than dispatching the same potentially destructive
+    // adapter command twice. A stuck execution requires explicit operator review.
     return;
   }
-  if (!["APPROVED_AWAITING_EXECUTOR", "EXECUTING", "EXECUTION_FAILED"].includes(eventRecord.status)) {
+  if (!["APPROVED_AWAITING_EXECUTOR", "EXECUTION_FAILED"].includes(eventRecord.status)) {
     throw new Error("Remediation event is not in an executable state.");
   }
 
-  if (eventRecord.status === "APPROVED_AWAITING_EXECUTOR") {
-    await setStatus(key, detail.commandId, "EXECUTING", {
-      executionStartedAt: new Date().toISOString(),
-    });
-  }
+  await setStatus(key, detail.commandId, eventRecord.status, "EXECUTING", {
+    executionStartedAt: new Date().toISOString(),
+  });
 
   let adapterResult;
   try {
@@ -122,7 +124,7 @@ async function execute(detail) {
       throw new Error("Remediation adapter did not accept the command.");
     }
   } catch (error) {
-    await setStatus(key, detail.commandId, "EXECUTION_FAILED", {
+    await setStatus(key, detail.commandId, "EXECUTING", "EXECUTION_FAILED", {
       executionFailedAt: new Date().toISOString(),
       lastExecutionError: String(error?.message ?? "Adapter failure").slice(0, 300),
     });
@@ -133,6 +135,7 @@ async function execute(detail) {
   await setStatus(
     key,
     detail.commandId,
+    "EXECUTING",
     recoveryVerified ? "RECOVERY_VERIFIED" : "ACTION_SUBMITTED_UNVERIFIED",
     {
       recoveryVerified,
