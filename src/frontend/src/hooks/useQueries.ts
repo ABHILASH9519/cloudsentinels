@@ -168,6 +168,23 @@ export function useUpdateIncidentStatus() {
   });
 }
 
+export function useAnalyzeIncident() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: bigint) => {
+      if (!actor) throw new Error("No actor");
+      return actor.analyzeIncident(id);
+    },
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["incident", id.toString()] });
+      qc.invalidateQueries({ queryKey: ["incidents"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["automation", "events"] });
+    },
+  });
+}
+
 export function useUpdateIncidentAIFields() {
   const { actor } = useActor();
   const qc = useQueryClient();
