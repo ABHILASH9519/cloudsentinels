@@ -88,6 +88,9 @@ export function useAwsActor() {
       async getIncident(id) {
         return incident(await request<any>(`/incidents/${id}`));
       },
+      async analyzeIncident(id) {
+        return incident(await request<any>(`/incidents/${id}/analyze`, "POST"));
+      },
       async updateIncidentStatus(id, status) {
         await request(`/incidents/${id}`, "PATCH", { status });
       },
