@@ -593,7 +593,7 @@ export async function handler(event) {
       if (method === "POST") {
         const alert = await createItem(userId, "ALERT", {
           title: cleanText(body.title, "title", 200, true),
-          severity: cleanText(body.severity, "severity", 20, true),
+          severity: cleanSeverity(body.severity),
           source: cleanText(body.source ?? "", "source", 100),
           message: cleanText(body.message ?? "", "message", 5000),
           status: "active",
