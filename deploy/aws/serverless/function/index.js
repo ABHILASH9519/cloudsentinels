@@ -101,11 +101,11 @@ function cleanText(value, field, max, required = false) {
 
 function redactSensitiveText(value) {
   return String(value ?? "")
-    .replace(/\\bAKIA[0-9A-Z]{16}\\b/g, "[REDACTED_AWS_ACCESS_KEY]")
-    .replace(/\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\b/g, "[REDACTED_JWT]")
-    .replace(/\\b(Bearer\\s+)[A-Za-z0-9._~+\\/-]+=*/gi, "$1[REDACTED]")
-    .replace(/\\b(password|passwd|secret|token|api[_-]?key)\\s*[:=]\\s*["']?[^"'\\s,;]+/gi, "$1=[REDACTED]")
-    .replace(/\\b[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b/g, "[REDACTED_EMAIL]");
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, "[REDACTED_AWS_ACCESS_KEY]")
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED_JWT]")
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+\/-]+=*/gi, "$1[REDACTED]")
+    .replace(/\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*["']?[^"'\s,;]+/gi, "$1=[REDACTED]")
+    .replace(/\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/g, "[REDACTED_EMAIL]");
 }
 
 function modelText(value, field) {
@@ -153,8 +153,8 @@ async function generateIncidentAnalysis(incident) {
 
   const normalized = outputText
     .trim()
-    .replace(/^\`\`\`(?:json)?\\s*/i, "")
-    .replace(/\\s*\`\`\`$/, "");
+    .replace(/^\`\`\`(?:json)?\s*/i, "")
+    .replace(/\s*\`\`\`$/, "");
   let analysis;
   try {
     analysis = JSON.parse(normalized);
@@ -291,6 +291,9 @@ export async function handler(event) {
     }
 
     if (resource === "incidents" && id && segments.length === 3 && segments[2] === "analyze" && method === "POST") {
+      if (!process.env.BEDROCK_MODEL_ID) {
+        return response(503, { error: "Amazon Bedrock analysis is not configured." });
+      }
       const incident = await getItem(userId, "INCIDENT", id);
       if (!incident) return response(404, { error: "Incident not found." });
       let analysis;
