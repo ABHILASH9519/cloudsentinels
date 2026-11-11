@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import demoDataset from "../../../../sample-data/demo-observability.json";
 import type {
   Alert,
+  AutomationEvent,
   Comment,
   DashboardSummary,
   Incident,
@@ -85,6 +86,19 @@ export function useGetActiveAlerts() {
     queryFn: async () => {
       if (!actor) return [];
       return actor.getActiveAlerts();
+    },
+    enabled: !!actor && !isFetching,
+    refetchInterval: 15000,
+  });
+}
+
+export function useGetAutomationEvents() {
+  const { actor, isFetching } = useActor();
+  return useQuery<AutomationEvent[]>({
+    queryKey: ["automation", "events"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return actor.getAutomationEvents();
     },
     enabled: !!actor && !isFetching,
     refetchInterval: 15000,
