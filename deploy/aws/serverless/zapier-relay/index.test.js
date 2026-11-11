@@ -91,6 +91,8 @@ test("forwards allow-listed event fields and signs the exact request body", asyn
   assert.equal(payload.ownerId, "user-123");
   assert.equal(payload.eventTime, "2026-11-10T10:00:00.000Z");
   assert.equal(payload.severity, "high");
+  assert.equal(payload.incidentId, "incident-9");
+  assert.equal(payload.resourceId, undefined);
   assert.equal("secret" in payload, false);
   assert.equal("accessToken" in payload, false);
 
