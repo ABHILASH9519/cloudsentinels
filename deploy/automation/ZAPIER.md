@@ -20,7 +20,7 @@ flowchart TD
   D --> F{Classification}
   F -->|High risk| G[Pending human approval]
   F -->|No target / unknown| H[Blocked or observed]
-  F -->|Eligible action| G[Pending approval or policy gate]
+  F -->|Eligible low-risk action| I[Policy gate]
   D -. selected, sanitized event .-> J[Optional sanitized outbound relay]
   J --> K[Zapier Catch Hook]
   K --> L[Filter / Paths]
@@ -103,7 +103,7 @@ After a human approves a high-risk action (or an explicitly configured low-risk 
 }
 ```
 
-The receiver verifies the HMAC and timestamp, loads the exact `USER#ownerId / AUTOMATION#eventTime#eventId` record, and checks the stored action, risk, approval policy, and cluster target. It returns HTTP 503 while remediation execution is disabled or the reviewed adapter is not configured. A successful approval is only queued; it is not proof that remediation ran or recovery succeeded.
+The receiver verifies the HMAC and timestamp, loads the exact `USER#ownerId / AUTOMATION#eventTime#eventId` record, and checks the stored action, risk, approval policy, and cluster target. The remediation worker uses conditional state transitions and a 720-second SQS visibility timeout; duplicate in-flight deliveries are acknowledged without a second adapter invocation. It returns HTTP 503 while remediation execution is disabled or the reviewed adapter is not configured. A successful approval is only queued; it is not proof that remediation ran or recovery succeeded.
 
 ## Current AWS resources and readiness
 
