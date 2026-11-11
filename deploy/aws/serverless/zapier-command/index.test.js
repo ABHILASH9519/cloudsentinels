@@ -8,6 +8,8 @@ import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 process.env.TABLE_NAME = "cloudsentinels-command-test";
 process.env.EVENT_BUS_NAME = "cloudsentinels-test-bus";
 process.env.ZAPIER_COMMAND_SECRET_ARN = "arn:aws:secretsmanager:ap-south-1:123456789012:secret:zapier-command-test";
+process.env.REMEDIATION_EXECUTION_ENABLED = "true";
+process.env.REMEDIATION_ADAPTER_FUNCTION_ARN = "arn:aws:lambda:ap-south-1:123456789012:function:test-adapter";
 
 const signingSecret = "a-test-signing-secret-that-is-long-enough-for-hmac";
 const { handler } = await import("./index.js");
@@ -186,6 +188,16 @@ test("requires a human approval identity for high-risk commands", async () => {
   const result = await handler(signedRequest({ approvedBy: "zapier-auto-policy" }));
 
   assert.equal(result.statusCode, 403);
+  assert.equal(updates.length, 0);
+  assert.equal(published.length, 0);
+});
+
+test("does not accept approval commands while remediation execution is disabled", async (t) => {
+  const enabled = process.env.REMEDIATION_EXECUTION_ENABLED;
+  process.env.REMEDIATION_EXECUTION_ENABLED = "false";
+  t.after(() => { process.env.REMEDIATION_EXECUTION_ENABLED = enabled; });
+  const result = await handler(signedRequest());
+  assert.equal(result.statusCode, 503);
   assert.equal(updates.length, 0);
   assert.equal(published.length, 0);
 });
