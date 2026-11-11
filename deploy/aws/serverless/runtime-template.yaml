@@ -466,6 +466,15 @@ Resources:
             Method: ANY
             Auth:
               Authorizer: CognitoJwtAuthorizer
+
+        AutomationEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /automation/events
+            Method: GET
+            Auth:
+              Authorizer: CognitoJwtAuthorizer
         Comments:
           Type: HttpApi
           Properties:
