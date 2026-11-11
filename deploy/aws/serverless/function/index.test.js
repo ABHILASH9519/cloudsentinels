@@ -3,16 +3,20 @@ import assert from "node:assert/strict";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
+import { createHmac } from "node:crypto";
+import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 
 
 process.env.TABLE_NAME = "cloudsentinels-api-test-table";
 process.env.EVENT_BUS_NAME = "cloudsentinels-test-bus";
 process.env.BEDROCK_MODEL_ID = "in.anthropic.claude-sonnet-5";
+process.env.CLUSTER_AGENT_SECRET_ARN = "test-cluster-agent-secret";
 const { handler } = await import("./index.js");
 
 const originalDbSend = DynamoDBDocumentClient.prototype.send;
 const originalEventSend = EventBridgeClient.prototype.send;
 const originalBedrockSend = BedrockRuntimeClient.prototype.send;
+const originalSecretsSend = SecretsManagerClient.prototype.send;
 const originalConsoleError = console.error;
 
 function createIncidentEvent() {
@@ -187,6 +191,116 @@ test("returns a clear unavailable response when Bedrock is not configured", asyn
       http: { method: "POST" },
       authorizer: { jwt: { claims: { sub: "test-user" } } },
     },
+  });
+  assert.equal(result.statusCode, 503);
+});
+
+test("accepts a signed cluster event, creates an alert, and publishes an owner-scoped domain event", async (t) => {
+  const payload = {
+    eventId: "cluster-event-0001",
+    eventType: "PodCrashLoopBackOff",
+    severity: "high",
+    title: "CrashLoopBackOff in checkout",
+    message: "Container restart back-off detected",
+    namespace: "production",
+    resourceKind: "Pod",
+    resourceName: "checkout-7d9c",
+  };
+  const rawBody = JSON.stringify(payload);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signingSecret = "test-signing-secret-with-at-least-32-characters";
+  const signature = createHmac("sha256", signingSecret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest("hex");
+  const storedItems = [];
+  let publishedDetail;
+  SecretsManagerClient.prototype.send = async () => ({
+    SecretString: JSON.stringify({
+      "demo-cluster": {
+        ownerId: "test-user",
+        clusterName: "demo-cluster",
+        signingSecret,
+      },
+    }),
+  });
+  DynamoDBDocumentClient.prototype.send = async (command) => {
+    if (command.constructor.name === "GetCommand") return {};
+    if (command.constructor.name === "UpdateCommand" && command.input.UpdateExpression.startsWith("ADD")) {
+      return { Attributes: { nextId: 9 } };
+    }
+    if (command.constructor.name === "PutCommand") storedItems.push(command.input.Item);
+    return {};
+  };
+  EventBridgeClient.prototype.send = async (command) => {
+    publishedDetail = JSON.parse(command.input.Entries[0].Detail);
+    return { FailedEntryCount: 0, Entries: [{ EventId: "cluster-eventbridge-id" }] };
+  };
+  t.after(() => {
+    DynamoDBDocumentClient.prototype.send = originalDbSend;
+    EventBridgeClient.prototype.send = originalEventSend;
+    SecretsManagerClient.prototype.send = originalSecretsSend;
+  });
+
+  const result = await handler({
+    rawPath: "/v1/telemetry/events",
+    headers: {
+      "x-cs-cluster-id": "demo-cluster",
+      "x-cs-timestamp": timestamp,
+      "x-cs-signature": signature,
+    },
+    requestContext: { http: { method: "POST" } },
+    body: rawBody,
+  });
+
+  assert.equal(result.statusCode, 202);
+  assert.equal(JSON.parse(result.body).accepted, true);
+  assert.equal(JSON.parse(result.body).alertId, "9");
+  assert.equal(storedItems.some((item) => item.PK === "USER#test-user" && item.status === "active"), true);
+  assert.equal(publishedDetail.userId, "test-user");
+  assert.equal(publishedDetail.clusterName, "demo-cluster");
+  assert.equal(publishedDetail.resource.eventId, "cluster-event-0001");
+});
+
+test("rejects a cluster event with an invalid HMAC signature", async (t) => {
+  SecretsManagerClient.prototype.send = async () => ({
+    SecretString: JSON.stringify({
+      "demo-cluster": {
+        ownerId: "test-user",
+        clusterName: "demo-cluster",
+        signingSecret: "test-signing-secret-with-at-least-32-characters",
+      },
+    }),
+  });
+  t.after(() => { SecretsManagerClient.prototype.send = originalSecretsSend; });
+
+  const rawBody = JSON.stringify({
+    eventId: "cluster-event-invalid",
+    eventType: "PodCrashLoopBackOff",
+    severity: "high",
+    title: "Invalid signature test",
+  });
+  const result = await handler({
+    rawPath: "/v1/telemetry/events",
+    headers: {
+      "x-cs-cluster-id": "demo-cluster",
+      "x-cs-timestamp": String(Math.floor(Date.now() / 1000)),
+      "x-cs-signature": "0".repeat(64),
+    },
+    requestContext: { http: { method: "POST" } },
+    body: rawBody,
+  });
+  assert.equal(result.statusCode, 401);
+});
+
+test("returns service unavailable when cluster agent secrets are not configured", async (t) => {
+  const configuredSecret = process.env.CLUSTER_AGENT_SECRET_ARN;
+  delete process.env.CLUSTER_AGENT_SECRET_ARN;
+  t.after(() => { process.env.CLUSTER_AGENT_SECRET_ARN = configuredSecret; });
+  const result = await handler({
+    rawPath: "/v1/telemetry/events",
+    headers: {},
+    requestContext: { http: { method: "POST" } },
+    body: "{}",
   });
   assert.equal(result.statusCode, 503);
 });
