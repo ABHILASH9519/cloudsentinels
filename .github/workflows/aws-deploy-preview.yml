@@ -31,6 +31,7 @@ jobs:
       CLUSTER_AGENT_SECRET_ARN: ${{ vars.CLUSTER_AGENT_SECRET_ARN }}
       REMEDIATION_ADAPTER_FUNCTION_ARN: ${{ vars.REMEDIATION_ADAPTER_FUNCTION_ARN }}
       REMEDIATION_EXECUTION_ENABLED: ${{ vars.REMEDIATION_EXECUTION_ENABLED || 'false' }}
+      USE_BUILT_IN_DRY_RUN_ADAPTER: ${{ vars.USE_BUILT_IN_DRY_RUN_ADAPTER || 'false' }}
 
     steps:
       - name: Check out deployment branch
@@ -159,7 +160,8 @@ jobs:
               "ZapierWebhookSecretArn=$ZAPIER_WEBHOOK_SECRET_ARN" \
               "ZapierCommandSecretArn=$ZAPIER_COMMAND_SECRET_ARN" \
               "RemediationAdapterFunctionArn=$REMEDIATION_ADAPTER_FUNCTION_ARN" \
-              "RemediationExecutionEnabled=$REMEDIATION_EXECUTION_ENABLED"
+              "RemediationExecutionEnabled=$REMEDIATION_EXECUTION_ENABLED" \
+              "UseBuiltInDryRunAdapter=$USE_BUILT_IN_DRY_RUN_ADAPTER"
 
       - name: Verify deployed API health
         shell: bash
