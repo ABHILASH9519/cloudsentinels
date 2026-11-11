@@ -110,6 +110,14 @@ test("records verified recovery only when the adapter explicitly confirms it", a
   assert.equal(eventRecord.recoveryVerified, true);
 });
 
+test("acknowledges duplicate in-flight delivery without invoking the adapter twice", async () => {
+  eventRecord.status = "EXECUTING";
+  const result = await handler(queueEvent());
+  assert.deepEqual(result, { batchItemFailures: [] });
+  assert.equal(invocations.length, 0);
+  assert.equal(updates.length, 0);
+});
+
 test("does not dispatch an event that is not approved", async () => {
   eventRecord.status = "PENDING_APPROVAL";
   const result = await handler(queueEvent());
