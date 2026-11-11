@@ -5,7 +5,7 @@
 ## Responsibility boundary
 
 - **CloudSentinels / AWS** owns event ingestion, event classification, idempotency, incident state, approvals, audit history, and any future Kubernetes remediation adapter.
-- **Zapier** is an optional outbound workflow layer for notifications, ticketing, escalation, and reporting.
+- **Zapier** is an optional workflow layer for notifications, ticketing, escalation, reporting, and human approval collection. CloudSentinels remains authoritative for policy checks and approval state.
 - A Zap failure must never block incident creation, event processing, or a recovery action.
 - Zapier must never call Kubernetes directly or mark a recovery successful.
 
@@ -27,7 +27,12 @@ flowchart TD
   L --> M[Slack or Microsoft Teams]
   L --> N[Jira / Linear ticket]
   L --> O[Email escalation]
-  L --> P[Daily incident digest]
+  L --> P[Human approval step]
+  P --> Q[Signed POST /automation/commands]
+  Q --> R[Remediation command SQS]
+  R --> S[Policy-gated remediation worker]
+  S --> T[Reviewed adapter]
+  T --> U[Independent recovery verification]
 ```
 
 The optional relay is implemented in `deploy/aws/serverless/zapier-relay/index.js` and its conditional AWS resources are defined in `runtime-template.yaml`. It is created only when `ZapierWebhookSecretArn` is supplied. Do not configure Zapier to poll the core SQS queue: the Automation Processor is its consumer and owns that queue's retry semantics.
@@ -38,7 +43,7 @@ The optional relay is implemented in `deploy/aws/serverless/zapier-relay/index.j
 |---|---|---|---|
 | Critical incident | Catch Hook: `incident.created` or `automation.state_changed` | severity = critical | Notify on-call Slack/Teams channel and email |
 | Ticket sync | Catch Hook: `incident.created` | severity in high/critical; dedupe by `eventId` | Create Jira/Linear issue; save external ticket ID in Zapier storage or ticket fields |
-| Approval request | Catch Hook: `automation.approval_required` | approval status = pending | Notify approver with CloudSentinels deep link; approval must happen in CloudSentinels |
+| Approval request | Catch Hook: `automation.approval_required` | approval status = pending | Notify approver with CloudSentinels deep link; Zapier may collect a human approval, but only the signed callback to CloudSentinels records the approval state and queues an eligible command |
 | Recovery result | Catch Hook: `automation.recovery_verified` | `recoveryVerified = true` only | Post resolved update and close/update matching ticket |
 | Daily digest | Schedule by Zapier | query/report source is a trusted CloudSentinels report endpoint | Send summary email or Teams post |
 
@@ -78,6 +83,25 @@ Use opaque cluster references, not kubeconfig, API-server addresses, pod logs, e
 6. Keep the Zap disabled until the test payload has been validated and the destination channel/project is confirmed.
 
 **Important:** Zapier Catch Hook URLs are bearer secrets. Anyone who obtains one may be able to trigger the Zap. Rotate it immediately if exposed.
+
+
+### Signed approval callback contract
+
+After a human approves a high-risk action (or an explicitly configured low-risk policy path approves it), Zapier must POST this payload to `/automation/commands` and sign the exact JSON body with the command signing secret:
+
+```json
+{
+  "eventId": "<eventId from the relay>",
+  "eventTime": "<eventTime from the relay>",
+  "ownerId": "<ownerId from the relay>",
+  "commandId": "<new stable UUID for this approval attempt>",
+  "action": "<recommendedAction from the relay>",
+  "approvalStatus": "approved",
+  "approvedBy": "<human approver identity or zapier-auto-policy>"
+}
+```
+
+The receiver verifies the HMAC and timestamp, loads the exact `USER#ownerId / AUTOMATION#eventTime#eventId` record, and checks the stored action, risk, approval policy, and cluster target. It returns HTTP 503 while remediation execution is disabled or the reviewed adapter is not configured. A successful approval is only queued; it is not proof that remediation ran or recovery succeeded.
 
 ## Current AWS resources and readiness
 
