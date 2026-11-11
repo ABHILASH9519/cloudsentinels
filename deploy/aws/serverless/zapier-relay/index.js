@@ -67,6 +67,8 @@ function toPayload(event, storedEvent) {
   const payload = {
     schemaVersion: "1",
     eventId: safeString(event.id, 128),
+    ownerId: safeString(storedEvent.ownerId, 128),
+    eventTime: safeString(storedEvent.eventTime, 40),
     eventType,
     source: safeString(event.source, 80),
     occurredAt: safeString(event.time, 40),
@@ -87,9 +89,15 @@ async function deliver(event, config) {
   if (typeof event.id !== "string" || !event.id) {
     throw new Error("Automation event is missing its EventBridge id.");
   }
+  const detail = event.detail && typeof event.detail === "object" ? event.detail : {};
+  const ownerId = safeString(detail.userId, 128);
+  const eventTime = safeString(event.time, 40);
+  const key = ownerId && eventTime
+    ? { PK: `USER#${ownerId}`, SK: `AUTOMATION#${eventTime}#${event.id}` }
+    : { PK: "SYSTEM#AUTOMATION", SK: `EVENT#${event.id}` };
   const stored = await db.send(new GetCommand({
     TableName: tableName,
-    Key: { PK: "SYSTEM#AUTOMATION", SK: `EVENT#${event.id}` },
+    Key: key,
   }));
   if (!stored.Item) {
     // The processor and relay consume separate SQS queues. Retry the relay until
