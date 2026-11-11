@@ -316,7 +316,13 @@ async function handleClusterTelemetry(event) {
   }
   await db.send(new PutCommand({
     TableName: table,
-    Item: { ...markerKey, eventId, status: "PROCESSING", createdAt: now },
+    Item: {
+      ...markerKey,
+      eventId,
+      status: "PROCESSING",
+      createdAt: now,
+      expiresAt: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+    },
     ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
   }));
 
