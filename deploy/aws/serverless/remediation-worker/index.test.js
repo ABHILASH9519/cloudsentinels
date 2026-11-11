@@ -51,7 +51,7 @@ DynamoDBDocumentClient.prototype.send = async function (command) {
       status: values[":status"],
       ...Object.fromEntries(
         Object.entries(values)
-          .filter(([key]) => ![":status", ":updatedAt", ":commandId"].includes(key))
+          .filter(([key]) => ![":status", ":updatedAt", ":commandId", ":expectedStatus"].includes(key))
           .map(([key, value]) => [key.slice(1), value]),
       ),
     };
