@@ -27,7 +27,7 @@ function parseRecord(record) {
   ) {
     throw new Error("Unsupported remediation queue message.");
   }
-  for (const field of ["eventId", "commandId", "action", "clusterName", "approvedBy"]) {
+  for (const field of ["eventId", "eventTime", "ownerId", "commandId", "action", "clusterName", "approvedBy"]) {
     if (typeof detail[field] !== "string" || !detail[field].trim()) {
       throw new Error(`Remediation command is missing ${field}.`);
     }
@@ -61,11 +61,17 @@ async function execute(detail) {
     throw new Error("Remediation worker is missing its table or adapter configuration.");
   }
 
-  const key = { PK: "SYSTEM#AUTOMATION", SK: `EVENT#${detail.eventId}` };
+  const key = {
+    PK: `USER#${detail.ownerId}`,
+    SK: `AUTOMATION#${detail.eventTime}#${detail.eventId}`,
+  };
   const result = await db.send(new GetCommand({ TableName: tableName, Key: key }));
   const eventRecord = result.Item;
   if (
     !eventRecord ||
+    eventRecord.id !== detail.eventId ||
+    eventRecord.ownerId !== detail.ownerId ||
+    eventRecord.eventTime !== detail.eventTime ||
     eventRecord.commandId !== detail.commandId ||
     eventRecord.recommendedAction !== detail.action ||
     eventRecord.clusterName !== detail.clusterName ||
