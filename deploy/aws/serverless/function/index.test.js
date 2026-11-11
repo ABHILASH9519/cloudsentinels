@@ -210,7 +210,7 @@ test("accepts a signed cluster event, creates an alert, and publishes an owner-s
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signingSecret = "test-signing-secret-with-at-least-32-characters";
   const signature = createHmac("sha256", signingSecret)
-    .update(`${timestamp}.${rawBody}`)
+    .update(`${timestamp}.demo-cluster.${rawBody}`)
     .digest("hex");
   const storedItems = [];
   let publishedDetail;
