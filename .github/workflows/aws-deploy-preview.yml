@@ -47,6 +47,12 @@ jobs:
           npm install --no-audit --no-fund
           node --test
 
+      - name: Test dry-run remediation adapter
+        working-directory: deploy/aws/serverless/remediation-adapter
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+
       - name: Test read-only cluster telemetry agent
         run: python3 -m unittest discover -s deploy/agent -p 'test_*.py'
 
