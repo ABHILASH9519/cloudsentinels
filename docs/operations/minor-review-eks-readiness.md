@@ -31,7 +31,7 @@ The feature branch now contains:
 - `scripts/eks/validate-airtable-inventory.mjs`: credential-key rejection, source-import freshness, independent telemetry freshness reporting, and `MATCH`/`SOURCE_ONLY`/`CLUSTER_ONLY`/`DRIFT`/`STALE` reconciliation.
 - `.github/workflows/eks-review-day.yml`: manual-only `plan`, `execute`, and `destroy` operations using protected environment + OIDC; plan and execute are separate runs.
 - `scripts/eks/validate-showcase-manifest.py`: validates the six Kubernetes showcase resources, embedded JSON, 20-cluster count, and sensitive-key exclusion.
-- `.github/workflows/eks-inventory-validation.yml`: Node tests and CloudFormation lint without AWS credentials (passed on commit `c496052`; 13/13 tests and `cfn-lint`); the additional showcase-manifest validation step has been added and awaits its first CI result.
+- `.github/workflows/eks-inventory-validation.yml`: Node tests, CloudFormation lint, and the refreshed Kubernetes showcase-manifest validation all passed without AWS credentials on commit `4a4acbdfb54a3d2c2aebd3beed8498f3a68f1a4c` (workflow run `42848936205`; all seven validation steps succeeded).
 - `deploy/eks/airtable-inventory.snapshot.json`: sanitized snapshot of the latest 20 cluster rows plus related-table freshness metadata.
 - `deploy/eks/review-day-scenarios.json`: seven controlled review scenarios derived from the new cluster health summary; observe/approval-only, not executable workload manifests.
 
