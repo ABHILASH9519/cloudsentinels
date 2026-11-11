@@ -38,6 +38,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
       - name: Build the project toolchain image
-        run: docker build --tag cloudsentinels-ci .
+        run: docker build --network=host --tag cloudsentinels-ci .
       - name: Compile frontend assets and Motoko backend
         run: docker run --rm --entrypoint /workdir/scripts/backend-smoke-test.sh cloudsentinels-ci
