@@ -408,6 +408,8 @@ Resources:
     Properties:
       CodeUri: function/
       Handler: index.handler
+      Timeout: 29
+      MemorySize: 512
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApplicationTableName
