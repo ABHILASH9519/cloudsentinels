@@ -136,6 +136,12 @@ export async function handler(event) {
   if ((event.requestContext?.http?.method ?? "POST") !== "POST") {
     return response(405, { error: "Method not allowed." });
   }
+  if (
+    process.env.REMEDIATION_EXECUTION_ENABLED !== "true" ||
+    !process.env.REMEDIATION_ADAPTER_FUNCTION_ARN
+  ) {
+    return response(503, { error: "Remediation execution is disabled until a reviewed adapter is configured." });
+  }
   const body = rawBody(event);
   if (body.length > 8192) return response(413, { error: "Request body is too large." });
   if (!body) return response(400, { error: "Request body is required." });
