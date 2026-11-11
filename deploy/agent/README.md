@@ -32,7 +32,7 @@ Generate the signing secret locally with `openssl rand -hex 32`. Do not commit t
 The public `POST /telemetry/events` route does not accept Cognito credentials. It requires:
 - `x-cs-cluster-id`
 - `x-cs-timestamp` (Unix seconds, maximum five-minute clock skew)
-- `x-cs-signature` (HMAC-SHA256 over `timestamp + "." + exact request body`)
+- `x-cs-signature` (HMAC-SHA256 over `timestamp + "." + cluster ID + "." + exact request body`)
 
 A valid event creates an owner-scoped active alert and publishes a domain event for the automation processor. Duplicate event IDs are idempotently acknowledged.
 
