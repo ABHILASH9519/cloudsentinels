@@ -252,7 +252,7 @@ async function handleClusterTelemetry(event) {
 
   const raw = rawBody(event);
   const expected = createHmac("sha256", config.signingSecret)
-    .update(`${timestamp}.${raw}`)
+    .update(`${timestamp}.${clusterId}.${raw}`)
     .digest();
   const supplied = Buffer.from(signature, "hex");
   if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
