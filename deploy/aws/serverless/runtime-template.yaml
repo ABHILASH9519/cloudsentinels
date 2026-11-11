@@ -394,7 +394,7 @@ Resources:
       MemorySize: 512
       Environment:
         Variables:
-          REMEDIATION_ADAPTER_FUNCTION_ARN: !Ref RemediationAdapterFunctionArn
+          REMEDIATION_ADAPTER_FUNCTION_ARN: !If [UseBuiltInDryRunAdapterActive, !GetAtt DryRunAdapter.Arn, !Ref RemediationAdapterFunctionArn]
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApplicationTableName
