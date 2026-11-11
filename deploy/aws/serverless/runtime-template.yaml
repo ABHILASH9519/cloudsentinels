@@ -283,7 +283,7 @@ Resources:
     Condition: HasZapierCommandSecret
     Properties:
       QueueName: cloudsentinels-remediation-commands
-      VisibilityTimeout: 120
+      VisibilityTimeout: 720
       MessageRetentionPeriod: 345600
       SqsManagedSseEnabled: true
       RedrivePolicy:
@@ -381,8 +381,8 @@ Resources:
     Properties:
       CodeUri: remediation-worker/
       Handler: index.handler
-      Timeout: 30
-      MemorySize: 256
+      Timeout: 120
+      MemorySize: 512
       Environment:
         Variables:
           REMEDIATION_ADAPTER_FUNCTION_ARN: !Ref RemediationAdapterFunctionArn
