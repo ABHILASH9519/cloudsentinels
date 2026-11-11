@@ -20,7 +20,7 @@ flowchart TD
   D --> F{Classification}
   F -->|High risk| G[Pending human approval]
   F -->|No target / unknown| H[Blocked or observed]
-  F -->|Adapter enabled and policy permits| I[Approved remediation adapter]
+  F -->|Eligible action| G[Pending approval or policy gate]
   D -. selected, sanitized event .-> J[Outbound integration relay - planned]
   J --> K[Zapier Catch Hook]
   K --> L[Filter / Paths]
@@ -28,6 +28,7 @@ flowchart TD
   L --> N[Jira / Linear ticket]
   L --> O[Email escalation]
   L --> P[Human approval step]
+  G --> P[Human approval or approved low-risk policy]
   P --> Q[Signed POST /automation/commands]
   Q --> R[Remediation command SQS]
   R --> S[Policy-gated remediation worker]
@@ -123,7 +124,8 @@ The EventBridge → SQS → Automation Processor path is provisioned. The proces
 - [ ] Duplicate EventBridge deliveries do not create duplicate tickets or repeated alerts.
 - [ ] A Zapier outage leaves CloudSentinels processing healthy and queues delivery for retry.
 - [ ] DLQ alarms and replay procedure are documented.
-- [ ] High-risk remediation remains pending until a CloudSentinels approval is recorded.
+- [ ] High-risk remediation remains pending until a signed approval callback is recorded in CloudSentinels.
+- [ ] Duplicate in-flight SQS deliveries never invoke the same adapter command twice; stuck EXECUTING records require operator review.
 - [ ] A recovery notification is emitted only after the Kubernetes adapter verifies the resulting state.
 
 
