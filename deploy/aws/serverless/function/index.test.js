@@ -256,6 +256,8 @@ test("accepts a signed cluster event, creates an alert, and publishes an owner-s
   assert.equal(JSON.parse(result.body).accepted, true);
   assert.equal(JSON.parse(result.body).alertId, "9");
   assert.equal(storedItems.some((item) => item.PK === "USER#test-user" && item.status === "active"), true);
+  const idempotencyMarker = storedItems.find((item) => item.SK === "CLUSTER_EVENT#cluster-event-0001");
+  assert.equal(idempotencyMarker.expiresAt > Math.floor(Date.now() / 1000) + 29 * 24 * 60 * 60, true);
   assert.equal(publishedDetail.userId, "test-user");
   assert.equal(publishedDetail.clusterName, "demo-cluster");
   assert.equal(publishedDetail.resource.eventId, "cluster-event-0001");
