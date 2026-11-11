@@ -86,6 +86,7 @@ export interface backendInterface {
     addAlert(title: string, severity: string, source: string, message: string): Promise<AlertId>;
     addComment(incidentId: IncidentId, author: string, text: string): Promise<CommentId>;
     addMetric(name: string, value: number, unit: string, source: string): Promise<MetricPointId>;
+    analyzeIncident(id: IncidentId): Promise<Incident>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createIncident(title: string, severity: string, source: string, rawLog: string): Promise<IncidentId>;
     deleteIncident(id: IncidentId): Promise<void>;
