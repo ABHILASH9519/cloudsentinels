@@ -57,6 +57,37 @@ async function setStatus(key, commandId, expectedStatus, status, extra = {}) {
   }));
 }
 
+
+async function resolveLinkedAlert(ownerId, resourceId) {
+  if (typeof resourceId !== "string" || !resourceId.trim()) return;
+  const now = new Date().toISOString();
+  try {
+    await db.send(new UpdateCommand({
+      TableName: tableName,
+      Key: {
+        PK: `USER#${ownerId}`,
+        SK: `ALERT#${resourceId.padStart(16, "0")}`,
+      },
+      UpdateExpression: "SET #status = :resolved, resolvedAt = :resolvedAt, updatedAt = :updatedAt",
+      ConditionExpression: "attribute_exists(PK) AND (#status = :active OR #status = :acknowledged)",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: {
+        ":resolved": "resolved",
+        ":resolvedAt": now,
+        ":updatedAt": now,
+        ":active": "active",
+        ":acknowledged": "acknowledged",
+      },
+    }));
+  } catch (error) {
+    if (error?.name === "ConditionalCheckFailedException") return;
+    console.error("Verified remediation could not update its linked alert", {
+      resourceId,
+      errorName: error?.name ?? "Error",
+    });
+  }
+}
+
 async function execute(detail) {
   if (!tableName || !adapterFunctionArn) {
     throw new Error("Remediation worker is missing its table or adapter configuration.");
@@ -132,6 +163,9 @@ async function execute(detail) {
   }
 
   const recoveryVerified = adapterResult.recoveryVerified === true;
+  if (recoveryVerified) {
+    await resolveLinkedAlert(detail.ownerId, eventRecord.resourceId);
+  }
   await setStatus(
     key,
     detail.commandId,
