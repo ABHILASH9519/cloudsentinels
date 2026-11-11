@@ -47,6 +47,12 @@ jobs:
           node --check deploy/aws/serverless/zapier-relay/index.js
           node --check deploy/aws/serverless/zapier-command/index.js
           node --check deploy/aws/serverless/remediation-worker/index.js
+          node --check deploy/aws/serverless/remediation-adapter/index.js
+      - name: Run dry-run remediation adapter tests
+        working-directory: deploy/aws/serverless/remediation-adapter
+        run: |
+          npm install --no-audit --no-fund
+          npm test
       - name: Run remediation worker tests
         working-directory: deploy/aws/serverless/remediation-worker
         run: |
