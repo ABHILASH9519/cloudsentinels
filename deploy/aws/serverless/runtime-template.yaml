@@ -354,6 +354,8 @@ Resources:
       Environment:
         Variables:
           ZAPIER_COMMAND_SECRET_ARN: !Ref ZapierCommandSecretArn
+          REMEDIATION_EXECUTION_ENABLED: !Ref RemediationExecutionEnabled
+          REMEDIATION_ADAPTER_FUNCTION_ARN: !Ref RemediationAdapterFunctionArn
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApplicationTableName
