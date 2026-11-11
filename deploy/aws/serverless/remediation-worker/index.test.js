@@ -10,8 +10,10 @@ const originalLambdaSend = LambdaClient.prototype.send;
 const originalDbSend = DynamoDBDocumentClient.prototype.send;
 
 let eventRecord;
+let alertRecord;
 let invocations;
 let updates;
+let alertUpdates;
 let adapterResponse;
 let requestedKey;
 
@@ -27,9 +29,17 @@ function resetState() {
     recommendedAction: "rollback-deployment",
     clusterName: "staging-cluster",
     requiresApproval: true,
+    resourceId: "9",
+  };
+  alertRecord = {
+    PK: "USER#user-123",
+    SK: "ALERT#0000000000000009",
+    id: "9",
+    status: "active",
   };
   invocations = [];
   updates = [];
+  alertUpdates = [];
   requestedKey = undefined;
   adapterResponse = {
     accepted: true,
@@ -44,8 +54,13 @@ DynamoDBDocumentClient.prototype.send = async function (command) {
     return { Item: eventRecord };
   }
   if (command.constructor.name === "UpdateCommand") {
-    updates.push(command.input);
     const values = command.input.ExpressionAttributeValues;
+    if (command.input.Key.SK.startsWith("ALERT#")) {
+      alertUpdates.push(command.input);
+      alertRecord = { ...alertRecord, status: values[":resolved"] };
+      return {};
+    }
+    updates.push(command.input);
     eventRecord = {
       ...eventRecord,
       status: values[":status"],
@@ -108,6 +123,7 @@ test("dispatches an approved command to the configured adapter", async () => {
   assert.equal(updates.length, 2);
   assert.equal(eventRecord.status, "ACTION_SUBMITTED_UNVERIFIED");
   assert.equal(eventRecord.recoveryVerified, false);
+  assert.equal(alertRecord.status, "active");
 });
 
 test("records verified recovery only when the adapter explicitly confirms it", async () => {
@@ -117,6 +133,8 @@ test("records verified recovery only when the adapter explicitly confirms it", a
   assert.deepEqual(result, { batchItemFailures: [] });
   assert.equal(eventRecord.status, "RECOVERY_VERIFIED");
   assert.equal(eventRecord.recoveryVerified, true);
+  assert.equal(alertRecord.status, "resolved");
+  assert.equal(alertUpdates.length, 1);
 });
 
 test("acknowledges duplicate in-flight delivery without invoking the adapter twice", async () => {
