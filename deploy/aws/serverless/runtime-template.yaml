@@ -16,6 +16,10 @@ Parameters:
     Type: String
   UserPoolClientId:
     Type: String
+  ClusterAgentSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional Secrets Manager JSON map of cluster IDs to ownerId, clusterName, and signingSecret.
   BedrockModelId:
     Type: String
     Default: in.anthropic.claude-sonnet-5
@@ -45,6 +49,7 @@ Parameters:
 Conditions:
   HasZapierWebhookSecret: !Not [!Equals [!Ref ZapierWebhookSecretArn, ""]]
   HasZapierCommandSecret: !Not [!Equals [!Ref ZapierCommandSecretArn, ""]]
+  HasClusterAgentSecret: !Not [!Equals [!Ref ClusterAgentSecretArn, ""]]
   CanExecuteRemediation: !And
     - !Equals [!Ref RemediationExecutionEnabled, "true"]
     - !Not [!Equals [!Ref RemediationAdapterFunctionArn, ""]]
@@ -408,6 +413,15 @@ Resources:
             TableName: !Ref ApplicationTableName
         - EventBridgePutEventsPolicy:
             EventBusName: !Ref CloudSentinelsEventBus
+        - !If
+          - HasClusterAgentSecret
+          - Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref ClusterAgentSecretArn
+          - !Ref AWS::NoValue
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -420,6 +434,7 @@ Resources:
       Environment:
         Variables:
           BEDROCK_MODEL_ID: !Ref BedrockModelId
+          CLUSTER_AGENT_SECRET_ARN: !Ref ClusterAgentSecretArn
       Events:
         Health:
           Type: HttpApi
@@ -500,6 +515,14 @@ Resources:
             Method: GET
             Auth:
               Authorizer: CognitoJwtAuthorizer
+        ClusterTelemetry:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /telemetry/events
+            Method: POST
+            Auth:
+              Authorizer: NONE
         Comments:
           Type: HttpApi
           Properties:
