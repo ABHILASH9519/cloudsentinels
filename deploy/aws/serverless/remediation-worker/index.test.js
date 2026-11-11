@@ -16,9 +16,11 @@ let adapterResponse;
 
 function resetState() {
   eventRecord = {
-    PK: "SYSTEM#AUTOMATION",
-    SK: "EVENT#event-123",
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-123",
     id: "event-123",
+    ownerId: "user-123",
+    eventTime: "2026-11-10T10:00:00.000Z",
     status: "APPROVED_AWAITING_EXECUTOR",
     commandId: "command-abc",
     recommendedAction: "rollback-deployment",
@@ -67,6 +69,8 @@ function queueEvent(overrides = {}) {
         "detail-type": "RemediationCommandApproved",
         detail: {
           eventId: "event-123",
+          eventTime: "2026-11-10T10:00:00.000Z",
+          ownerId: "user-123",
           commandId: "command-abc",
           action: "rollback-deployment",
           clusterName: "staging-cluster",
