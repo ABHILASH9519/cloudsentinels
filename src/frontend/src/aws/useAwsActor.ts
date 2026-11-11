@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type {
   Alert,
+  AutomationEvent,
   Comment,
   DashboardSummary,
   Incident,
@@ -147,6 +148,9 @@ export function useAwsActor() {
         return (await request<any[]>("/alerts"))
           .filter((row) => row.status === "active")
           .map(alertItem);
+      },
+      async getAutomationEvents() {
+        return request<AutomationEvent[]>("/automation/events");
       },
       async updateAlertStatus(id, status) {
         await request(`/alerts/${id}`, "PATCH", { status });
