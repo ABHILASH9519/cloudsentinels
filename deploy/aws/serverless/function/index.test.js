@@ -2,13 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import { BedrockRuntimeClient } from "@aws-sdk/client-bedrock-runtime";
+
 
 process.env.TABLE_NAME = "cloudsentinels-api-test-table";
 process.env.EVENT_BUS_NAME = "cloudsentinels-test-bus";
+process.env.BEDROCK_MODEL_ID = "in.anthropic.claude-sonnet-5";
 const { handler } = await import("./index.js");
 
 const originalDbSend = DynamoDBDocumentClient.prototype.send;
 const originalEventSend = EventBridgeClient.prototype.send;
+const originalBedrockSend = BedrockRuntimeClient.prototype.send;
 const originalConsoleError = console.error;
 
 function createIncidentEvent() {
@@ -104,4 +108,85 @@ test("lists automation activity only from the authenticated user's partition", a
   assert.equal(queryInput.ExpressionAttributeValues[":prefix"], "AUTOMATION#");
   assert.equal(queryInput.Limit, 100);
   assert.equal(JSON.parse(result.body)[0].id, "evt-1");
+});
+
+test("generates a redacted Bedrock analysis and persists it to the owned incident", async (t) => {
+  let stored = {
+    PK: "USER#test-user",
+    SK: "INCIDENT#0000000000000042",
+    id: "42",
+    title: "API latency spike",
+    severity: "high",
+    source: "synthetic",
+    rawLog: "password=super-secret user@example.com request timed out",
+    status: "open",
+  };
+  let modelInput;
+  DynamoDBDocumentClient.prototype.send = async (command) => {
+    if (command.constructor.name === "GetCommand") return { Item: stored };
+    if (command.constructor.name === "UpdateCommand") {
+      for (const [alias, field] of Object.entries(command.input.ExpressionAttributeNames)) {
+        const valueAlias = `:${alias.slice(1)}`;
+        if (Object.hasOwn(command.input.ExpressionAttributeValues, valueAlias)) {
+          stored[field] = command.input.ExpressionAttributeValues[valueAlias];
+        }
+      }
+      return {};
+    }
+    return {};
+  };
+  BedrockRuntimeClient.prototype.send = async (command) => {
+    modelInput = command.input;
+    return {
+      output: {
+        message: {
+          content: [{
+            text: JSON.stringify({
+              summary: "The API is experiencing elevated request latency.",
+              rootCause: "The supplied log shows request timeouts; the underlying dependency is not identified.",
+              suggestedFix: "Inspect upstream dependency latency, API Gateway metrics, and Lambda duration before changing capacity.",
+            }),
+          }],
+        },
+      },
+    };
+  };
+  EventBridgeClient.prototype.send = async () => ({ FailedEntryCount: 0, Entries: [{ EventId: "analysis-event" }] });
+  t.after(() => {
+    DynamoDBDocumentClient.prototype.send = originalDbSend;
+    EventBridgeClient.prototype.send = originalEventSend;
+    BedrockRuntimeClient.prototype.send = originalBedrockSend;
+  });
+
+  const result = await handler({
+    rawPath: "/v1/incidents/42/analyze",
+    requestContext: {
+      http: { method: "POST" },
+      authorizer: { jwt: { claims: { sub: "test-user" } } },
+    },
+  });
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(JSON.parse(result.body).aiSummary, "The API is experiencing elevated request latency.");
+  assert.equal(JSON.parse(result.body).aiModelId, "in.anthropic.claude-sonnet-5");
+  assert.equal(modelInput.modelId, "in.anthropic.claude-sonnet-5");
+  const prompt = modelInput.messages[0].content[0].text;
+  assert.equal(prompt.includes("super-secret"), false);
+  assert.equal(prompt.includes("user@example.com"), false);
+  assert.equal(prompt.includes("[REDACTED_EMAIL]"), true);
+});
+
+test("returns a clear unavailable response when Bedrock is not configured", async (t) => {
+  const configuredModel = process.env.BEDROCK_MODEL_ID;
+  delete process.env.BEDROCK_MODEL_ID;
+  t.after(() => { process.env.BEDROCK_MODEL_ID = configuredModel; });
+
+  const result = await handler({
+    rawPath: "/v1/incidents/42/analyze",
+    requestContext: {
+      http: { method: "POST" },
+      authorizer: { jwt: { claims: { sub: "test-user" } } },
+    },
+  });
+  assert.equal(result.statusCode, 404);
 });
