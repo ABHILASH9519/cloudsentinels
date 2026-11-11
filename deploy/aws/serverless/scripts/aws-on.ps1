@@ -6,7 +6,13 @@ param(
   [string]$LocalDevOrigin = "http://localhost:5173",
   [string]$CoreStackName = "cloudsentinels-core",
   [string]$RuntimeStackName = "cloudsentinels-runtime",
-  [string]$DeploymentRoleArn = ""
+  [string]$DeploymentRoleArn = "",
+  [string]$ClusterAgentSecretArn = "",
+  [string]$BedrockModelId = "in.anthropic.claude-sonnet-5",
+  [string]$ZapierWebhookSecretArn = "",
+  [string]$ZapierCommandSecretArn = "",
+  [string]$RemediationAdapterFunctionArn = "",
+  [string]$RemediationExecutionEnabled = "false"
 )
 $ErrorActionPreference = "Stop"
 if (-not (Get-Command "aws" -ErrorAction SilentlyContinue)) { throw "AWS CLI v2 is required." }
@@ -56,7 +62,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "Packaged runtime template validation failed." }
 
   Write-Host "Deploying API, Lambda, EventBridge, SQS and automation processor..."
-  aws cloudformation deploy --template-file $packagedTemplate --stack-name $RuntimeStackName --parameter-overrides "AppOrigin=$AppOrigin" "LocalDevOrigin=$LocalDevOrigin" "ApplicationTableName=$table" "CognitoIssuer=$issuer" "UserPoolClientId=$client" --capabilities CAPABILITY_IAM --role-arn $DeploymentRoleArn --region $Region --no-fail-on-empty-changeset
+  aws cloudformation deploy --template-file $packagedTemplate --stack-name $RuntimeStackName --parameter-overrides "AppOrigin=$AppOrigin" "LocalDevOrigin=$LocalDevOrigin" "ApplicationTableName=$table" "CognitoIssuer=$issuer" "UserPoolClientId=$client" "BedrockModelId=$BedrockModelId" "ClusterAgentSecretArn=$ClusterAgentSecretArn" "ZapierWebhookSecretArn=$ZapierWebhookSecretArn" "ZapierCommandSecretArn=$ZapierCommandSecretArn" "RemediationAdapterFunctionArn=$RemediationAdapterFunctionArn" "RemediationExecutionEnabled=$RemediationExecutionEnabled" --capabilities CAPABILITY_IAM --role-arn $DeploymentRoleArn --region $Region --no-fail-on-empty-changeset
   if ($LASTEXITCODE -ne 0) { throw "Runtime deployment failed. Persistent core resources were left intact." }
 
   $runtime = aws cloudformation describe-stacks --stack-name $RuntimeStackName --region $Region --query "Stacks[0].Outputs" --output json | ConvertFrom-Json
