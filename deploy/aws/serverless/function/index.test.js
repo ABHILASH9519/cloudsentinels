@@ -304,3 +304,50 @@ test("returns service unavailable when cluster agent secrets are not configured"
   });
   assert.equal(result.statusCode, 503);
 });
+
+test("rejects unsupported incident severity before writing", async (t) => {
+  let writes = 0;
+  DynamoDBDocumentClient.prototype.send = async () => {
+    writes += 1;
+    return {};
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalDbSend; });
+  const event = createIncidentEvent();
+  event.body = JSON.stringify({ title: "Bad severity", severity: "urgent", source: "unit-test" });
+  const result = await handler(event);
+  assert.equal(result.statusCode, 400);
+  assert.equal(writes, 0);
+});
+
+test("rejects invalid incident status and system-only fields in user patches", async (t) => {
+  let updates = 0;
+  DynamoDBDocumentClient.prototype.send = async (command) => {
+    if (command.constructor.name === "GetCommand") {
+      return { Item: { id: "42", status: "open", PK: "USER#test-user", SK: "INCIDENT#0000000000000042" } };
+    }
+    if (command.constructor.name === "UpdateCommand") updates += 1;
+    return {};
+  };
+  t.after(() => { DynamoDBDocumentClient.prototype.send = originalDbSend; });
+
+  const invalidStatus = await handler({
+    rawPath: "/v1/incidents/42",
+    requestContext: {
+      http: { method: "PATCH" },
+      authorizer: { jwt: { claims: { sub: "test-user" } } },
+    },
+    body: JSON.stringify({ status: "deleted" }),
+  });
+  assert.equal(invalidStatus.statusCode, 400);
+
+  const systemField = await handler({
+    rawPath: "/v1/incidents/42",
+    requestContext: {
+      http: { method: "PATCH" },
+      authorizer: { jwt: { claims: { sub: "test-user" } } },
+    },
+    body: JSON.stringify({ aiModelId: "attacker-model" }),
+  });
+  assert.equal(systemField.statusCode, 400);
+  assert.equal(updates, 0);
+});
