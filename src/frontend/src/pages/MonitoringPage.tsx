@@ -526,6 +526,9 @@ export function MonitoringPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-xs text-foreground">{event.eventType}</span>
                       <StatusBadge status={event.status} />
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {event.risk} risk
+                      </span>
                       {event.requiresApproval && (
                         <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-300">
                           Approval required
@@ -533,6 +536,11 @@ export function MonitoringPage() {
                       )}
                     </div>
                     <p className="text-xs leading-relaxed text-muted-foreground">{event.reason}</p>
+                    {event.clusterName && (
+                      <p className="text-[10px] font-mono text-muted-foreground">
+                        cluster · {event.clusterName}
+                      </p>
+                    )}
                     {event.recommendedAction && (
                       <p className="text-[11px] text-cyan-200">
                         Recommended: {event.recommendedAction}
