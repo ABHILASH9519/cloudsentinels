@@ -14,7 +14,7 @@ import {
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const eventBridge = new EventBridgeClient({});
-const bedrock = new BedrockRuntimeClient({});
+const bedrock = new BedrockRuntimeClient({ maxAttempts: 1 });
 const secretsManager = new SecretsManagerClient({});
 let clusterAgentSecretCache = null;
 let clusterAgentSecretCacheExpiresAt = 0;
