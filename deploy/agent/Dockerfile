@@ -9,9 +9,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY cluster-agent.py /app/cluster-agent.py
+COPY cluster_agent.py /app/cluster_agent.py
 RUN mkdir -p /data && chown -R 65532:65532 /app /data
 USER 65532:65532
 
 ENV SPOOL_DB_PATH=/data/events.sqlite3
-ENTRYPOINT ["python", "/app/cluster-agent.py"]
+ENTRYPOINT ["python", "/app/cluster_agent.py"]
