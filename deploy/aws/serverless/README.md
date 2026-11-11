@@ -104,6 +104,7 @@ See [n8n / Zapier automation](../../automation/README.md) for the EventBridge �
 - `PATCH /alerts/{id}`
 - `GET|POST /metrics`
 - `GET /automation/events` — authenticated, owner-scoped automation processing history.
+- `POST /telemetry/events` — HMAC-authenticated cluster-agent ingestion; requires `ClusterAgentSecretArn`.
 
 AI analysis uses the India-geographic Bedrock profile `in.anthropic.claude-sonnet-5` and runs only when a signed-in user requests it. Incident title, source, severity, and a redacted/truncated raw-log excerpt are sent to Bedrock; each request may incur model-inference charges. All application endpoints except health require a valid Cognito JWT. This is the AWS backend foundation; remaining application features/integrations must be validated before production use.
 
