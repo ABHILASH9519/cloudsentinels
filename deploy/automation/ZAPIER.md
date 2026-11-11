@@ -46,12 +46,14 @@ Do not send every raw metric to Jira. Alert thresholds and deduplication belong 
 
 ## Sanitized webhook contract
 
-The relay sends only the following allow-listed fields (unknown fields are dropped):
+The relay sends only the following allow-listed fields (unknown fields are dropped). `ownerId` is the opaque Cognito subject and `eventTime` binds the callback to the exact owner-scoped DynamoDB event record:
 
 ```json
 {
   "schemaVersion": "1",
   "eventId": "evt_01J...",
+  "ownerId": "<opaque-cognito-sub>",
+  "eventTime": "2026-11-10T08:00:00.000Z",
   "eventType": "automation.state_changed",
   "occurredAt": "2026-11-10T08:00:00.000Z",
   "severity": "critical",
@@ -60,8 +62,7 @@ The relay sends only the following allow-listed fields (unknown fields are dropp
   "status": "PENDING_APPROVAL",
   "recommendedAction": "rollback-deployment",
   "requiresApproval": true,
-  "recoveryVerified": false,
-  "dashboardUrl": "https://<cloudsentinels-dashboard>/incidents/<incident-id>"
+  "recoveryVerified": false
 }
 ```
 
