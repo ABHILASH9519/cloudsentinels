@@ -14,6 +14,7 @@ const originalDbSend = DynamoDBDocumentClient.prototype.send;
 const originalFetch = globalThis.fetch;
 let fetchResponse;
 let requests = [];
+let requestedKey;
 const eventRecords = new Map();
 
 function storeEvent(eventId, attributes = {}) {
@@ -39,6 +40,7 @@ SecretsManagerClient.prototype.send = async function () {
 };
 
 DynamoDBDocumentClient.prototype.send = async function (command) {
+  requestedKey = command.input.Key;
   return { Item: eventRecords.get(command.input.Key.SK) };
 };
 
@@ -49,6 +51,7 @@ globalThis.fetch = async (url, options) => {
 
 test.beforeEach(() => {
   requests = [];
+  requestedKey = undefined;
   eventRecords.clear();
   fetchResponse = { ok: true, status: 200 };
 });
@@ -90,6 +93,10 @@ test("forwards allow-listed event fields and signs the exact request body", asyn
   assert.equal(payload.eventType, "IncidentCreated");
   assert.equal(payload.ownerId, "user-123");
   assert.equal(payload.eventTime, "2026-11-10T10:00:00.000Z");
+  assert.deepEqual(requestedKey, {
+    PK: "USER#user-123",
+    SK: "AUTOMATION#2026-11-10T10:00:00.000Z#event-1",
+  });
   assert.equal(payload.severity, "high");
   assert.equal(payload.incidentId, "incident-9");
   assert.equal(payload.resourceId, undefined);
