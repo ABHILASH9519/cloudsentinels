@@ -49,7 +49,7 @@ class ClusterAgentTests(unittest.TestCase):
 
     def test_hmac_signing_is_deterministic(self):
         raw = b'{"eventId":"evt-1"}'
-        first = sign_request("1794400000", raw, "a-long-test-secret-value-at-least-32-chars")
+        first = sign_request("1794400000", "demo-cluster", raw, "a-long-test-secret-value-at-least-32-chars")
         second = sign_request("1794400000", raw, "a-long-test-secret-value-at-least-32-chars")
         self.assertEqual(first, second)
         self.assertEqual(len(first), 64)
