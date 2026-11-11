@@ -8,6 +8,7 @@ on:
       - "deploy/aws/serverless/**"
       - "deploy/automation/**"
       - "deploy/kubernetes/**"
+      - "deploy/agent/**"
       - "docs/architecture/**"
       - "docs/integrations/**"
       - "src/frontend/src/aws/**"
@@ -31,6 +32,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Test read-only cluster telemetry agent
+        run: python3 -m unittest discover -s deploy/agent -p 'test_*.py'
       - name: Validate SAM template
         run: sam validate --lint --template-file deploy/aws/serverless/runtime-template.yaml
       - name: Build SAM functions and install per-function dependencies
