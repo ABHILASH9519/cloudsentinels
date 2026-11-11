@@ -34,7 +34,7 @@ The public `POST /telemetry/events` route does not accept Cognito credentials. I
 - `x-cs-timestamp` (Unix seconds, maximum five-minute clock skew)
 - `x-cs-signature` (HMAC-SHA256 over `timestamp + "." + cluster ID + "." + exact request body`)
 
-A valid event creates an owner-scoped active alert and publishes a domain event for the automation processor. Duplicate event IDs are idempotently acknowledged.
+A valid event creates an owner-scoped active alert and publishes a domain event for the automation processor. Duplicate event IDs are idempotently acknowledged. The DynamoDB idempotency marker expires after 30 days via the table TTL setting.
 
 ## Run locally
 
