@@ -2,7 +2,7 @@ import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
-const lambda = new LambdaClient({});
+const lambda = new LambdaClient({ maxAttempts: 1 });
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const tableName = process.env.TABLE_NAME;
 const adapterFunctionArn = process.env.REMEDIATION_ADAPTER_FUNCTION_ARN;
