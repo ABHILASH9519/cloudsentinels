@@ -102,6 +102,7 @@ See [n8n / Zapier automation](../../automation/README.md) for the EventBridge â†
 - `GET|POST /alerts`
 - `PATCH /alerts/{id}`
 - `GET|POST /metrics`
+- `GET /automation/events` â€” authenticated, owner-scoped automation processing history.
 
 All application endpoints except health require a valid Cognito JWT. This is the AWS backend foundation; remaining application features/integrations must be validated before production use.
 
