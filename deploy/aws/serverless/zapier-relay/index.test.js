@@ -13,6 +13,8 @@ const originalSecretSend = SecretsManagerClient.prototype.send;
 const originalDbSend = DynamoDBDocumentClient.prototype.send;
 const originalFetch = globalThis.fetch;
 let fetchResponse;
+let fetchError = null;
+let secretFailure = null;
 let requests = [];
 const eventRecords = new Map();
 
@@ -26,6 +28,7 @@ function storeEvent(eventId, attributes = {}) {
 }
 
 SecretsManagerClient.prototype.send = async function () {
+  if (secretFailure) throw secretFailure;
   return {
     SecretString: JSON.stringify({
       webhookUrl: "https://hooks.zapier.com/hooks/catch/123/abc",
@@ -40,6 +43,7 @@ DynamoDBDocumentClient.prototype.send = async function (command) {
 
 globalThis.fetch = async (url, options) => {
   requests.push({ url, options });
+  if (fetchError) throw fetchError;
   return fetchResponse;
 };
 
@@ -47,12 +51,32 @@ test.beforeEach(() => {
   requests = [];
   eventRecords.clear();
   fetchResponse = { ok: true, status: 200 };
+  fetchError = null;
+  secretFailure = null;
 });
 
 test.after(() => {
   SecretsManagerClient.prototype.send = originalSecretSend;
   DynamoDBDocumentClient.prototype.send = originalDbSend;
   globalThis.fetch = originalFetch;
+});
+
+test("returns an SQS partial-batch failure when Secrets Manager is unavailable", async () => {
+  secretFailure = new Error("simulated Secrets Manager outage");
+  const result = await handler({
+    Records: [{
+      messageId: "secrets-unavailable",
+      body: JSON.stringify({
+        id: "event-secret-outage",
+        "detail-type": "IncidentCreated",
+      }),
+    }],
+  });
+
+  assert.deepEqual(result, {
+    batchItemFailures: [{ itemIdentifier: "secrets-unavailable" }],
+  });
+  assert.equal(requests.length, 0);
 });
 
 test("forwards allow-listed event fields and signs the exact request body", async () => {
@@ -92,6 +116,27 @@ test("forwards allow-listed event fields and signs the exact request body", asyn
     .update(`${timestamp}.${options.body}`)
     .digest("hex");
   assert.equal(options.headers["x-cloudsentinels-signature"], `sha256=${expected}`);
+});
+
+test("returns an SQS partial-batch failure when the webhook request times out", async () => {
+  fetchError = Object.assign(new Error("simulated webhook timeout"), {
+    name: "TimeoutError",
+  });
+  storeEvent("event-timeout");
+  const result = await handler({
+    Records: [{
+      messageId: "webhook-timeout",
+      body: JSON.stringify({
+        id: "event-timeout",
+        "detail-type": "AlertCreated",
+      }),
+    }],
+  });
+
+  assert.deepEqual(result, {
+    batchItemFailures: [{ itemIdentifier: "webhook-timeout" }],
+  });
+  assert.equal(requests.length, 1);
 });
 
 test("returns an SQS partial-batch failure when Zapier responds non-2xx", async () => {
