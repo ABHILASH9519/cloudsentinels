@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudsentinels-agent
+  namespace: cloudsentinels-system
+  labels:
+    app.kubernetes.io/name: cloudsentinels-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudsentinels-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cloudsentinels-agent
+    spec:
+      serviceAccountName: cloudsentinels-agent
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent
+          image: REPLACE_WITH_YOUR_REGISTRY/cloudsentinels-agent:VERSION
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CLOUDSENTINELS_API_URL
+              value: https://REPLACE_WITH_YOUR_CLOUDSENTINELS_API
+            - name: CLOUDSENTINELS_AGENT_CLUSTER_ID
+              value: REPLACE_WITH_AIRTABLE_RECORD_ID
+            - name: CLOUDSENTINELS_AGENT_CONTEXT
+              value: REPLACE_WITH_CLUSTER_NAME
+            - name: CLOUDSENTINELS_AGENT_INTERVAL
+              value: 30s
+            - name: CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS
+              value: "false"
+            - name: CLOUDSENTINELS_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudsentinels-agent-token
+                  key: token
+          resources:
+            requests:
+              cpu: 25m
+              memory: 48Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      restartPolicy: Always

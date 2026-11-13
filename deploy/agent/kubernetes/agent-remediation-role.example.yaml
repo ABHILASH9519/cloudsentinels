@@ -1,0 +1,26 @@
+# Optional and intentionally separate. Apply only in an explicitly approved
+# application namespace after the remediation policy and rollback procedure
+# have been reviewed. This grants patch on deployments only in this namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudsentinels-agent-deployment-restart
+  namespace: REPLACE_WITH_APPROVED_NAMESPACE
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudsentinels-agent-deployment-restart
+  namespace: REPLACE_WITH_APPROVED_NAMESPACE
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudsentinels-agent-deployment-restart
+subjects:
+  - kind: ServiceAccount
+    name: cloudsentinels-agent
+    namespace: cloudsentinels-system

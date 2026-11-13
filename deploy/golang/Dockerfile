@@ -9,8 +9,9 @@ COPY internal ./internal
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/cloudsentinels ./cmd/cloudsentinels
 
 FROM gcr.io/distroless/static-debian12:nonroot
-WORKDIR /
-COPY --from=build /out/cloudsentinels /cloudsentinels
+WORKDIR /app
+COPY --from=build /out/cloudsentinels /app/cloudsentinels
+COPY deploy/eks/airtable-inventory.snapshot.json /app/deploy/eks/airtable-inventory.snapshot.json
 USER nonroot:nonroot
 EXPOSE 8080
-ENTRYPOINT ["/cloudsentinels"]
+ENTRYPOINT ["/app/cloudsentinels"]
