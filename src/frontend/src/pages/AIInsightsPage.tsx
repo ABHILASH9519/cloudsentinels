@@ -1,14 +1,25 @@
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, Brain, Lightbulb, ShieldAlert } from "lucide-react";
+import { AlertCircle, Brain, Lightbulb, RefreshCw, ShieldAlert } from "lucide-react";
+import { toast } from "sonner";
 import { SeverityBadge } from "../components/SeverityBadge";
 import { StatusBadge } from "../components/StatusBadge";
-import { useClusterInsights } from "../hooks/useClusterData";
+import { useClusterInsights, useTriggerClusterAnalysis } from "../hooks/useClusterData";
 import { useListIncidents } from "../hooks/useQueries";
 
 export function AIInsightsPage() {
   const { data: incidents, isLoading } = useListIncidents();
   const clusterInsights = useClusterInsights();
+  const analyze = useTriggerClusterAnalysis();
+  const runAnalysis = async () => {
+    try {
+      const report = await analyze.mutateAsync();
+      toast.success(`Analysis completed: ${report.insights.length} findings`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Analysis failed");
+    }
+  };
   const withAI = (incidents ?? []).filter((inc) => inc.aiSummary && inc.aiSummary.trim() !== "");
   const insights = clusterInsights.data?.insights ?? [];
 
@@ -19,6 +30,10 @@ export function AIInsightsPage() {
         <h1 className="font-display text-2xl font-bold text-foreground">AI Insights</h1>
         <p className="mt-1 text-sm text-muted-foreground">Cluster health triage, anomaly evidence and recommended next checks.</p>
       </div>
+      <Button onClick={() => void runAnalysis()} disabled={analyze.isPending}>
+        <RefreshCw className={`mr-2 h-4 w-4 ${analyze.isPending ? "animate-spin" : ""}`} />
+        {analyze.isPending ? "Analyzing…" : "Run cluster analysis"}
+      </Button>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between"><h2 className="font-display text-base font-semibold text-foreground">Cluster intelligence</h2><span className="font-mono text-[9px] text-muted-foreground">{insights.length} FINDINGS</span></div>

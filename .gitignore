@@ -22,3 +22,16 @@ __pycache__/
 
 # Local submission demo processes, logs and generated binary
 .local-demo-*
+
+# Local Kubernetes agent runtime artifacts
+.local-cloudsentinels-agent.exe
+.local-cloudsentinels-agent.pid
+
+# Local Cognito-backed operational runtime artifacts
+.local-server-*
+
+# Frontend build output (generated in CI/deployments)
+src/frontend/dist/
+
+# Local Windows build artifacts
+*.exe

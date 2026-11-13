@@ -35,4 +35,4 @@ The local token currently represents one local operator principal. It is a boots
 
 ## Review limitations
 
-The current incident repository remains process-memory demo storage. Cognito groups are surfaced as roles but are not yet used for fine-grained authorization policies. There is no refresh-token flow, browser login UI wiring, durable audit log, or Kubernetes service-account integration in this Go bootstrap. These are explicit production gates.
+The Go incident repository is process-memory storage and is not durable across process restarts. The React browser login uses Cognito Authorization Code + PKCE and the Go API validates ID tokens. Cognito groups are surfaced as roles but are not yet enforced through fine-grained authorization policies. Durable audit logging and the production EKS service-account/Pod Identity configuration remain explicit production gates.

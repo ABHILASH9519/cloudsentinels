@@ -1,116 +1,56 @@
-# CloudSentinels Go core — final review runbook
+# CloudSentinels Go core — current review runbook
 
-This runbook describes the Go bootstrap and the exact checks reviewers can reproduce. It is not a claim that the full CloudSentinels product is production-ready.
+This runbook describes the current Go-first control plane and checks that can be reproduced. It does not claim that every external integration is production-ready.
 
-## Scope in this review
+## Active implementation
 
-Included:
-- Go HTTP service bootstrap and three execution-mode identifiers.
-- Cognito OIDC ID-token verifier (issuer discovery, signing-key validation, issuer, expiry and app-client audience).
-- Development/offline local operator bearer token with constant-time comparison and production guard.
-- Incident request validation, bounded JSON input, generated IDs, duplicate-ID protection and in-memory demo repository.
-- Race-enabled Go tests, vet, static build and Docker image build in GitHub Actions.
+- Go HTTP API for cluster inventory, monitoring, explainable analysis, agent telemetry and signed Zapier command ingress.
+- Go Kubernetes agent with fixed kubectl allowlist, per-cluster bearer credentials and optional signed Lambda event forwarding.
+- Go AWS Lambda adapter compiled for Linux ARM64; the deployed AWS Operations API still contains Node.js workers and is not yet replaced by the Go adapter.
+- Cognito OIDC browser sign-in using Authorization Code + PKCE; the Go API validates Cognito ID tokens.
+- React/TypeScript dashboard; the frontend is a presentation layer, not a backend runtime.
+- Docker-backed local Kubernetes manifests and a read-only agent deployment.
+- GitHub Actions Go/UI validation and optional Zapier CI notification through gpuliyar/zapier-webhook-action@v1.0.0.
 
-Not yet implemented:
-- Durable database/repository and audit event store.
-- React sign-in/session integration and fine-grained role authorization.
-- AWS SDK v2 runtime credential adapter / STS role assumption.
-- AWS Lambda/serverless adapter and local Kubernetes client-go adapter.
-- AI analysis provider, Zapier event/approval integration, and policy-gated remediation execution.
+## Known production boundaries
 
-## Local setup
+- The Go API's incident repository, command queue and telemetry cache are process-local. They are not durable across restarts and are not safe for horizontal scaling until migrated to DynamoDB/SQS with audit history.
+- Airtable snapshot contains the exact sanitized 20 cluster records; Airtable-reported CPU/memory is inventory metadata, not streaming metrics.
+- Local Docker-backed Minikube agent telemetry is real when the cluster and agent are running. EKS has not yet been provisioned.
+- Application-level Zapier delivery requires ZAPIER_CATCH_HOOK_URL and ZAPIER_SIGNING_SECRET. GitHub Actions notification requires the repository secret ZAPIER_WEBHOOK_ID.
+- The AI triage engine is explainable deterministic rules, not a trained ML model or LLM.
+- Mutating Kubernetes actions remain disabled by default and require explicit approval plus scoped RBAC.
 
-Requirements: Go 1.23 or newer.
+## Reproducible checks
 
-PowerShell:
-
-```powershell
-$env:CLOUDSENTINELS_ENV = "development"
-$env:CLOUDSENTINELS_EXECUTION_MODE = "online-server"
-$env:CLOUDSENTINELS_HTTP_ADDR = "127.0.0.1:8080"
-$env:CLOUDSENTINELS_LOCAL_AUTH_TOKEN = "replace-with-a-random-token-of-at-least-32-characters"
-go run ./cmd/cloudsentinels
-```
-
-Generate a strong token rather than using the example value:
-
-```powershell
-$token = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$env:CLOUDSENTINELS_LOCAL_AUTH_TOKEN = $token
-```
-
-## Reproducible API checks
-
-In a second PowerShell window:
-
-```powershell
-$base = "http://127.0.0.1:8080"
-Invoke-RestMethod "$base/healthz"
-Invoke-RestMethod "$base/readyz"
-Invoke-RestMethod "$base/api/v1/platform"
-
-# This must return HTTP 401 when an authenticator is configured but no bearer token is supplied.
-try { Invoke-RestMethod "$base/api/v1/incidents" } catch { $_.Exception.Response.StatusCode }
-
-$headers = @{ Authorization = "Bearer $env:CLOUDSENTINELS_LOCAL_AUTH_TOKEN" }
-Invoke-RestMethod -Headers $headers "$base/api/v1/incidents"
-
-$incident = @{
-  title = "payments-api pod crash loop"
-  description = "Repeated restarts observed in the local review environment"
-  severity = "high"
-  source = "manual-review"
-  target = "offline-kubernetes"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post -Headers $headers -ContentType "application/json" -Body $incident "$base/api/v1/incidents"
-```
-
-Expected results:
-- Health, readiness and platform endpoints return HTTP 200.
-- Protected routes return HTTP 503 if no authenticator is configured.
-- Protected routes return HTTP 401 for missing or invalid credentials.
-- Valid local bearer credentials allow incident list/create; new incidents receive an ID and default `open` status.
-- Invalid enum values, unknown JSON fields, trailing JSON values, oversized bodies and duplicate IDs are rejected.
-
-## CI checks
-
-The Go workflow runs:
-1. gofmt check
-2. go vet
-3. go test -race -cover
-4. CGO-disabled Go build
-5. Docker multi-stage image build
-
-Local commands:
+From the repository root:
 
 ```powershell
 gofmt -w cmd internal
-go test -race -cover ./...
+go test -race ./...
 go vet ./...
-$env:CGO_ENABLED = "0"
 go build -trimpath ./cmd/cloudsentinels
-docker build -f deploy/golang/Dockerfile -t cloudsentinels:review .
+go build -trimpath ./cmd/cloudsentinels-agent
 ```
 
-The connected Windows desktop did not have the Docker Desktop Linux engine running during this review pass. The Docker build is therefore delegated to the GitHub Actions runner and must be confirmed green there.
+Cross-build the Go Lambda adapter:
 
-## Cognito configuration gate
+```powershell
+$env:GOOS = "linux"
+$env:GOARCH = "arm64"
+$env:CGO_ENABLED = "0"
+go build -tags lambda.norpc -trimpath -o $env:TEMP\cloudsentinels-lambda-bootstrap ./cmd/cloudsentinels-lambda
+```
 
-Configure both `COGNITO_ISSUER_URL` and `COGNITO_APP_CLIENT_ID`. The issuer must be the HTTPS Cognito User Pool issuer URL. Use a Cognito ID token issued for that app client. Confirm group claim names and application role mapping against the actual pool. Never place AWS access keys or the local operator token in frontend code, source control, or Zapier.
+Frontend checks:
 
-## Production acceptance checklist
+```powershell
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm check
+pnpm build
+```
 
-- [ ] Cognito token integration tested against the actual User Pool (valid, expired, wrong issuer, wrong audience, access-token rejection).
-- [ ] Fine-grained role/policy checks added for incident operations.
-- [ ] Durable storage, migrations, retention and audit history implemented.
-- [ ] API rate limits, request IDs, metrics and structured status logging added.
-- [ ] Serverless and Kubernetes execution adapters implemented and tested separately.
-- [ ] AI analysis is advisory only and cannot authorize actions.
-- [ ] Zapier signatures, approval scope, replay protection and idempotency verified.
-- [ ] Remediation remains dry-run until least-privilege execution and post-action verification pass.
-- [ ] End-to-end staging deployment, rollback and incident drill completed.
+## EKS deployment gates
 
-## Review order
-
-Review the Go-core bootstrap PR first, then this authentication/API hardening PR. Do not merge a dependent PR until its base PR has been reviewed and merged or the PR is retargeted to the resulting base commit.
+Use the protected manual workflow only after the owner has approved the AWS account, region, VPC/subnets, EKS version, node sizing, endpoint allowlist, IAM roles and cost envelope. Plan and execute are separate workflow operations. The same sanitized Airtable snapshot is used by the local Kubernetes inventory service and will be mounted into EKS; live Kubernetes telemetry is collected separately by the Go agent.

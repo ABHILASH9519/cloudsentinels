@@ -19,22 +19,14 @@ import {
 import { useState } from "react";
 import { useAwsAuth } from "../aws/AwsAuth";
 
-const LOCAL_DEMO_MODE = import.meta.env.DEV && import.meta.env.VITE_CLOUDSENTINELS_LOCAL_DEMO === "true";
-
-const navItems = LOCAL_DEMO_MODE
-  ? [
-      { to: "/clusters", label: "Cluster Command", icon: Server, ocid: "nav.clusters.link" },
-      { to: "/monitoring", label: "Monitoring", icon: Activity, ocid: "nav.monitoring.link" },
-      { to: "/ai-insights", label: "AI Insights", icon: BrainCircuit, ocid: "nav.ai_insights.link" },
-    ]
-  : [
-      { to: "/", label: "Overview", icon: LayoutDashboard, ocid: "nav.dashboard.link" },
-      { to: "/incidents", label: "Incidents", icon: AlertTriangle, ocid: "nav.incidents.link" },
-      { to: "/monitoring", label: "Monitoring", icon: Activity, ocid: "nav.monitoring.link" },
-      { to: "/clusters", label: "Clusters", icon: Server, ocid: "nav.clusters.link" },
-      { to: "/ai-insights", label: "AI Insights", icon: BrainCircuit, ocid: "nav.ai_insights.link" },
-      { to: "/settings", label: "Settings", icon: Settings, ocid: "nav.settings.link" },
-    ];
+const navItems = [
+  { to: "/", label: "Overview", icon: LayoutDashboard, ocid: "nav.dashboard.link" },
+  { to: "/incidents", label: "Incidents", icon: AlertTriangle, ocid: "nav.incidents.link" },
+  { to: "/monitoring", label: "Monitoring", icon: Activity, ocid: "nav.monitoring.link" },
+  { to: "/clusters", label: "Clusters", icon: Server, ocid: "nav.clusters.link" },
+  { to: "/ai-insights", label: "AI Insights", icon: BrainCircuit, ocid: "nav.ai_insights.link" },
+  { to: "/settings", label: "Settings", icon: Settings, ocid: "nav.settings.link" },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { signOut } = useAwsAuth();
@@ -91,13 +83,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <p className="mt-2 text-[11px] leading-relaxed text-slate-400">AI-powered self-healing for Kubernetes and live cluster systems.</p>
       </div>
       <div className="border-t border-sidebar-border px-3 py-4">
-        {LOCAL_DEMO_MODE ? (
-          <div className="px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-cyan-200/70">Local demo session</div>
-        ) : (
-          <Button variant="ghost" size="sm" data-ocid="auth.logout.button" onClick={() => void signOut()} className="w-full justify-start gap-3 text-slate-400 hover:bg-red-400/10 hover:text-red-300">
-            <LogOut className="h-4 w-4" /> Sign Out
-          </Button>
-        )}
+        <Button variant="ghost" size="sm" data-ocid="auth.logout.button" onClick={() => void signOut()} className="w-full justify-start gap-3 text-slate-400 hover:bg-red-400/10 hover:text-red-300">
+          <LogOut className="h-4 w-4" /> Sign Out
+        </Button>
       </div>
     </div>
   );
@@ -129,7 +117,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <div className="mission-topbar-kicker">Environment</div>
-              <div className="mission-topbar-title">{LOCAL_DEMO_MODE ? "Local Go demo / snapshot" : "AWS-native control plane"}</div>
+              <div className="mission-topbar-title">AWS + Kubernetes control plane</div>
             </div>
             <div className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-200/20 bg-cyan-200/[.07] text-cyan-100"><Orbit className="h-4 w-4" /></div>
           </div>

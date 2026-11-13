@@ -64,7 +64,7 @@ The relay sends only the following allow-listed fields (unknown fields are dropp
   "occurredAt": "2026-11-10T08:00:00.000Z",
   "severity": "critical",
   "resourceId": "<alert-id>",
-  "clusterRef": "demo-cluster",
+  "clusterRef": "<airtable-cluster-record-id>",
   "status": "PENDING_APPROVAL",
   "risk": "high",
   "recommendedAction": "replace-or-recover-node",

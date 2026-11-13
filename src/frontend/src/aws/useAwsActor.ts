@@ -9,7 +9,7 @@ import type {
   UserProfile,
   UserRole,
   backendInterface,
-} from "../backend.d";
+} from "../api-types";
 import { useAwsAuth } from "./AwsAuth";
 import { awsRequest } from "./api";
 

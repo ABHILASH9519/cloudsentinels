@@ -22,4 +22,4 @@ Run with `CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS=false`. It collects node/pod/even
 
 An in-cluster deployment template and read-only RBAC are in `kubernetes/`. Build the container with `Dockerfile`, publish it to your registry, create the `cloudsentinels-agent-token` Secret, replace the manifest placeholders, and apply `agent-readonly-rbac.yaml` plus `agent-deployment.yaml`. Use the Airtable record ID as the agent cluster ID so telemetry merges into the matching inventory row.
 
-The API command queue and telemetry cache are currently in-memory demo components; do not deploy the agent against a production cluster until durable command storage, audit persistence, and approval/rollback controls are connected.
+The API command queue and telemetry cache are currently process-local. For production multi-replica use, move command delivery and telemetry history to durable SQS/DynamoDB storage and enable persistent audit records before relying on the API for operational response.

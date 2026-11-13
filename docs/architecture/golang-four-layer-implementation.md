@@ -2,96 +2,66 @@
 
 ## Objective
 
-CloudSentinels is a DevOps web application service with one shared Go control plane and three execution modes. The React/TypeScript application remains the presentation layer. Go owns inventory normalization, monitoring APIs, explainable analysis, signed workflow events and the fixed-command desktop/cluster agent.
+CloudSentinels is a Go-first control plane for Airtable-backed cluster inventory, live Kubernetes telemetry, explainable health analysis and approval-gated automation. React/TypeScript is the presentation layer.
 
 ## Layer 1 — UI and execution modes
 
-1. **Online / server:** persistent Go HTTP API. This is the command broker for local and in-cluster agents.
-2. **Online / serverless:** Go API Gateway HTTP API + Lambda adapter using the same Go handlers and analysis package. It supports inventory, monitoring, AI triage and outbound Zapier notifications. It deliberately rejects local CLI command enqueueing because Lambda memory is ephemeral.
-3. **Offline / local Kubernetes:** Go desktop agent uses the selected local kubeconfig context and fixed kubectl arguments. An optional in-cluster deployment template supports remote clusters and sends telemetry outbound to the online-server API.
-
-The React route `/clusters` displays Airtable inventory, cluster health, node/pod/CPU/memory metrics, source/freshness and execution-mode readiness. `/ai-insights` displays evidence and recommended checks.
+1. Online server: persistent Go HTTP API for inventory, monitoring, analysis and command brokering.
+2. Online serverless: Go API Gateway/Lambda adapter built for Linux ARM64. The existing deployed AWS Operations API remains a separate runtime and has not yet been replaced by the Go Lambda binary.
+3. Local/remote Kubernetes: Go agent uses the configured kube context and fixed kubectl arguments. Docker-backed Minikube is the local operational cluster; EKS provisioning is scheduled through the protected review-day workflow.
 
 ## Layer 2 — Identity and credentials
 
-- **Web user:** Cognito OIDC ID-token verification (issuer, signature, expiry and app-client audience). Protected routes fail closed if no authenticator is configured.
-- **Local development:** high-entropy local operator bearer token with constant-time comparison and production guard.
-- **Cluster agents:** dedicated agent bearer token, optionally mapped per Airtable cluster record ID through `CLOUDSENTINELS_AGENT_TOKENS`. If the per-cluster map is configured, the global token fallback is disabled.
-- **Zapier:** timestamped HMAC-SHA256 verification on inbound command callbacks; signed outbound event payloads.
-- **Kubernetes:** use a least-privilege kubeconfig or service account. The provided ClusterRole is read-only; an optional namespace-scoped Role adds deployment patch permission for an explicitly approved namespace.
+- Web users authenticate with Cognito OIDC; browser sign-in uses Authorization Code + PKCE and the Go API validates ID tokens.
+- Local development auth is a high-entropy operator token and must remain disabled in production.
+- Cluster agents use unique bearer tokens, preferably mapped by Airtable record ID.
+- Zapier inbound commands use timestamped HMAC-SHA256 signatures.
+- Kubernetes RBAC is read-only by default; restart requires an explicit human approval and scoped namespace permissions.
 
-Never put Airtable PATs, agent tokens, Cognito secrets, kubeconfig or Zapier signing secrets in VITE_ variables, source control, UI payloads or logs.
+Never place Airtable PATs, agent tokens, Cognito secrets, kubeconfig or Zapier signing secrets in frontend variables, source control, UI payloads or logs.
 
-## Layer 3 — Shared CloudSentinels core
-
-### Airtable inventory
-
-The Airtable adapter reads an explicit field allowlist from the Cloud-Sentinel base:
-- 20 cluster inventory rows from the Clusters table.
-- 15 Nodes rows from the related table.
-- Current Nodes records have zero cluster links; their latest Last Seen timestamps are historical. The snapshot is therefore inventory, not live Kubernetes telemetry.
-- The adapter does not request or use the Airtable API Endpoint field as a connection target.
-
-Without a server-side `AIRTABLE_API_TOKEN`, the API serves the sanitized snapshot at `deploy/eks/airtable-inventory.snapshot.json`. With the PAT configured, the online server refreshes on startup and at the configured interval; Lambda refreshes on cold start.
-
-### Monitoring and analysis
+## Layer 3 — Shared Go core
 
 The Go API exposes:
-- `GET /api/v1/inventory/clusters`
-- `POST /api/v1/inventory/refresh`
-- `GET /api/v1/monitoring/summary`
-- `GET /api/v1/ai/insights`
-- `POST /api/v1/ai/analyze`
+- GET /api/v1/inventory/clusters
+- POST /api/v1/inventory/refresh
+- GET /api/v1/monitoring/summary
+- GET /api/v1/ai/insights
+- POST /api/v1/ai/analyze
+- POST /api/v1/agent/telemetry
 
-A desktop/in-cluster agent reports ready nodes, pods, ready pods, warning events, CPU and memory metrics. Agent telemetry is merged into the matching Airtable row by record ID; a separate local cluster is added when no Airtable row matches. Telemetry older than two minutes is marked offline.
+The Airtable adapter reads the allowlisted 20-cluster inventory snapshot. The same exact snapshot is mounted into the local Kubernetes inventory service. Agent telemetry is kept separate from Airtable metadata and merged by Airtable record ID when a cluster agent is registered.
 
-The current analysis is an explainable deterministic rules engine using reported health, status, CPU and agent freshness. It is **not** a trained ML/LLM inference model. It provides evidence and recommended checks; it never grants permission or executes a remediation.
-
-### Local execution and command safety
-
-The agent accepts only:
-- `collect-snapshot` — read-only metrics collection;
-- `rollout-status` — read-only deployment rollout status;
-- `restart-deployment` — mutating restart followed by rollout-status verification.
-
-The restart action requires a signed Zapier command, `approvalStatus=approved`, an `approvedBy` identity, server-side mutation opt-in, local-agent mutation opt-in and namespace-scoped Kubernetes patch permission. Arbitrary shell, PowerShell, scripts, delete, scale, exec, apply and credential export are not accepted.
+The Go agent reports node readiness, pod readiness, warning events, CPU and memory. The analysis engine is explainable deterministic rules; it is not a trained ML/LLM model.
 
 ## Layer 4 — Zapier automation
 
-Outbound event types include:
-- `incident.created` from the online API;
-- `cluster.ai_finding` for high/critical analysis findings (cooldown protected);
-- `cluster.warning` for warning telemetry from the desktop/in-cluster agent;
-- `cloudsentinels.integration_test` from the UI test action.
-
-Inbound Zapier Webhooks POST signed JSON to `/api/v1/zapier/commands`. Zapier can request a read-only snapshot or, only after an explicit approval step, request a named deployment restart. The persistent online-server API brokers commands to the correct cluster agent. The Lambda adapter rejects local command enqueueing.
-
-Zapier is a workflow adapter, not the authorization authority. CloudSentinels validates HMAC freshness, action allowlist, target cluster, approval fields, mutation policy and agent credential before execution.
+Application event delivery uses the Go API's ZAPIER_CATCH_HOOK_URL and ZAPIER_SIGNING_SECRET settings. Inbound command callbacks are HMAC-verified and restricted to the documented command allowlist. The GitHub Actions Go CI workflow also includes the requested gpuliyar/zapier-webhook-action@v1.0.0 step after Go and frontend checks; it requires the repository secret ZAPIER_WEBHOOK_ID.
 
 ## Current implementation and readiness
 
 | Component | Code status | External readiness |
 |---|---|---|
-| React cluster dashboard and AI findings | Implemented; typecheck/lint/build pass locally | Requires Cognito config and Go API URL |
-| Airtable snapshot adapter | Implemented; 20 rows loaded | Snapshot mode until a server-side Airtable PAT is configured |
-| Live Airtable adapter | Implemented with field allowlist and pagination | Not tested against the API from this desktop because no PAT is configured |
-| Online Go server | Implemented and locally built | Not deployed to a public HTTPS endpoint |
-| Go Lambda adapter + SAM template | Implemented and ARM64 cross-build passes | Not deployed; AWS identity is unavailable in the connected desktop |
-| Desktop/in-cluster agent | Implemented and locally built; Kubernetes manifests supplied | Not connected; Minikube/Docker Desktop engine is stopped |
-| Zapier outbound/inbound HMAC | Implemented | Needs Catch Hook URL and signing secret |
-| AI analysis | Explainable rules engine implemented | No external LLM provider connected |
-| Command queue / telemetry | In-memory implementation with per-cluster agent auth and lease retry | Must move to durable SQS/DynamoDB before production/multi-replica use |
+| React dashboard | Typecheck, lint and production build pass | Requires Cognito and configured API endpoints |
+| Go HTTP API | Implemented; local health/readiness verified | Public EC2 hosting and durable storage remain separate tasks |
+| Airtable inventory | Sanitized 20-row snapshot mounted locally | Live PAT refresh requires the server-side Airtable token |
+| Local Kubernetes | Docker-backed Minikube and read-only Go agent | Local node/pod telemetry can be verified while cluster is running |
+| EKS | Protected plan/execute workflow and CloudFormation template | No EKS cluster provisioned yet |
+| Go Lambda adapter | ARM64 cross-build passes | Not deployed as the active AWS Operations API |
+| AWS hosted runtime | API Gateway/Lambda health verified in ap-south-1 | Supporting Node.js event/automation workers remain in place |
+| Zapier | GitHub Actions step committed; Go HMAC integration implemented | GitHub secret and application Catch Hook/signing secret still need configuration |
+| AI analysis | Explainable rules engine implemented | Not an ML/LLM model |
+| Command queue / telemetry cache | Per-cluster auth and bounded commands implemented | In-memory; move to SQS/DynamoDB before production multi-replica use |
 
 ## Production acceptance gates
 
-1. Configure Cognito issuer/app client and verify real tokens.
-2. Configure Airtable PAT in the server environment or Secrets Manager; verify live refresh and freshness.
-3. Configure Zapier Catch Hook URL and signing secret; test inbound and outbound deliveries.
-4. Deploy the Go server behind HTTPS and durable command/telemetry storage.
-5. Deploy the Go Lambda adapter only for stateless inventory/analysis/notifications; keep the agent command broker on persistent online-server until SQS/DynamoDB is connected.
-6. Start Minikube/Docker Desktop or deploy the agent into each target cluster with unique per-cluster tokens and read-only RBAC.
-7. Validate monitoring against real cluster metrics, then add durable audit history and policy/role authorization.
+1. Configure Cognito issuer/app client and verify real user tokens.
+2. Configure Airtable PAT in the server environment or Secrets Manager and verify refresh.
+3. Configure GitHub Actions ZAPIER_WEBHOOK_ID and application ZAPIER_CATCH_HOOK_URL / ZAPIER_SIGNING_SECRET; verify real deliveries.
+4. Deploy the Go server behind HTTPS and move command/telemetry storage to durable services.
+5. Deploy EKS only after owner approval, network/IAM review and cost approval.
+6. Deploy the Go agent into EKS with a unique cluster credential and read-only RBAC.
+7. Verify telemetry freshness and independent health checks.
 8. Keep mutations disabled until approval, namespace-scoped RBAC, rollout verification and rollback procedures are reviewed.
-9. Complete staging, failure drills and rollback before retiring legacy Node/Motoko services.
 
-See [Airtable, Zapier and desktop-agent operations](../integrations/airtable-zapier-desktop-agent.md) for configuration and runbooks.
+See [Airtable, Zapier and desktop-agent operations](../integrations/airtable-zapier-desktop-agent.md).

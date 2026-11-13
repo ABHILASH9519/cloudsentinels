@@ -145,7 +145,7 @@ func (s *Server) listIncidents(w http.ResponseWriter, r *http.Request) {
 	for _, item := range s.incidents {
 		items = append(items, item)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "count": len(items), "storage": "process-memory-demo"})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "count": len(items), "storage": "process-memory"})
 }
 
 func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {

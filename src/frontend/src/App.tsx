@@ -15,8 +15,6 @@ import { ClustersPage } from "./pages/ClustersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { IncidentDetailPage } from "./pages/IncidentDetailPage";
 import { IncidentsPage } from "./pages/IncidentsPage";
-import { LocalDemoAIInsightsPage } from "./pages/LocalDemoAIInsightsPage";
-import { LocalDemoMonitoringPage } from "./pages/LocalDemoMonitoringPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitoringPage } from "./pages/MonitoringPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -24,8 +22,6 @@ import { SettingsPage } from "./pages/SettingsPage";
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 10000 } },
 });
-const LOCAL_DEMO_MODE = import.meta.env.DEV && import.meta.env.VITE_CLOUDSENTINELS_LOCAL_DEMO === "true";
-
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isSignedIn, isLoaded, error } = useAwsAuth();
   if (!isLoaded)
@@ -37,7 +33,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       </div>
     );
   if (!isSignedIn) return <LoginPage authError={error} />;
-  if (LOCAL_DEMO_MODE) return <>{children}</>;
   return <AuthenticatedWorkspace>{children}</AuthenticatedWorkspace>;
 }
 function AuthenticatedWorkspace({ children }: { children: React.ReactNode }) {
@@ -90,7 +85,7 @@ const rootRoute = createRootRoute({ component: RootLayout });
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: LOCAL_DEMO_MODE ? ClustersPage : DashboardPage,
+  component: DashboardPage,
 });
 const incidentsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -105,7 +100,7 @@ const incidentDetailRoute = createRoute({
 const monitoringRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/monitoring",
-  component: LOCAL_DEMO_MODE ? LocalDemoMonitoringPage : MonitoringPage,
+  component: MonitoringPage,
 });
 const clustersRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -115,7 +110,7 @@ const clustersRoute = createRoute({
 const aiInsightsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/ai-insights",
-  component: LOCAL_DEMO_MODE ? LocalDemoAIInsightsPage : AIInsightsPage,
+  component: AIInsightsPage,
 });
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,

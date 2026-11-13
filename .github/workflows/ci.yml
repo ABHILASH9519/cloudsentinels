@@ -1,43 +1,45 @@
-name: CloudSentinels CI
+name: CloudSentinels Go and UI CI
 
 on:
   push:
-    branches: [main, feat/four-layer-self-healing-architecture]
+    branches: [main, feat/airtable-cluster-monitoring-zapier]
   pull_request:
-    branches: [main, feat/n8n-event-automation, feat/four-layer-self-healing-architecture]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Type-check frontend
-        run: pnpm --filter @cloudsentinels/frontend typecheck
-      - name: Lint frontend
-        run: pnpm --filter @cloudsentinels/frontend check
-      - name: Build frontend
-        run: pnpm --filter @cloudsentinels/frontend build
-
   backend:
+    name: Go API, agent and Lambda
     runs-on: ubuntu-latest
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Build the project toolchain image
-        run: docker build --network=host --tag cloudsentinels-ci .
-      - name: Compile frontend assets and Motoko backend
-        run: docker run --rm --entrypoint /workdir/scripts/backend-smoke-test.sh cloudsentinels-ci
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+      - run: test -z "$(gofmt -l cmd internal)"
+      - run: go vet ./...
+      - run: go test -race -cover ./...
+      - run: CGO_ENABLED=0 go build -trimpath ./cmd/cloudsentinels
+      - run: CGO_ENABLED=0 go build -trimpath ./cmd/cloudsentinels-agent
+      - run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -trimpath -o /tmp/cloudsentinels-lambda ./cmd/cloudsentinels-lambda
+      - run: docker build -f deploy/golang/Dockerfile -t cloudsentinels:ci .
+
+  frontend:
+    name: React frontend checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm check
+      - run: pnpm build

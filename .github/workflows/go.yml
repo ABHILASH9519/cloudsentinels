@@ -1,11 +1,13 @@
-name: CloudSentinels CI
+name: CloudSentinels Go CI
 
 on:
   push:
     branches:
+      - main
       - feat/golang-four-layer-core
       - feat/golang-review-hardening
       - feat/airtable-cluster-monitoring-zapier
+  workflow_dispatch:
   pull_request:
     paths:
       - "go.mod"
@@ -14,7 +16,7 @@ on:
       - "internal/**"
       - "deploy/golang/**"
       - "deploy/agent/**"
-      - "deploy/lambda/**"
+      - "deploy/eks/**"
       - "src/frontend/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -46,7 +48,7 @@ jobs:
         run: go test -race -cover ./...
       - name: Build online API
         run: CGO_ENABLED=0 go build -trimpath ./cmd/cloudsentinels
-      - name: Build desktop agent
+      - name: Build Kubernetes agent
         run: CGO_ENABLED=0 go build -trimpath ./cmd/cloudsentinels-agent
       - name: Cross-build Lambda ARM64 bootstrap
         run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -trimpath -o /tmp/cloudsentinels-lambda ./cmd/cloudsentinels-lambda
@@ -78,3 +80,24 @@ jobs:
         run: pnpm check
       - name: Production build
         run: pnpm build
+
+  zapier-notify:
+    name: Notify Zapier after successful Go and UI checks
+    needs: [go, frontend]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      ZAPIER_WEBHOOK_ID: ${{ secrets.ZAPIER_WEBHOOK_ID }}
+    steps:
+      - name: Explain skipped notification when Zapier is not configured
+        if: env.ZAPIER_WEBHOOK_ID == ''
+        run: echo "::notice::Zapier notification skipped. Add the repository secret ZAPIER_WEBHOOK_ID to enable it."
+      - name: Call Zapier Webhook
+        if: env.ZAPIER_WEBHOOK_ID != ''
+        uses: gpuliyar/zapier-webhook-action@v1.0.0
+        with:
+          webhook-id: ${{ secrets.ZAPIER_WEBHOOK_ID }}
+          method: POST
+          silent: false
+          message: >-
+            {"event":"cloudsentinels.ci.passed","repository":"${{ github.repository }}","branch":"${{ github.ref_name }}","commit":"${{ github.sha }}","workflow":"${{ github.workflow }}","run":"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}

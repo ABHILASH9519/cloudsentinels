@@ -2,7 +2,7 @@
 
 ## Scope and safety boundary
 
-This runbook prepares CloudSentinels for a **non-production EKS demonstration on the minor-review day**. Until that review, do not create an EKS cluster, node group, load balancer, NAT gateway, or any other EKS-dependent AWS resource. Do not apply the Airtable showcase manifest.
+This runbook prepares CloudSentinels for a **real, isolated EKS deployment and operational validation environment**. Do not create an EKS cluster, node group, load balancer, NAT gateway, or any other EKS-dependent AWS resource until the owner has approved the account, network, IAM roles, cost envelope and execution window. Do not apply legacy showcase manifests.
 
 The target region currently planned is `ap-south-1` (Mumbai), subject to confirmation on review day. The EKS version, VPC, subnet layout, node size/count, endpoint exposure, and maximum spend must be approved before provisioning. Do not infer these from the historical Airtable inventory.
 
@@ -63,7 +63,7 @@ All items below are gates, not assumptions:
 ## Planned non-production topology
 
 - One EKS control plane in `ap-south-1`.
-- One small managed EC2 node group for core services and demonstration workloads, with explicit min/desired/max capacity.
+- One managed EC2 node group for the CloudSentinels API/agent integration workloads and controlled operational validation, with explicit min/desired/max capacity.
 - Optional Fargate profile only for workloads that are compatible with Fargate; it does not replace or eliminate the EKS control plane.
 - Private worker subnets; restrict Kubernetes API endpoint access to the review team's approved network or a controlled access path.
 - Required EKS add-ons: VPC CNI, CoreDNS, kube-proxy, and EBS CSI where persistent volumes are needed.
@@ -86,7 +86,7 @@ This is a target design, not a deployed cluster configuration. Exact instance ty
 8. Deploy only reviewed application manifests from source control. Never convert historical Airtable pod/deployment rows directly into Kubernetes resources.
 9. Run controlled tests in a dedicated test namespace (for example, a disposable CrashLoopBackOff workload and a test deployment rollout), verify incident detection, AI analysis, approved remediation, and post-action health.
 10. Capture evidence: cluster version/status, node readiness, event-to-incident latency, selected procedure/version, approval record, remediation result, and verification result.
-11. Tear down non-required demo resources after review, or explicitly record the owner, budget, and expiry for anything retained.
+11. Remove temporary validation resources after verification, or explicitly record the owner, budget, and expiry for anything retained.
 
 ## Acceptance checklist
 
@@ -107,6 +107,6 @@ This is a target design, not a deployed cluster configuration. Exact instance ty
 
 - No EKS cluster or worker nodes.
 - No import of Airtable sample rows as live Pods, Deployments, Nodes, or Cluster objects.
-- No production workload deployment.
+- No production workloads without a separate production change approval.
 - No broad IAM policy attachment, root-user deployment, or long-lived AWS access key.
 - No claim of seconds-level recovery until event-to-verification latency is measured under test.
