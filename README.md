@@ -1,5 +1,38 @@
 # CloudSentinels
 
+> **Active migration:** The Go-first four-layer platform is being introduced on `feat/golang-four-layer-core`. The existing React/TypeScript + Motoko application and AWS Node.js serverless track remain in the repository during the migration; they are not yet replaced or production-parity validated.
+
+## Go-first four-layer platform
+
+The new shared Go service bootstrap is in `cmd/cloudsentinels` and `internal/`. Its architecture and migration boundaries are documented in [the Go four-layer implementation plan](docs/architecture/golang-four-layer-implementation.md).
+
+| Layer | Responsibility |
+|---|---|
+| 1 — UI / execution targets | Existing web UI with Online server, Online serverless, and Offline local Kubernetes modes |
+| 2 — Authentication / credentials | AWS Cognito and IAM/STS identity; local session and kubeconfig identity |
+| 3 — CloudSentinels core | Shared incident detection, AI analysis contracts, deterministic policy and remediation orchestration |
+| 4 — Automation | Zapier notifications, approvals, procedures, signed triggers and workflow feedback |
+
+### Go service bootstrap
+
+- Go HTTP service with health, readiness and platform-capability endpoints.
+- Three explicit execution-mode settings: `online-server`, `online-serverless`, and `offline-kubernetes`.
+- Protected incident routes fail closed until a real Cognito or local-session authenticator is wired in.
+- Incident API currently uses process-memory demo storage; durable persistence is a required next step.
+- Multi-stage, non-root container definition at `deploy/golang/Dockerfile`.
+- Go CI runs formatting, `go vet`, race-enabled tests and a build.
+
+Run locally:
+
+```sh
+go test ./...
+go run ./cmd/cloudsentinels
+```
+
+The Go bootstrap is not yet a complete production migration. AWS SDK v2, client-go, durable repositories, real identity adapters, AI provider integration, Zapier callbacks and live remediation adapters are staged follow-up work. The legacy application and AWS Node.js templates remain until parity, data migration and rollback are proven.
+
+---
+
 CloudSentinels is an incident-management and observability project for teams operating cloud workloads and Kubernetes clusters. The goal is to bring incident context, monitoring signals and operational workflows into one place, then make routine response work safer and easier to understand.
 
 The repository currently contains two implementation tracks:
