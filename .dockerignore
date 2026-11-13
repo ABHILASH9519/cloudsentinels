@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.env.*
+**/.env
+**/.env.*
+**/*secret*
+node_modules
+**/node_modules
+frontend
+src
+coverage.out
+*.test
+*.exe

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ABHILASH9519/cloudsentinels/internal/auth"
 	"github.com/ABHILASH9519/cloudsentinels/internal/config"
 	"github.com/ABHILASH9519/cloudsentinels/internal/httpapi"
 )
@@ -22,7 +23,17 @@ func main() {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	api := httpapi.NewServer(cfg, logger, nil)
+	authenticator, err := auth.New(context.Background(), auth.Config{
+		IssuerURL: cfg.CognitoIssuerURL, ClientID: cfg.CognitoClientID,
+		LocalToken: cfg.LocalAuthToken, Environment: cfg.Environment,
+		AllowLocalToken: cfg.AllowLocalAuthInProd,
+	})
+	if err != nil {
+		logger.Error("initialize authentication", "error", err)
+		os.Exit(1)
+	}
+
+	api := httpapi.NewServer(cfg, logger, authenticator)
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           api.Handler(),
