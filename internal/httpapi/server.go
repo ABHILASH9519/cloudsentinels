@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -92,13 +91,13 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_json", "Request body is not valid incident JSON")
 		return
 	}
+	if item.Status == "" { item.Status = domain.StatusOpen }
 	if err := item.Validate(); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_incident", err.Error())
 		return
 	}
 	if item.ID == "" { item.ID = newID() }
 	if item.DetectedAt.IsZero() { item.DetectedAt = time.Now().UTC() }
-	if item.Status == "" { item.Status = domain.StatusOpen }
 	s.mu.Lock()
 	s.incidents[item.ID] = item
 	s.mu.Unlock()
@@ -150,4 +149,3 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 
 func newID() string { return time.Now().UTC().Format("20060102T150405.000000000") }
 
-var _ = errors.New
