@@ -39,9 +39,11 @@ func TestIncidentRoutesFailClosedWithoutAuthenticator(t *testing.T) {
 }
 
 type discardWriter struct{}
+
 func (discardWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 type testAuthenticator struct{}
+
 func (testAuthenticator) Authenticate(*http.Request) (Principal, error) {
 	return Principal{Subject: "test-user", Roles: []string{"operator"}}, nil
 }
