@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ABHILASH9519/cloudsentinels/internal/config"
@@ -39,3 +40,22 @@ func TestIncidentRoutesFailClosedWithoutAuthenticator(t *testing.T) {
 
 type discardWriter struct{}
 func (discardWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+type testAuthenticator struct{}
+func (testAuthenticator) Authenticate(*http.Request) (Principal, error) {
+	return Principal{Subject: "test-user", Roles: []string{"operator"}}, nil
+}
+
+func TestAuthenticatedIncidentCreation(t *testing.T) {
+	server := NewServer(config.Config{ExecutionMode: "online-server"}, slog.Default(), testAuthenticator{})
+	body := `{"title":"Pod crash loop","description":"payments-api is restarting","severity":"high","source":"prometheus","target":"offline-kubernetes"}`
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/incidents", strings.NewReader(body))
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"status":"open"`) {
+		t.Fatalf("expected default open status, got %s", response.Body.String())
+	}
+}
