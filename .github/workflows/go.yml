@@ -13,6 +13,7 @@ on:
       - "internal/**"
       - "deploy/golang/**"
       - ".github/workflows/go.yml"
+      - ".dockerignore"
 
 permissions:
   contents: read
@@ -37,3 +38,5 @@ jobs:
         run: go test -race -cover ./...
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath ./cmd/cloudsentinels
+      - name: Container build
+        run: docker build -f deploy/golang/Dockerfile -t cloudsentinels:ci .
