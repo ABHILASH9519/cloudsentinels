@@ -131,3 +131,5 @@ The demo records created through the UI are stored by the current backend implem
 ## Go API authentication configuration
 
 The Go service now supports Cognito OIDC ID-token verification and a high-entropy local operator token for development/offline testing. See [authentication setup](docs/architecture/authentication-setup.md) and [.env.example](.env.example). Protected incident routes remain disabled when no authenticator is configured; never commit local credentials.
+
+The review scope, local startup/API smoke-test commands, CI checks, and production acceptance gates are captured in the [Go core final-review runbook](docs/review/go-core-final-review.md).
