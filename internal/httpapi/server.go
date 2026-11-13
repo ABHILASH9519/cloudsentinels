@@ -56,8 +56,8 @@ func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) platform(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"service": "cloudsentinels",
-		"version": s.config.BuildVersion,
+		"service":       "cloudsentinels",
+		"version":       s.config.BuildVersion,
 		"executionMode": s.config.ExecutionMode,
 		"components": []map[string]string{
 			{"id": "online-server", "status": "adapter-pending"},
@@ -66,23 +66,29 @@ func (s *Server) platform(w http.ResponseWriter, _ *http.Request) {
 		},
 		"core": map[string]string{
 			"incidentDetection": "go-api-bootstrap",
-			"aiAnalysis": "provider-adapter-pending",
-			"remediation": "policy-engine-pending",
+			"aiAnalysis":        "provider-adapter-pending",
+			"remediation":       "policy-engine-pending",
 		},
 	})
 }
 
 func (s *Server) listIncidents(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) { return }
+	if !s.authorize(w, r) {
+		return
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	items := make([]domain.Incident, 0, len(s.incidents))
-	for _, item := range s.incidents { items = append(items, item) }
+	for _, item := range s.incidents {
+		items = append(items, item)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "count": len(items), "storage": "process-memory-demo"})
 }
 
 func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) { return }
+	if !s.authorize(w, r) {
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var item domain.Incident
 	decoder := json.NewDecoder(r.Body)
@@ -91,13 +97,19 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_json", "Request body is not valid incident JSON")
 		return
 	}
-	if item.Status == "" { item.Status = domain.StatusOpen }
+	if item.Status == "" {
+		item.Status = domain.StatusOpen
+	}
 	if err := item.Validate(); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_incident", err.Error())
 		return
 	}
-	if item.ID == "" { item.ID = newID() }
-	if item.DetectedAt.IsZero() { item.DetectedAt = time.Now().UTC() }
+	if item.ID == "" {
+		item.ID = newID()
+	}
+	if item.DetectedAt.IsZero() {
+		item.DetectedAt = time.Now().UTC()
+	}
 	s.mu.Lock()
 	s.incidents[item.ID] = item
 	s.mu.Unlock()
@@ -148,4 +160,3 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 }
 
 func newID() string { return time.Now().UTC().Format("20060102T150405.000000000") }
-
