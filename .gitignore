@@ -1,2 +1,11 @@
-# Local canister secrets must never be committed.
+# Local secrets and environment files
 src/backend/secrets/
+.env
+.env.*
+!.env.example
+
+# Go build outputs
+/cloudsentinels
+/cloudsentinels.exe
+*.test
+coverage.out

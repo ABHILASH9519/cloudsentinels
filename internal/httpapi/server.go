@@ -1,24 +1,24 @@
 package httpapi
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/ABHILASH9519/cloudsentinels/internal/auth"
 	"github.com/ABHILASH9519/cloudsentinels/internal/config"
 	"github.com/ABHILASH9519/cloudsentinels/internal/domain"
 )
 
-type Principal struct {
-	Subject string
-	Roles   []string
-}
-
 type Authenticator interface {
-	Authenticate(*http.Request) (Principal, error)
+	Authenticate(*http.Request) (auth.Principal, error)
 }
 
 type Server struct {
@@ -97,6 +97,11 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_json", "Request body is not valid incident JSON")
 		return
 	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Request body must contain exactly one JSON object")
+		return
+	}
 	if item.Status == "" {
 		item.Status = domain.StatusOpen
 	}
@@ -105,12 +110,22 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if item.ID == "" {
-		item.ID = newID()
+		id, err := newID()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "id_generation_failed", "Could not generate an incident identifier")
+			return
+		}
+		item.ID = id
 	}
 	if item.DetectedAt.IsZero() {
 		item.DetectedAt = time.Now().UTC()
 	}
 	s.mu.Lock()
+	if _, exists := s.incidents[item.ID]; exists {
+		s.mu.Unlock()
+		writeError(w, http.StatusConflict, "incident_exists", "An incident with this identifier already exists")
+		return
+	}
 	s.incidents[item.ID] = item
 	s.mu.Unlock()
 	writeJSON(w, http.StatusCreated, item)
@@ -159,4 +174,10 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]string{"error": code, "message": message})
 }
 
-func newID() string { return time.Now().UTC().Format("20060102T150405.000000000") }
+func newID() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value[:]), nil
+}

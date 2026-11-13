@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - feat/golang-four-layer-core
+      - feat/golang-review-hardening
   pull_request:
     paths:
       - "go.mod"
+      - "go.sum"
       - "cmd/**"
       - "internal/**"
       - "deploy/golang/**"

@@ -19,36 +19,38 @@ const (
 type IncidentStatus string
 
 const (
-	StatusOpen         IncidentStatus = "open"
-	StatusAcknowledged IncidentStatus = "acknowledged"
+	StatusOpen          IncidentStatus = "open"
+	StatusAcknowledged  IncidentStatus = "acknowledged"
 	StatusInvestigating IncidentStatus = "investigating"
-	StatusResolved     IncidentStatus = "resolved"
+	StatusResolved      IncidentStatus = "resolved"
 )
 
 type ExecutionTarget string
 
 const (
-	TargetOnlineServer    ExecutionTarget = "online-server"
-	TargetOnlineServerless ExecutionTarget = "online-serverless"
+	TargetOnlineServer      ExecutionTarget = "online-server"
+	TargetOnlineServerless  ExecutionTarget = "online-serverless"
 	TargetOfflineKubernetes ExecutionTarget = "offline-kubernetes"
 )
 
 type Incident struct {
-	ID             string          `json:"id"`
-	Title          string          `json:"title"`
-	Description    string          `json:"description"`
-	Severity       Severity        `json:"severity"`
-	Status         IncidentStatus  `json:"status"`
-	Source         string          `json:"source"`
-	Target         ExecutionTarget `json:"target"`
-	DetectedAt     time.Time       `json:"detectedAt"`
-	CorrelationID  string          `json:"correlationId,omitempty"`
+	ID            string          `json:"id"`
+	Title         string          `json:"title"`
+	Description   string          `json:"description"`
+	Severity      Severity        `json:"severity"`
+	Status        IncidentStatus  `json:"status"`
+	Source        string          `json:"source"`
+	Target        ExecutionTarget `json:"target"`
+	DetectedAt    time.Time       `json:"detectedAt"`
+	CorrelationID string          `json:"correlationId,omitempty"`
 }
 
 var ErrInvalidIncident = errors.New("invalid incident")
 
 func (i Incident) Validate() error {
-	if strings.TrimSpace(i.Title) == "" || strings.TrimSpace(i.Source) == "" {
+	if strings.TrimSpace(i.Title) == "" || len(i.Title) > 200 ||
+		strings.TrimSpace(i.Source) == "" || len(i.Source) > 100 ||
+		len(i.Description) > 10000 || len(i.CorrelationID) > 128 {
 		return ErrInvalidIncident
 	}
 	switch i.Severity {
@@ -61,7 +63,9 @@ func (i Incident) Validate() error {
 	default:
 		return ErrInvalidIncident
 	}
-	if i.Status == "" {
+	switch i.Status {
+	case StatusOpen, StatusAcknowledged, StatusInvestigating, StatusResolved:
+	default:
 		return ErrInvalidIncident
 	}
 	return nil

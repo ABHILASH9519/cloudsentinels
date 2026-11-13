@@ -126,3 +126,8 @@ If the token is not configured in the backend environment, role initialization f
 5. Acknowledge or resolve the alert from Monitoring and verify that the active-alert count updates.
 
 The demo records created through the UI are stored by the current backend implementation. The Monitoring page now includes **Load sample data**, which imports the fictional incidents, metrics, and alerts through the authenticated backend methods. Imported records use a `demo/` source prefix and the operation can be safely retried without duplicating matching records. This is test data, not live telemetry. Backend maps and role state still require upgrade-persistence verification before production use. Kubernetes rule files generate Prometheus alerts but do not by themselves send them into this UI.
+
+
+## Go API authentication configuration
+
+The Go service now supports Cognito OIDC ID-token verification and a high-entropy local operator token for development/offline testing. See [authentication setup](docs/architecture/authentication-setup.md) and [.env.example](.env.example). Protected incident routes remain disabled when no authenticator is configured; never commit local credentials.
