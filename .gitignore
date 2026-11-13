@@ -9,3 +9,13 @@ src/backend/secrets/
 /cloudsentinels.exe
 *.test
 coverage.out
+
+# JavaScript dependencies and generated frontend output
+/node_modules/
+**/node_modules/
+src/frontend/dist/
+.pnpm-store/
+
+# Python test/runtime cache
+__pycache__/
+*.py[cod]

@@ -1,26 +1,28 @@
 # CloudSentinels
 
-> **Active migration:** The Go-first four-layer platform is being introduced on `feat/golang-four-layer-core`. The existing React/TypeScript + Motoko application and AWS Node.js serverless track remain in the repository during the migration; they are not yet replaced or production-parity validated.
+> **Active migration:** The Go-first four-layer platform is being expanded on `feat/airtable-cluster-monitoring-zapier`. The existing React/TypeScript UI is retained as the presentation layer while Go provides the shared online API, Lambda adapter, Airtable inventory, explainable cluster analysis, signed Zapier webhooks and desktop Kubernetes agent. Legacy Motoko and AWS Node.js code remains until parity and migration are validated.
 
 ## Go-first four-layer platform
 
-The new shared Go service bootstrap is in `cmd/cloudsentinels` and `internal/`. Its architecture and migration boundaries are documented in [the Go four-layer implementation plan](docs/architecture/golang-four-layer-implementation.md).
+The shared Go services are in `cmd/` and `internal/`: online HTTP API, API Gateway/Lambda adapter, desktop Kubernetes CLI agent, Airtable inventory sync, explainable cluster analysis and signed Zapier event/command integration. See [the integration guide](docs/integrations/airtable-zapier-desktop-agent.md), [architecture](docs/architecture/golang-four-layer-implementation.md), [final-review checklist](docs/review/airtable-monitoring-final-review.md), [Go deployment guide](deploy/golang/README.md), and [Go Lambda guide](deploy/lambda/README.md).
 
 | Layer | Responsibility |
 |---|---|
 | 1 — UI / execution targets | Existing web UI with Online server, Online serverless, and Offline local Kubernetes modes |
-| 2 — Authentication / credentials | AWS Cognito and IAM/STS identity; local session and kubeconfig identity |
-| 3 — CloudSentinels core | Shared incident detection, AI analysis contracts, deterministic policy and remediation orchestration |
-| 4 — Automation | Zapier notifications, approvals, procedures, signed triggers and workflow feedback |
+| 2 — Authentication / credentials | Cognito OIDC ID-token validation; local operator and per-cluster agent tokens; IAM/STS workload identity remains a deployment task |
+| 3 — CloudSentinels core | Airtable inventory, monitoring, explainable rules analysis, incident handling and approval-gated CLI queue |
+| 4 — Automation | Signed Zapier notifications, approval callbacks, procedures and workflow feedback |
 
 ### Go service bootstrap
 
 - Go HTTP service with health, readiness and platform-capability endpoints.
 - Three explicit execution-mode settings: `online-server`, `online-serverless`, and `offline-kubernetes`.
-- Protected incident routes fail closed until a real Cognito or local-session authenticator is wired in.
-- Incident API currently uses process-memory demo storage; durable persistence is a required next step.
-- Multi-stage, non-root container definition at `deploy/golang/Dockerfile`.
-- Go CI runs formatting, `go vet`, race-enabled tests and a build.
+- Cognito ID-token verification and separate high-entropy local/agent credentials; protected routes fail closed when auth is not configured.
+- 20 sanitized Airtable cluster records with optional server-side live sync; explicit inventory provenance and stale telemetry warnings.
+- Monitoring summary, rule-based AI triage, signed Zapier outbound events and HMAC-protected inbound command requests.
+- Desktop agent with a fixed kubectl allowlist and approval-gated deployment restart; arbitrary shell is never accepted.
+- Shared API Gateway/Lambda adapter for online serverless mode; persistent online-server remains the local agent command broker.
+- Multi-stage non-root API image, separate Lambda SAM package and Go CI for API/agent/Lambda builds.
 
 Run locally:
 
@@ -29,7 +31,7 @@ go test ./...
 go run ./cmd/cloudsentinels
 ```
 
-The Go bootstrap is not yet a complete production migration. AWS SDK v2, client-go, durable repositories, real identity adapters, AI provider integration, Zapier callbacks and live remediation adapters are staged follow-up work. The legacy application and AWS Node.js templates remain until parity, data migration and rollback are proven.
+The Go integration is not yet a complete production deployment: Airtable PAT, Cognito app configuration, Zapier Catch Hook secrets, AWS Lambda deployment, durable SQS/DynamoDB command storage, and a running local Kubernetes cluster still need environment setup and validation. AI triage is currently explainable rules, not a trained model. The legacy application and AWS Node.js templates remain until parity, data migration and rollback are proven.
 
 ---
 

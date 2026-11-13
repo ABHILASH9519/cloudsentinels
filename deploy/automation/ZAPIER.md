@@ -159,3 +159,18 @@ The HMAC headers are provided for downstream verification. A Zapier Catch Hook d
 A live synthetic EventBridge test exposed an existing Lambda packaging defect in the deployed Automation Processor: Node.js 22 was loading `automation/index.js` as CommonJS even though it uses ES-module imports. This caused `Runtime.UserCodeSyntaxError: Cannot use import statement outside a module`, leaving the SQS message unprocessed and no automation record in DynamoDB.
 
 This branch now includes `automation/package.json` with `"type": "module"` and pinned AWS SDK v3 runtime dependencies, plus the equivalent package manifest for the new Zapier relay. The API function already had its own ES-module package manifest. The fix is committed but **must be deployed to the existing runtime stack** before treating event processing as healthy. CI now runs `sam build` to install each function's dependencies and catch packaging issues before deployment.
+
+
+---
+
+## Go-first integration: Airtable inventory, AI findings and desktop CLI
+
+The new Go-first branch adds a separate integration path documented in [Airtable + Zapier + desktop agent](../../docs/integrations/airtable-zapier-desktop-agent.md). It uses the Cloud-Sentinel Airtable inventory, the shared Go analysis engine, signed Zapier webhooks and a desktop agent that polls the online-server API.
+
+- Outbound Go events include `incident.created`, `cluster.ai_finding`, `cluster.warning`, and `cloudsentinels.integration_test`.
+- Inbound Zapier commands use `POST /api/v1/zapier/commands` with `X-CS-Timestamp` and `X-CS-Signature` HMAC-SHA256 headers.
+- The desktop agent accepts only `collect-snapshot`, `rollout-status`, and approval-gated `restart-deployment`; it never executes arbitrary shell or PowerShell.
+- Use the online-server API as the persistent command broker. The Lambda adapter is stateless and deliberately rejects local CLI command enqueueing.
+- Mutations require an approved signed request and both server-side and local-agent opt-in flags. Both flags default to false.
+
+This Go webhook path is separate from the existing AWS EventBridge/SQS Zapier relay described above. Neither path is considered live until its own secrets, endpoint and delivery checks are configured.
