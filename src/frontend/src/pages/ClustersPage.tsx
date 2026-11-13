@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "@tanstack/react-router";
 import { Activity, AlertTriangle, BrainCircuit, CheckCircle2, Cloud, Database, RefreshCw, Server, Terminal, Workflow } from "lucide-react";
 import { toast } from "sonner";
-import { useAutomationCommands, useClusterInventory, useClusterMonitoring, useRefreshAirtableInventory, useTestZapierWebhook, useTriggerClusterAnalysis } from "../hooks/useClusterData";
+import { useAutomationCommands, useClusterInventory, useClusterMonitoring, usePlatformStatus, useRefreshAirtableInventory, useTestZapierWebhook, useTriggerClusterAnalysis } from "../hooks/useClusterData";
 
 function tone(value: string) {
   const status = value.toLowerCase();
@@ -21,6 +21,7 @@ export function ClustersPage() {
   const inventory = useClusterInventory();
   const monitoring = useClusterMonitoring();
   const commands = useAutomationCommands();
+  const platform = usePlatformStatus();
   const refresh = useRefreshAirtableInventory();
   const zapier = useTestZapierWebhook();
   const analyze = useTriggerClusterAnalysis();
@@ -69,8 +70,8 @@ export function ClustersPage() {
           <Button variant="outline" onClick={refreshInventory} disabled={refresh.isPending || !inventory.data?.liveSyncEnabled}>
             <RefreshCw className={`mr-2 h-4 w-4 ${refresh.isPending ? "animate-spin" : ""}`} /> Refresh Airtable
           </Button>
-          <Button onClick={testZapier} disabled={zapier.isPending}>
-            <Workflow className="mr-2 h-4 w-4" /> Test Zapier
+          <Button onClick={testZapier} disabled={zapier.isPending || platform.isLoading || platform.data?.integrations.zapier !== "configured"}>
+            <Workflow className="mr-2 h-4 w-4" /> {platform.data?.integrations.zapier === "configured" ? "Test Zapier" : "Zapier not configured"}
           </Button>
         </div>
       </div>
@@ -169,7 +170,7 @@ export function ClustersPage() {
         </Card>
         <Card className="mission-panel">
           <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm"><Workflow className="h-4 w-4 text-cyan-200" /> Zapier command queue</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-xs text-muted-foreground"><p>{commands.data?.items.length ?? 0} automation commands recorded in this API process.</p><p>Allowed CLI actions: collect snapshot, rollout status, and approval-gated deployment restart. Arbitrary shell is rejected.</p><div className="flex flex-wrap gap-2">{(commands.data?.items ?? []).slice(0,3).map((item) => <StatusPill key={item.id} value={item.status} />)}</div></CardContent>
+          <CardContent className="space-y-2 text-xs text-muted-foreground"><p>{commands.data?.items.length ?? 0} automation commands recorded in this API process.</p><p>Zapier integration: <strong className="text-foreground">{platform.data?.integrations.zapier ?? "checking"}</strong></p><p>Allowed CLI actions: collect snapshot, rollout status, and approval-gated deployment restart. Arbitrary shell is rejected.</p><div className="flex flex-wrap gap-2">{(commands.data?.items ?? []).slice(0,3).map((item) => <StatusPill key={item.id} value={item.status} />)}</div></CardContent>
         </Card>
       </section>
     </div>

@@ -19,3 +19,6 @@ src/frontend/dist/
 # Python test/runtime cache
 __pycache__/
 *.py[cod]
+
+# Local submission demo processes, logs and generated binary
+.local-demo-*

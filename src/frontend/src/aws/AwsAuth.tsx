@@ -48,6 +48,11 @@ export function AwsAuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
+    if (import.meta.env.DEV && import.meta.env.VITE_CLOUDSENTINELS_LOCAL_DEMO === "true") {
+      setUser({ id: "local-demo", email: "demo@localhost", name: "Local Demo" });
+      setIsLoaded(true);
+      return;
+    }
     let active = true;
     void (async () => {
       try {

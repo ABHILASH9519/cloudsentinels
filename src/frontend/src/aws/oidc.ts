@@ -161,6 +161,13 @@ export async function completeSignIn() {
 }
 
 export async function getIdToken(): Promise<string | null> {
+  if (
+    import.meta.env.DEV &&
+    import.meta.env.VITE_CLOUDSENTINELS_LOCAL_DEMO === "true" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+  ) {
+    return import.meta.env.VITE_CLOUDSENTINELS_LOCAL_TOKEN || null;
+  }
   const accessToken = await getAccessToken();
   if (!accessToken) return null;
   return getTokens()?.id_token ?? null;

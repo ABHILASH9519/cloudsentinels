@@ -100,6 +100,21 @@ export type AutomationCommand = {
   updatedAt: string;
 };
 
+export type PlatformStatus = {
+  executionMode: string;
+  integrations: { airtable: string; zapier: string; desktopAgent: string };
+  components: Array<{ id: string; status: string; deployment?: string }>;
+};
+
+export function usePlatformStatus() {
+  return useQuery({
+    queryKey: ["cloudsentinels", "platform"],
+    queryFn: () => cloudSentinelsRequest<PlatformStatus>("/api/v1/platform"),
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
 export function useClusterInventory() {
   return useQuery({
     queryKey: ["cloudsentinels", "clusters"],
