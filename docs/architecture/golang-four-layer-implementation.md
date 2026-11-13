@@ -8,7 +8,7 @@ CloudSentinels is a Go-first control plane for Airtable-backed cluster inventory
 
 1. Online server: persistent Go HTTP API for inventory, monitoring, analysis and command brokering.
 2. Online serverless: Go API Gateway/Lambda adapter built for Linux ARM64. The existing deployed AWS Operations API remains a separate runtime and has not yet been replaced by the Go Lambda binary.
-3. Local/remote Kubernetes: Go agent uses the configured kube context and fixed kubectl arguments. Docker-backed Minikube is the local operational cluster; EKS provisioning is scheduled through the protected review-day workflow.
+3. Local/remote Kubernetes: Go agent uses the configured kube context and fixed kubectl arguments. Docker-backed Minikube is the local operational cluster; CoreDNS and metrics-server are Ready, and kubectl top nodes returns live node CPU/memory. EKS provisioning is scheduled through the protected review-day workflow.
 
 ## Layer 2 — Identity and credentials
 

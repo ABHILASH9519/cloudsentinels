@@ -35,3 +35,4 @@ src/frontend/dist/
 
 # Local Windows build artifacts
 *.exe
+*.exe~
