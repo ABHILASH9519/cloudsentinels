@@ -84,7 +84,7 @@ jobs:
   zapier-notify:
     name: Notify Zapier after successful Go and UI checks
     needs: [go, frontend]
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       ZAPIER_WEBHOOK_ID: ${{ secrets.ZAPIER_WEBHOOK_ID }}
@@ -100,4 +100,4 @@ jobs:
           method: POST
           silent: false
           message: >-
-            {"event":"cloudsentinels.ci.passed","repository":"${{ github.repository }}","branch":"${{ github.ref_name }}","commit":"${{ github.sha }}","workflow":"${{ github.workflow }}","run":"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}
+            {"event":"cloudsentinels.ci.passed","repository":"${{ github.repository }}","branch":"${{ github.head_ref || github.ref_name }}","commit":"${{ github.sha }}","workflow":"${{ github.workflow }}","run":"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}

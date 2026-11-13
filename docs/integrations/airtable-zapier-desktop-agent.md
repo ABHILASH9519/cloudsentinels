@@ -133,7 +133,7 @@ Arbitrary shell, PowerShell, scripts, delete, scale, exec, apply and credential 
 
 ### GitHub Actions CI notification
 
-The Go CI workflow calls `gpuliyar/zapier-webhook-action@v1.0.0` after both the Go and frontend jobs pass. Configure the repository Actions secret `ZAPIER_WEBHOOK_ID` with the ID segment from the Zapier Catch Hook URL (`https://hooks.zapier.com/hooks/catch/{webhook-id}`). Do not store the full URL in the workflow file. The notification contains the repository, branch, commit SHA, workflow name and run URL. The workflow can be tested with **Actions → CloudSentinels Go CI → Run workflow** after adding the secret.
+The Go CI workflow calls `gpuliyar/zapier-webhook-action@v1.0.0` after both the Go and frontend jobs pass. Configure the repository Actions secret `ZAPIER_WEBHOOK_ID` with the ID segment from the Zapier Catch Hook URL (`https://hooks.zapier.com/hooks/catch/{webhook-id}`). Do not store the full URL in the workflow file. The notification contains the repository, branch, commit SHA, workflow name and run URL. The workflow notifies on successful push, pull-request and manual-dispatch checks. Manual dispatch is available after the workflow file is present on the repository default branch. Add the secret before expecting a live Zapier delivery. The requested action release declares the Node.js 16 runtime; GitHub may emit a deprecation warning or disable that runtime. Upgrade/fork it to a supported Node.js runtime before treating this notification path as production-critical.
 
 This GitHub Actions notification is separate from the Go API's outbound application-event integration below, which requires `ZAPIER_CATCH_HOOK_URL` and `ZAPIER_SIGNING_SECRET`.
 
