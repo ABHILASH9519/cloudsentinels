@@ -160,6 +160,12 @@ export async function completeSignIn() {
   );
 }
 
+export async function getIdToken(): Promise<string | null> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) return null;
+  return getTokens()?.id_token ?? null;
+}
+
 export async function getAccessToken(): Promise<string | null> {
   const tokens = getTokens();
   if (!tokens) return null;

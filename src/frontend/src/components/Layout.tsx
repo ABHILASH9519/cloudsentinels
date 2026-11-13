@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   Orbit,
+  Server,
   Settings,
   Shield,
   X,
@@ -22,6 +23,7 @@ const navItems = [
   { to: "/", label: "Overview", icon: LayoutDashboard, ocid: "nav.dashboard.link" },
   { to: "/incidents", label: "Incidents", icon: AlertTriangle, ocid: "nav.incidents.link" },
   { to: "/monitoring", label: "Monitoring", icon: Activity, ocid: "nav.monitoring.link" },
+  { to: "/clusters", label: "Clusters", icon: Server, ocid: "nav.clusters.link" },
   { to: "/ai-insights", label: "AI Insights", icon: BrainCircuit, ocid: "nav.ai_insights.link" },
   { to: "/settings", label: "Settings", icon: Settings, ocid: "nav.settings.link" },
 ];

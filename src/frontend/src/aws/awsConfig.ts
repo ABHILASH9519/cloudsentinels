@@ -9,6 +9,7 @@ const rawConfig = {
   clientId: import.meta.env.VITE_COGNITO_CLIENT_ID as string | undefined,
   domain: normalizeBaseUrl(import.meta.env.VITE_COGNITO_DOMAIN as string | undefined),
   apiUrl: normalizeBaseUrl(import.meta.env.VITE_AWS_API_URL as string | undefined),
+  cloudSentinelsApiUrl: normalizeBaseUrl(import.meta.env.VITE_CLOUDSENTINELS_API_URL as string | undefined),
 };
 
 export const awsConfig = rawConfig;

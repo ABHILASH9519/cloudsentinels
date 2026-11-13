@@ -11,6 +11,7 @@ import { useAwsAuth } from "./aws/AwsAuth";
 import { useAwsActor } from "./aws/useAwsActor";
 import { Layout } from "./components/Layout";
 import { AIInsightsPage } from "./pages/AIInsightsPage";
+import { ClustersPage } from "./pages/ClustersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { IncidentDetailPage } from "./pages/IncidentDetailPage";
 import { IncidentsPage } from "./pages/IncidentsPage";
@@ -101,6 +102,11 @@ const monitoringRoute = createRoute({
   path: "/monitoring",
   component: MonitoringPage,
 });
+const clustersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/clusters",
+  component: ClustersPage,
+});
 const aiInsightsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/ai-insights",
@@ -116,6 +122,7 @@ const routeTree = rootRoute.addChildren([
   incidentsRoute,
   incidentDetailRoute,
   monitoringRoute,
+  clustersRoute,
   aiInsightsRoute,
   settingsRoute,
 ]);
