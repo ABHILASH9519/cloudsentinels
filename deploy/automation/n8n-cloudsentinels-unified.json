@@ -21,7 +21,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const allowed = ['schemaVersion','eventId','eventType','occurredAt','clusterId','clusterName','sourceType','environment','severity','title','summary','resourceId','resourceKind','resourceName','namespace','region','service','accountId','action','resourceState'];\nconst items = $input.all();\nconst getHeader = (headers, name) => {\n  const key = Object.keys(headers || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());\n  return key ? headers[key] : undefined;\n};\nconst parseObject = (value, label) => {\n  if (typeof value === 'string') {\n    try { value = JSON.parse(value); }\n    catch { throw new Error(`Invalid ${label}: expected a JSON object`); }\n  }\n  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};\n};\nreturn items.flatMap((item, index) => {\n  const root = parseObject(item.json, 'webhook input');\n  const headers = parseObject(root.headers, 'webhook headers');\n  let body = root.body !== undefined ? parseObject(root.body, 'request body') : root;\nconst isEventBridge = Boolean(body && body.id && body.source && body[\"detail-type\"]);\nif (isEventBridge) {\n  const envelope = body;\n  const detail = parseObject(envelope.detail, \"EventBridge detail\");\n  const alarmName = String(detail.alarmName || \"\");\n  const state = detail.state && typeof detail.state === \"object\" ? detail.state.value : detail.state;\n  const eventType = String(envelope[\"detail-type\"] || \"AWS EventBridge Event\");\n  let severity = \"info\";\n  if (eventType.toLowerCase().includes(\"cloudwatch alarm\") && state === \"ALARM\") {\n    severity = /statuscheckfailed|errors|dead.?letter|dlq/i.test(alarmName) ? \"critical\" : \"high\";\n  } else if (eventType.toLowerCase().includes(\"instance state-change\")) {\n    severity = detail.state === \"terminated\" ? \"critical\" : [\"stopped\", \"stopping\", \"shutting-down\"].includes(detail.state) ? \"medium\" : \"low\";\n  } else if (envelope.source === \"aws.guardduty\") {\n    const score = Number(detail.severity || 0);\n    severity = score >= 7 ? \"critical\" : score >= 4 ? \"high\" : \"medium\";\n  } else if (envelope.source === \"aws.securityhub\") {\n    const label = String(detail.findings?.[0]?.Severity?.Label || \"\").toLowerCase();\n    severity = label === \"critical\" ? \"critical\" : label === \"high\" ? \"high\" : label === \"medium\" ? \"medium\" : \"low\";\n  }\n  const finding = detail.findings?.[0] || {};\n  body = {\n    ...detail,\n    eventId: envelope.id,\n    eventType,\n    occurredAt: envelope.time,\n    sourceType: envelope.source,\n    region: envelope.region,\n    accountId: envelope.account,\n    resourceId: detail[\"instance-id\"] || alarmName || detail.functionName || detail.resource?.resourceId || finding.Resources?.[0]?.Id || \"\",\n    resourceState: state || \"\",\n    service: envelope.source === \"aws.guardduty\" ? \"AWS/GuardDuty\" : envelope.source === \"aws.securityhub\" ? \"AWS/SecurityHub\" : alarmName.toLowerCase().includes(\"lambda\") ? \"AWS/Lambda\" : alarmName.toLowerCase().includes(\"server\") ? \"AWS/EC2\" : \"AWS\",\n    severity,\n    title: alarmName || detail[\"instance-id\"] || finding.Title || detail.title || eventType,\n    summary: detail.state && typeof detail.state === \"object\" ? (detail.state.reason || detail.state.value || \"CloudWatch alarm state changed\") : (finding.Description || detail.description || detail.message || detail.reason || String(state || \"AWS event received\"))\n  };\n}\n\n  // Accept common event wrappers used by API gateways and event relays.\n  for (const key of ['data', 'detail', 'payload']) {\n    if ((!body.eventId || !body.eventType) && body[key] !== undefined) {\n      const nested = parseObject(body[key], key);\n      if (Object.keys(nested).length) body = nested;\n    }\n  }\n  const headerEventId = getHeader(headers, 'x-cs-event-id');\n  const eventId = String(body.eventId || headerEventId || '').trim();\n  const eventType = String(body.eventType || '').trim();\n  if (!eventId && !eventType && Object.keys(body).length === 0) {\n    // n8n editor can execute this node without webhook input. Treat that as a no-op,\n    // not a failed workflow; a real event must include both required identifiers.\n    return [];\n  }\n  if (!eventId || !eventType) {\n    const keys = Object.keys(body).slice(0, 20).join(', ') || '(none)';\n    throw new Error(`Invalid CloudSentinels event at item ${index + 1}: eventId and eventType are required. Received keys: ${keys}. Send a JSON object with both fields.`);\n  }\n  if (eventId.length > 128 || eventType.length > 80) throw new Error('Rejected event: eventId or eventType exceeds the allowed length');\n  const event = {};\n  for (const key of allowed) if (body[key] !== undefined) event[key] = body[key];\n  event.eventId = eventId;\n  event.eventType = eventType;\n  event.severity = String(event.severity || 'info').toLowerCase();\n  const validSeverities = ['critical','high','degraded','warning','medium','low','info'];\n  if (!validSeverities.includes(event.severity)) event.severity = 'info';\n  const type = eventType.toLowerCase();\n  let route = 'general';\n  if (type.includes('recover') || type.includes('online') || type.includes('healthy')) route = 'recovery';\n  else if (event.severity === 'critical' || type.includes('offline') || type.includes('notready')) route = 'critical';\n  else if (['high','degraded','warning','medium'].includes(event.severity) || type.includes('degraded') || type.includes('warning') || type.includes('crashloop')) route = 'degraded';\n  const safe = (value, max) => String(value || '').replace(/[\\u0000-\\u001f\\u007f]/g, ' ').slice(0, max);\n  return { json: { ...event, title: safe(event.title || eventType, 180), summary: safe(event.summary, 1000), clusterName: safe(event.clusterName, 120), route, receivedAt: new Date().toISOString(), receiver: 'n8n-local', signaturePresent: Boolean(getHeader(headers, 'x-cs-signature') && getHeader(headers, 'x-cs-timestamp')), autoRemediation: false } };\n});"
+        "jsCode": "const allowed = ['schemaVersion','eventId','eventType','occurredAt','clusterId','clusterName','sourceType','environment','severity','title','summary','resourceId','resourceKind','resourceName','namespace','region','service','accountId','action','resourceState','functionName','alarmName'];\nconst items = $input.all();\nconst getHeader = (headers, name) => {\n  const key = Object.keys(headers || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());\n  return key ? headers[key] : undefined;\n};\nconst parseObject = (value, label) => {\n  if (typeof value === 'string') {\n    try { value = JSON.parse(value); }\n    catch { throw new Error(`Invalid ${label}: expected a JSON object`); }\n  }\n  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};\n};\nreturn items.flatMap((item, index) => {\n  const root = parseObject(item.json, 'webhook input');\n  const headers = parseObject(root.headers, 'webhook headers');\n  let body = root.body !== undefined ? parseObject(root.body, 'request body') : root;\nconst isEventBridge = Boolean(body && body.id && body.source && body[\"detail-type\"]);\nif (isEventBridge) {\n  const envelope = body;\n  const detail = parseObject(envelope.detail, \"EventBridge detail\");\n  const alarmName = String(detail.alarmName || \"\");\n  const state = detail.state && typeof detail.state === \"object\" ? detail.state.value : detail.state;\n  const eventType = String(envelope[\"detail-type\"] || \"AWS EventBridge Event\");\n  let severity = \"info\";\n  if (eventType.toLowerCase().includes(\"cloudwatch alarm\") && state === \"ALARM\") {\n    severity = /statuscheckfailed|errors|dead.?letter|dlq/i.test(alarmName) ? \"critical\" : \"high\";\n  } else if (eventType.toLowerCase().includes(\"instance state-change\")) {\n    severity = detail.state === \"terminated\" ? \"critical\" : [\"stopped\", \"stopping\", \"shutting-down\"].includes(detail.state) ? \"medium\" : \"low\";\n  } else if (envelope.source === \"aws.guardduty\") {\n    const score = Number(detail.severity || 0);\n    severity = score >= 7 ? \"critical\" : score >= 4 ? \"high\" : \"medium\";\n  } else if (envelope.source === \"aws.securityhub\") {\n    const label = String(detail.findings?.[0]?.Severity?.Label || \"\").toLowerCase();\n    severity = label === \"critical\" ? \"critical\" : label === \"high\" ? \"high\" : label === \"medium\" ? \"medium\" : \"low\";\n  }\n  const finding = detail.findings?.[0] || {};\n  body = {\n    ...detail,\n    eventId: envelope.id,\n    eventType,\n    occurredAt: envelope.time,\n    sourceType: envelope.source,\n    region: envelope.region,\n    accountId: envelope.account,\n    resourceId: detail[\"instance-id\"] || alarmName || detail.functionName || detail.resource?.resourceId || finding.Resources?.[0]?.Id || \"\",\n    resourceState: state || \"\",\n    service: envelope.source === \"aws.guardduty\" ? \"AWS/GuardDuty\" : envelope.source === \"aws.securityhub\" ? \"AWS/SecurityHub\" : alarmName.toLowerCase().includes(\"lambda\") ? \"AWS/Lambda\" : alarmName.toLowerCase().includes(\"server\") ? \"AWS/EC2\" : \"AWS\",\n    severity,\n    title: alarmName || detail[\"instance-id\"] || finding.Title || detail.title || eventType,\n    summary: detail.state && typeof detail.state === \"object\" ? (detail.state.reason || detail.state.value || \"CloudWatch alarm state changed\") : (finding.Description || detail.description || detail.message || detail.reason || String(state || \"AWS event received\"))\n  };\n}\n\n  // Accept common event wrappers used by API gateways and event relays.\n  for (const key of ['data', 'detail', 'payload']) {\n    if ((!body.eventId || !body.eventType) && body[key] !== undefined) {\n      const nested = parseObject(body[key], key);\n      if (Object.keys(nested).length) body = nested;\n    }\n  }\n  const headerEventId = getHeader(headers, 'x-cs-event-id');\n  const eventId = String(body.eventId || headerEventId || '').trim();\n  const eventType = String(body.eventType || '').trim();\n  if (!eventId && !eventType && Object.keys(body).length === 0) {\n    // n8n editor can execute this node without webhook input. Treat that as a no-op,\n    // not a failed workflow; a real event must include both required identifiers.\n    return [];\n  }\n  if (!eventId || !eventType) {\n    const keys = Object.keys(body).slice(0, 20).join(', ') || '(none)';\n    throw new Error(`Invalid CloudSentinels event at item ${index + 1}: eventId and eventType are required. Received keys: ${keys}. Send a JSON object with both fields.`);\n  }\n  if (eventId.length > 128 || eventType.length > 80) throw new Error('Rejected event: eventId or eventType exceeds the allowed length');\n  const event = {};\n  for (const key of allowed) if (body[key] !== undefined) event[key] = body[key];\n  event.eventId = eventId;\n  event.eventType = eventType;\n  event.severity = String(event.severity || 'info').toLowerCase();\n  const validSeverities = ['critical','high','degraded','warning','medium','low','info'];\n  if (!validSeverities.includes(event.severity)) event.severity = 'info';\n  const type = eventType.toLowerCase();\n  let route = 'general';\n  if (type.includes('recover') || type.includes('online') || type.includes('healthy')) route = 'recovery';\n  else if (event.severity === 'critical' || type.includes('offline') || type.includes('notready')) route = 'critical';\n  else if (['high','degraded','warning','medium'].includes(event.severity) || type.includes('degraded') || type.includes('warning') || type.includes('crashloop')) route = 'degraded';\n  const safe = (value, max) => String(value || '').replace(/[\\u0000-\\u001f\\u007f]/g, ' ').slice(0, max);\n  return { json: { ...event, title: safe(event.title || eventType, 180), summary: safe(event.summary, 1000), clusterName: safe(event.clusterName, 120), route, receivedAt: new Date().toISOString(), receiver: 'n8n-local', signaturePresent: Boolean(getHeader(headers, 'x-cs-signature') && getHeader(headers, 'x-cs-timestamp')), autoRemediation: false } };\n});"
       },
       "id": "c4f6cb77-5a12-4d5f-8d0d-0a64b6b1a8a0",
       "name": "Validate and Normalize Event",
@@ -61,7 +61,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        760,
+        1540,
         300
       ]
     },
@@ -75,7 +75,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1040,
+        1800,
         80
       ]
     },
@@ -108,8 +108,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1040,
-        300
+        1800,
+        400
       ]
     },
     {
@@ -122,8 +122,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1320,
-        180
+        2060,
+        200
       ]
     },
     {
@@ -155,8 +155,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1320,
-        420
+        2060,
+        520
       ]
     },
     {
@@ -169,8 +169,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1600,
-        340
+        2320,
+        400
       ]
     },
     {
@@ -183,8 +183,36 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1600,
-        540
+        2320,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Events arrive through the dedicated AWS EventBridge -> SQS -> local poller bridge.\n// This node makes the AWS connector explicit in the n8n execution path while\n// preserving the normalized event envelope used by the shared incident policy.\nreturn $input.all().map(({ json: e }) => {\n  const isAws = String(e.sourceType || \"\").startsWith(\"aws.\") ||\n    String(e.service || \"\").startsWith(\"AWS/\");\n  if (!isAws) return { json: { ...e, ingestConnector: e.ingestConnector || \"cloudsentinels-agent-or-webhook\" } };\n  return { json: {\n    ...e,\n    ingestConnector: \"aws-eventbridge-sqs\",\n    aws: {\n      provider: \"AWS\",\n      eventSource: e.sourceType || \"unknown\",\n      eventType: e.eventType || \"unknown\",\n      accountId: e.accountId || null,\n      region: e.region || null,\n      resourceId: e.resourceId || null,\n      resourceState: e.resourceState || null,\n      receivedThrough: \"dedicated-cloudsentinels-n8n-sqs-queue\"\n    }\n  }};\n});\n"
+      },
+      "id": "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1003",
+      "name": "AWS EventBridge / SQS Connector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Explicit AWS Lambda / serverless event adapter.\n// Lambda alarm and function events are enriched for the shared remediation policy.\n// This node does not invoke Lambda APIs or mutate function configuration.\nreturn $input.all().map(({ json: e }) => {\n  const text = [\n    e.service, e.title, e.summary, e.eventType, e.resourceKind, e.resourceName,\n    e.resourceId, e.functionName, e.alarmName\n  ].join(\" \").toLowerCase();\n  const isLambda = /lambda|serverless/.test(text) ||\n    (String(e.sourceType || \"\").startsWith(\"aws.\") && /function/i.test(String(e.resourceKind || \"\")));\n  if (!isLambda) return { json: e };\n  const functionName = e.functionName || e.resourceName ||\n    (String(e.resourceId || \"\").startsWith(\"arn:\") ? e.resourceId.split(\":\").pop() : e.resourceId) || null;\n  return { json: {\n    ...e,\n    service: \"AWS/Lambda\",\n    sourceType: e.sourceType || \"aws.lambda\",\n    resourceKind: \"AWS::Lambda::Function\",\n    resourceName: functionName || e.resourceName || null,\n    functionName,\n    ingestConnector: \"aws-lambda-cloudwatch-eventbridge\",\n    serverless: {\n      provider: \"AWS Lambda\",\n      functionName,\n      region: e.region || null,\n      accountId: e.accountId || null,\n      alarmName: e.alarmName || e.title || null,\n      alarmState: e.resourceState || null,\n      diagnostics: [\"errors\", \"throttles\", \"duration\", \"concurrency\", \"logs\"],\n      mutationEnabled: false,\n      approvalRequiredForChanges: true\n    }\n  }};\n});\n"
+      },
+      "id": "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1004",
+      "name": "AWS Lambda / Serverless Connector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        300
       ]
     },
     {
@@ -197,8 +225,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        760,
-        560
+        1280,
+        300
       ]
     },
     {
@@ -211,7 +239,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1900,
+        2580,
         300
       ]
     }
@@ -232,7 +260,7 @@
       "main": [
         [
           {
-            "node": "Unified Remediation Policy",
+            "node": "AWS EventBridge / SQS Connector",
             "type": "main",
             "index": 0
           }
@@ -287,6 +315,28 @@
         [
           {
             "node": "Prepare General Audit Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AWS EventBridge / SQS Connector": {
+      "main": [
+        [
+          {
+            "node": "AWS Lambda / Serverless Connector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AWS Lambda / Serverless Connector": {
+      "main": [
+        [
+          {
+            "node": "Unified Remediation Policy",
             "type": "main",
             "index": 0
           }

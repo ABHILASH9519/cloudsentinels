@@ -11,7 +11,7 @@ CloudSentinels uses one local n8n workflow for the shared incident lifecycle acr
 - Source definition: [n8n-cloudsentinels-unified.json](./n8n-cloudsentinels-unified.json)
 - Rebuild, import, publish and restart local n8n: .\deploy\\automation\\publish-unified-workflow.ps1
 
-The previous event-triage workflow has been unpublished. The unified workflow is the active local n8n entry point.
+The previous event-triage workflow has been unpublished. The unified workflow is the active local n8n entry point. Its visible main path now includes **AWS EventBridge / SQS Connector** and **AWS Lambda / Serverless Connector** nodes between event normalization and the shared remediation policy. These are explicit in-workflow adapters; AWS transport remains EventBridge → dedicated SQS → local poller → webhook.
 
 ## Shared incident lifecycle
 
