@@ -16,8 +16,8 @@ Run with `CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS=false`. It collects node/pod/even
 
 - No arbitrary shell or command string is accepted.
 - `collect-snapshot` and `rollout-status` are read-only.
-- `restart-deployment` requires signed webhook approval plus server and local mutation flags explicitly enabled.
-- No delete, scale, exec, apply, credential export or arbitrary scripts are supported.
+- `restart-deployment` and `rollback-deployment` require signed webhook approval plus server and local mutation flags explicitly enabled. Both verify rollout status after the change. Use `POST /api/v1/remediation/preview` first; it is always dry-run and never queues a command.
+- No delete, scale, exec, apply, credential export or arbitrary scripts are supported. Rollback reverts the Deployment to its previous rollout revision; inspect rollout history and application data compatibility before approval.
 - Use a least-privilege kubeconfig/RBAC identity. Do not use a cluster-admin context for routine monitoring.
 
 An in-cluster deployment template and read-only RBAC are in `kubernetes/`. Build the container with `Dockerfile`, publish it to your registry, create the `cloudsentinels-agent-token` Secret, replace the manifest placeholders, and apply `agent-readonly-rbac.yaml` plus `agent-deployment.yaml`. Use the Airtable record ID as the agent cluster ID so telemetry merges into the matching inventory row.

@@ -427,7 +427,7 @@ func (a *agent) execute(command automation.Command) (string, string) {
 			return "failed", truncate(err.Error()+" "+out, 3000)
 		}
 		return "succeeded", truncate(out, 3000)
-	case "restart-deployment":
+	case "restart-deployment", "rollback-deployment":
 		if !a.allowMutations {
 			return "blocked", "Local mutations are disabled. Set CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS=true only after reviewing the action policy."
 		}
@@ -437,7 +437,13 @@ func (a *agent) execute(command automation.Command) (string, string) {
 		if !safeResource.MatchString(command.Namespace) || !safeResource.MatchString(command.Deployment) {
 			return "blocked", "Invalid Kubernetes namespace or deployment identifier."
 		}
-		out, err := kubectl(ctx, "rollout", "restart", "deployment/"+command.Deployment, "-n", command.Namespace)
+		var out string
+		var err error
+		if command.Action == "rollback-deployment" {
+			out, err = kubectl(ctx, "rollout", "undo", "deployment/"+command.Deployment, "-n", command.Namespace)
+		} else {
+			out, err = kubectl(ctx, "rollout", "restart", "deployment/"+command.Deployment, "-n", command.Namespace)
+		}
 		if err != nil {
 			return "failed", truncate(err.Error()+" "+out, 3000)
 		}

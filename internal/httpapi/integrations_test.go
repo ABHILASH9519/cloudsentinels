@@ -71,6 +71,16 @@ func TestSignedZapierCommandAndMutationGate(t *testing.T) {
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("expected server policy to block mutations, got %d", response.Code)
 	}
+	rollback := []byte(`{"commandId":"rollback-1","action":"rollback-deployment","clusterId":"minikube","namespace":"default","deployment":"api","approvalStatus":"approved","approvedBy":"operator"}`)
+	stamp = time.Now().UTC().Format(time.RFC3339)
+	request = httptest.NewRequest(http.MethodPost, "/api/v1/zapier/commands", bytes.NewReader(rollback))
+	request.Header.Set("X-CS-Timestamp", stamp)
+	request.Header.Set("X-CS-Signature", automation.Sign(secret, stamp, rollback))
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expected server policy to block rollback, got %d", response.Code)
+	}
 }
 
 func TestDesktopAgentTelemetryRequiresSeparateToken(t *testing.T) {

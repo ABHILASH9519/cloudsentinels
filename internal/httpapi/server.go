@@ -94,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/zapier/test", s.testZapier)
 	mux.HandleFunc("POST /api/v1/n8n/test", s.testN8N)
 	mux.HandleFunc("GET /api/v1/automation/commands", s.listAutomationCommands)
+	mux.HandleFunc("POST /api/v1/remediation/preview", s.previewRemediation)
 	mux.HandleFunc("GET /api/v1/agent/commands", s.agentCommands)
 	mux.HandleFunc("POST /api/v1/agent/commands/{id}/result", s.agentCommandResult)
 	mux.HandleFunc("POST /api/v1/agent/telemetry", s.agentTelemetry)
@@ -400,7 +401,7 @@ func (s *Server) zapierCommand(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_command", "Webhook body must contain exactly one JSON object")
 		return
 	}
-	if input.Action == "restart-deployment" && !s.config.AllowLocalMutations {
+	if (input.Action == "restart-deployment" || input.Action == "rollback-deployment") && !s.config.AllowLocalMutations {
 		writeError(w, http.StatusForbidden, "mutations_disabled", "Local CLI mutations are disabled by server policy")
 		return
 	}
@@ -447,6 +448,49 @@ func (s *Server) testN8N(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "delivered_to_n8n_webhook"})
 }
+
+// previewRemediation evaluates an action without queuing or executing it.
+func (s *Server) previewRemediation(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+	var input struct {
+		Action     string `json:"action"`
+		ClusterID  string `json:"clusterId"`
+		Namespace  string `json:"namespace"`
+		Deployment string `json:"deployment"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_preview", "Preview request JSON is invalid")
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid_preview", "Preview body must contain exactly one JSON object")
+		return
+	}
+	if input.Action != "restart-deployment" && input.Action != "rollback-deployment" {
+		writeError(w, http.StatusUnprocessableEntity, "action_not_allowed", "Only restart-deployment and rollback-deployment are currently supported")
+		return
+	}
+	probe := automation.Command{Action: input.Action, ClusterID: input.ClusterID, Namespace: input.Namespace, Deployment: input.Deployment, ApprovalStatus: "approved", ApprovedBy: "preview-only"}
+	if _, err := automation.NewQueue().Enqueue(probe); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "target_rejected", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "preview_only", "dryRun": true, "queued": false, "executed": false,
+		"action": input.Action, "clusterId": input.ClusterID, "namespace": input.Namespace, "deployment": input.Deployment,
+		"risk": "high", "requiresHumanApproval": true,
+		"serverMutationEnabled": s.config.AllowLocalMutations,
+		"executionEnabled":      false,
+		"guardrails":            []string{"fixed action allowlist", "cluster-bound agent authentication", "explicit human approval", "server and agent mutation flags must both be enabled", "rollout status verification", "no arbitrary shell commands"},
+	})
+}
+
 func (s *Server) listAutomationCommands(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r) {
 		return

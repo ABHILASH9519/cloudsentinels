@@ -47,3 +47,19 @@ func TestQueueDispatchesReadOnlyCommands(t *testing.T) {
 		t.Fatalf("unexpected pending commands: %#v", items)
 	}
 }
+
+func TestQueueRequiresApprovalForRollbackAndDispatchesOnlyAfterApproval(t *testing.T) {
+	q := NewQueue()
+	base := Command{ID: "rollback-test", Action: "rollback-deployment", ClusterID: "local-cluster", Namespace: "payments", Deployment: "api", ApprovalStatus: "pending"}
+	if _, err := q.Enqueue(base); err == nil {
+		t.Fatal("rollback must require explicit approval")
+	}
+	base.ApprovalStatus, base.ApprovedBy = "approved", "operator@example.test"
+	if _, err := q.Enqueue(base); err != nil {
+		t.Fatal(err)
+	}
+	items := q.PendingForCluster("local-cluster", 10)
+	if len(items) != 1 || items[0].Action != "rollback-deployment" {
+		t.Fatalf("approved rollback not dispatched: %#v", items)
+	}
+}

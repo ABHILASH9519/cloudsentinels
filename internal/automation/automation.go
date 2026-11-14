@@ -74,9 +74,9 @@ func (q *Queue) Enqueue(command Command) (Command, error) {
 		if command.ApprovalStatus == "" {
 			command.ApprovalStatus = "not-required"
 		}
-	case "restart-deployment":
+	case "restart-deployment", "rollback-deployment":
 		if command.ApprovalStatus != "approved" || strings.TrimSpace(command.ApprovedBy) == "" {
-			return Command{}, errors.New("restart-deployment requires an explicit approved status and approvedBy identity")
+			return Command{}, errors.New("deployment mutation requires an explicit approved status and approvedBy identity")
 		}
 		if !resourceNamePattern.MatchString(command.Namespace) || !resourceNamePattern.MatchString(command.Deployment) {
 			return Command{}, errors.New("restart-deployment requires valid namespace and deployment names")
@@ -132,7 +132,7 @@ func (q *Queue) PendingForCluster(clusterID string, limit int) []Command {
 		if item.Status != "queued" {
 			continue
 		}
-		if item.Action == "restart-deployment" && item.ApprovalStatus != "approved" {
+		if (item.Action == "restart-deployment" || item.Action == "rollback-deployment") && item.ApprovalStatus != "approved" {
 			continue
 		}
 		items = append(items, item)
