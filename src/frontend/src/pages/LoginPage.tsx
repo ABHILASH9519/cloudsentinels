@@ -1,10 +1,10 @@
-﻿import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Activity, BrainCircuit, Shield, Zap } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useFirebaseAuth } from "../auth/FirebaseAuth";
 
 export function LoginPage({ authError }: { authError?: string | null }) {
-  const { signIn, signInEmail, signUpEmail, error, isLoaded } =
+  const { signIn, signInEmail, signUpEmail, error, isLoaded, isConfigured } =
     useFirebaseAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -65,6 +65,14 @@ export function LoginPage({ authError }: { authError?: string | null }) {
           <p className="text-sm text-muted-foreground mb-5">
             Your account is secured by Google Firebase Authentication.
           </p>
+          {!isConfigured && (
+            <div
+              role="status"
+              className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            >
+              Firebase is not connected yet. Add the four VITE_FIREBASE_* values from your Firebase Web App configuration to src/frontend/.env.local, then restart the frontend.
+            </div>
+          )}
           {message && (
             <div
               role="alert"
@@ -79,7 +87,7 @@ export function LoginPage({ authError }: { authError?: string | null }) {
           <Button
             className="w-full"
             onClick={() => void signIn()}
-            disabled={!isLoaded || busy}
+            disabled={!isLoaded || !isConfigured || busy}
           >
             <span className="flex items-center gap-2">
               <Shield className="w-4 h-4" />
@@ -124,10 +132,10 @@ export function LoginPage({ authError }: { authError?: string | null }) {
               className="w-full"
               type="submit"
               variant="secondary"
-              disabled={!isLoaded || busy}
+              disabled={!isLoaded || !isConfigured || busy}
             >
               {busy
-                ? "Please waitâ€¦"
+                ? "Please wait…"
                 : mode === "signup"
                   ? "Create account"
                   : "Sign in with email"}
@@ -150,7 +158,7 @@ export function LoginPage({ authError }: { authError?: string | null }) {
           </p>
         </div>
         <p className="text-center text-xs text-muted-foreground mt-6">
-          CloudSentinels Â· Cloud operations and incident response
+          CloudSentinels · Cloud operations and incident response
         </p>
       </div>
     </div>

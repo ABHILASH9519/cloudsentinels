@@ -38,6 +38,7 @@ export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : null;
 type AuthUser = { id: string; email: string | null; name: string | null };
 type AuthContextValue = {
   isLoaded: boolean;
+  isConfigured: boolean;
   isSignedIn: boolean;
   user: AuthUser | null;
   error: string | null;
@@ -123,6 +124,7 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
   const value = useMemo(
     () => ({
       isLoaded,
+      isConfigured: !!firebaseAuth,
       isSignedIn: !!user,
       user,
       error,
