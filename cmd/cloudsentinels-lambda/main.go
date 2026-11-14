@@ -27,7 +27,7 @@ func init() {
 	cfg.ExecutionMode = "online-serverless"
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	authenticator, err := auth.New(context.Background(), auth.Config{
-		FirebaseProjectID: cfg.FirebaseProjectID, CredentialsFile: cfg.FirebaseCredentials,
+		FirebaseProjectID: cfg.FirebaseProjectID, CredentialsFile: cfg.FirebaseCredentials, CredentialsJSON: cfg.FirebaseServiceAccountJSON,
 		LocalToken: cfg.LocalAuthToken, Environment: cfg.Environment, AllowLocalToken: cfg.AllowLocalAuthInProd,
 	})
 	if err != nil {

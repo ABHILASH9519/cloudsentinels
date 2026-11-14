@@ -51,3 +51,32 @@ func TestLoadAcceptsSupportedExecutionModes(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadFirebaseProjectFallbackAndServiceAccountJSON(t *testing.T) {
+	t.Setenv("FIREBASE_PROJECT_ID", "")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "cloudsentinels-test")
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+	t.Setenv("FIREBASE_SERVICE_ACCOUNT_JSON", `{"type":"service_account","project_id":"cloudsentinels-test"}`)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.FirebaseProjectID != "cloudsentinels-test" || cfg.FirebaseServiceAccountJSON == "" {
+		t.Fatalf("Firebase config not loaded: %#v", cfg)
+	}
+}
+
+func TestLoadRejectsConflictingOrInvalidFirebaseCredentials(t *testing.T) {
+	t.Setenv("FIREBASE_PROJECT_ID", "cloudsentinels-test")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", `C:\firebase\service-account.json`)
+	t.Setenv("FIREBASE_SERVICE_ACCOUNT_JSON", `{}`)
+	if _, err := Load(); err == nil {
+		t.Fatal("expected conflicting credential sources to be rejected")
+	}
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+	t.Setenv("FIREBASE_SERVICE_ACCOUNT_JSON", "not-json")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected invalid Firebase service account JSON to be rejected")
+	}
+}

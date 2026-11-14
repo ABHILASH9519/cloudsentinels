@@ -12,7 +12,7 @@ CloudSentinels is a Go-first control plane for Airtable-backed cluster inventory
 
 ## Layer 2 — Identity and credentials
 
-- Web users authenticate with Cognito OIDC; browser sign-in uses Authorization Code + PKCE and the Go API validates ID tokens.
+- Web users authenticate with Firebase Authentication; the Go API verifies Firebase ID tokens and revocation with the Firebase Admin SDK.
 - Local development auth is a high-entropy operator token and must remain disabled in production.
 - Cluster agents use unique bearer tokens, preferably mapped by Airtable record ID.
 - Zapier inbound commands use timestamped HMAC-SHA256 signatures.

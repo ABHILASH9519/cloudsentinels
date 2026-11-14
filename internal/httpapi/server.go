@@ -83,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.ready)
 	mux.HandleFunc("GET /api/v1/platform", s.platform)
+	mux.HandleFunc("GET /api/v1/auth/me", s.currentUser)
 	mux.HandleFunc("GET /api/v1/incidents", s.listIncidents)
 	mux.HandleFunc("POST /api/v1/incidents", s.createIncident)
 	mux.HandleFunc("GET /api/v1/inventory/clusters", s.listClusters)
@@ -691,6 +692,19 @@ func mergeLocalTelemetry(clusters []inventory.Cluster, telemetry []LocalTelemetr
 		}
 	}
 	return clusters
+}
+
+func (s *Server) currentUser(w http.ResponseWriter, r *http.Request) {
+	if s.authenticator == nil {
+		writeError(w, http.StatusServiceUnavailable, "authentication_unconfigured", "Firebase Authentication is not configured")
+		return
+	}
+	principal, err := s.authenticator.Authenticate(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "A valid Firebase ID token is required")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "uid": principal.Subject, "email": principal.Email, "roles": principal.Roles})
 }
 
 func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
