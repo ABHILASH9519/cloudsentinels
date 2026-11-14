@@ -1,0 +1,56 @@
+{
+    "name":  "CloudSentinels - Local Event Intake",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "cloudsentinels/events",
+                                         "responseMode":  "onReceived",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "2b2c8e4f-4e9f-4b73-b22a-0a6e9f02c5c1",
+                      "name":  "CloudSentinels Event Webhook",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       240,
+                                       300
+                                   ],
+                      "webhookId":  "7e0e20d0-82d1-4ac4-b2e5-f5ed74f11c10"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "const allowed = [\u0027schemaVersion\u0027,\u0027eventId\u0027,\u0027eventType\u0027,\u0027occurredAt\u0027,\u0027clusterId\u0027,\u0027clusterName\u0027,\u0027sourceType\u0027,\u0027environment\u0027,\u0027severity\u0027,\u0027title\u0027,\u0027summary\u0027];\nreturn $input.all().map((item) =\u003e {\n  const body = item.json.body \u0026\u0026 typeof item.json.body === \u0027object\u0027 ? item.json.body : item.json;\n  if (!body.eventId || !body.eventType) throw new Error(\u0027CloudSentinels event requires eventId and eventType\u0027);\n  const event = {};\n  for (const key of allowed) if (body[key] !== undefined) event[key] = body[key];\n  const type = String(event.eventType).toLowerCase();\n  const severity = String(event.severity || \u0027\u0027).toLowerCase();\n  let route = \u0027general\u0027;\n  if (type.includes(\u0027recovered\u0027) || type.includes(\u0027online\u0027)) route = \u0027recovery\u0027;\n  else if (severity === \u0027critical\u0027 || type.includes(\u0027offline\u0027)) route = \u0027critical\u0027;\n  else if (severity === \u0027warning\u0027 || severity === \u0027high\u0027 || type.includes(\u0027degraded\u0027) || type.includes(\u0027warning\u0027)) route = \u0027degraded\u0027;\n  return { json: { ...event, route, receivedAt: new Date().toISOString(), receiver: \u0027n8n-local\u0027 } };\n});"
+                                     },
+                      "id":  "c4f6cb77-5a12-4d5f-8d0d-0a64b6b1a8a0",
+                      "name":  "Validate and Normalize Event",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       500,
+                                       300
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "CloudSentinels Event Webhook":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Validate and Normalize Event",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "active":  false,
+    "id":  "cloudsentinelsLocalEvents"
+}

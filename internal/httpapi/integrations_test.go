@@ -224,3 +224,85 @@ func TestAgentTelemetryPreservesRemoteClusterRoutingMetadata(t *testing.T) {
 		t.Fatal("timed out waiting for remote cluster online event")
 	}
 }
+
+func TestN8NTestEndpointAndPlatformStatus(t *testing.T) {
+	secret := "n8n-test-signing-secret-with-more-than-32-bytes"
+	events := make(chan automation.Event, 1)
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		if r.Header.Get("X-CS-Signature") == "" || r.Header.Get("X-CS-Timestamp") == "" {
+			t.Error("expected signed n8n webhook headers")
+		}
+		var event automation.Event
+		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+			t.Error(err)
+		}
+		events <- event
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer hook.Close()
+	cfg := config.Config{ExecutionMode: "online-server", N8NWebhookURL: hook.URL, N8NSigningSecret: secret}
+	server := NewServerWithServices(cfg, slog.Default(), testAuthenticator{}, nil, nil, nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/n8n/test", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected n8n test delivered, got %d: %s", response.Code, response.Body.String())
+	}
+	select {
+	case event := <-events:
+		if event.EventType != "cloudsentinels.integration_test" {
+			t.Fatalf("unexpected event: %#v", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("n8n did not receive test event")
+	}
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/platform", nil))
+	var platform struct {
+		Integrations map[string]string `json:"integrations"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &platform); err != nil {
+		t.Fatal(err)
+	}
+	if platform.Integrations["n8n"] != "configured" {
+		t.Fatalf("n8n status not reported: %#v", platform.Integrations)
+	}
+}
+
+func TestEventFanoutSendsToZapierAndN8NIndependently(t *testing.T) {
+	zapierEvents := make(chan automation.Event, 1)
+	n8nEvents := make(chan automation.Event, 1)
+	newHook := func(ch chan<- automation.Event) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			var event automation.Event
+			if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+				t.Errorf("decode event: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			ch <- event
+			w.WriteHeader(http.StatusAccepted)
+		}))
+	}
+	zapierHook := newHook(zapierEvents)
+	defer zapierHook.Close()
+	n8nHook := newHook(n8nEvents)
+	defer n8nHook.Close()
+	zapierSecret := "zapier-test-secret-with-more-than-32-characters"
+	n8nSecret := "n8n-test-secret-with-more-than-32-characters"
+	cfg := config.Config{ExecutionMode: "online-server", N8NWebhookURL: n8nHook.URL, N8NSigningSecret: n8nSecret}
+	dispatcher := &automation.Dispatcher{URL: zapierHook.URL, Secret: zapierSecret, Client: zapierHook.Client()}
+	server := NewServerWithServices(cfg, slog.Default(), testAuthenticator{}, nil, nil, dispatcher)
+	server.emitAutomationEvent("fanout-test", automation.Event{EventType: "cluster.health.degraded", EventID: "fanout-1", Severity: "warning"}, 0)
+	for name, ch := range map[string]<-chan automation.Event{"Zapier": zapierEvents, "n8n": n8nEvents} {
+		select {
+		case event := <-ch:
+			if event.EventID != "fanout-1" {
+				t.Fatalf("%s received wrong event: %#v", name, event)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s did not receive event", name)
+		}
+	}
+}

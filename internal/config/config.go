@@ -26,6 +26,8 @@ type Config struct {
 	AirtableSyncInterval time.Duration
 	ZapierCatchHookURL   string
 	ZapierSigningSecret  string
+	N8NWebhookURL        string
+	N8NSigningSecret     string
 	AgentToken           string
 	AgentTokens          map[string]string
 	AllowLocalMutations  bool
@@ -52,6 +54,8 @@ func Load() (Config, error) {
 		AirtableSyncInterval: durationEnv("AIRTABLE_SYNC_INTERVAL", 5*time.Minute),
 		ZapierCatchHookURL:   env("ZAPIER_CATCH_HOOK_URL", ""),
 		ZapierSigningSecret:  env("ZAPIER_SIGNING_SECRET", ""),
+		N8NWebhookURL:        env("N8N_WEBHOOK_URL", ""),
+		N8NSigningSecret:     env("N8N_SIGNING_SECRET", ""),
 		AgentToken:           env("CLOUDSENTINELS_AGENT_TOKEN", ""),
 		AgentTokens:          agentTokens,
 		AllowLocalMutations:  boolEnv("CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS"),
@@ -75,6 +79,18 @@ func Load() (Config, error) {
 	}
 	if cfg.ZapierSigningSecret != "" && len(cfg.ZapierSigningSecret) < 32 {
 		return Config{}, fmt.Errorf("ZAPIER_SIGNING_SECRET must be at least 32 characters")
+	}
+	if cfg.N8NSigningSecret != "" && len(cfg.N8NSigningSecret) < 32 {
+		return Config{}, fmt.Errorf("N8N_SIGNING_SECRET must be at least 32 characters")
+	}
+	if cfg.N8NWebhookURL != "" {
+		u, err := url.ParseRequestURI(cfg.N8NWebhookURL)
+		if err != nil || u.Host == "" || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))) {
+			return Config{}, fmt.Errorf("N8N_WEBHOOK_URL must be HTTPS or local HTTP")
+		}
+		if cfg.N8NSigningSecret == "" {
+			return Config{}, fmt.Errorf("N8N_SIGNING_SECRET is required when N8N_WEBHOOK_URL is configured")
+		}
 	}
 	if cfg.ZapierCatchHookURL != "" {
 		u, err := url.ParseRequestURI(cfg.ZapierCatchHookURL)

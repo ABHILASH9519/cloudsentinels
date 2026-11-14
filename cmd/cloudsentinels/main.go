@@ -67,7 +67,7 @@ func main() {
 	server := &http.Server{Addr: cfg.HTTPAddr, Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		logger.Info("CloudSentinels Go API starting", "address", cfg.HTTPAddr, "execution_mode", cfg.ExecutionMode,
-			"inventory_source", inventoryStore.Snapshot().Source, "zapier_configured", dispatcher != nil, "firebase_project_configured", cfg.FirebaseProjectID != "")
+			"inventory_source", inventoryStore.Snapshot().Source, "zapier_configured", dispatcher != nil, "n8n_configured", cfg.N8NWebhookURL != "" && cfg.N8NSigningSecret != "", "firebase_project_configured", cfg.FirebaseProjectID != "")
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("HTTP server failed", "error", err)
 			stop()

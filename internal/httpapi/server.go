@@ -49,6 +49,7 @@ type Server struct {
 	inventory           *inventory.Store
 	automationQueue     *automation.Queue
 	zapier              *automation.Dispatcher
+	n8n                 *automation.Dispatcher
 	incidentsMu         sync.RWMutex
 	incidents           map[string]domain.Incident
 	telemetryMu         sync.RWMutex
@@ -71,6 +72,7 @@ func NewServerWithServices(cfg config.Config, logger *slog.Logger, authenticator
 	return &Server{
 		config: cfg, logger: logger, authenticator: authenticator,
 		inventory: inventoryStore, automationQueue: queue, zapier: dispatcher,
+		n8n:       newN8NDispatcher(cfg),
 		incidents: make(map[string]domain.Incident), localTelemetry: make(map[string]LocalTelemetry),
 		lastAutomationEvent: make(map[string]time.Time),
 	}
@@ -90,6 +92,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/ai/analyze", s.runAIAnalysis)
 	mux.HandleFunc("POST /api/v1/zapier/commands", s.zapierCommand)
 	mux.HandleFunc("POST /api/v1/zapier/test", s.testZapier)
+	mux.HandleFunc("POST /api/v1/n8n/test", s.testN8N)
 	mux.HandleFunc("GET /api/v1/automation/commands", s.listAutomationCommands)
 	mux.HandleFunc("GET /api/v1/agent/commands", s.agentCommands)
 	mux.HandleFunc("POST /api/v1/agent/commands/{id}/result", s.agentCommandResult)
@@ -118,6 +121,10 @@ func (s *Server) platform(w http.ResponseWriter, _ *http.Request) {
 	}
 	s.telemetryMu.RUnlock()
 	zapierStatus := "not-configured"
+	n8nStatus := "not-configured"
+	if s.n8n != nil && s.n8n.Enabled() {
+		n8nStatus = "configured"
+	}
 	if s.zapier != nil && s.zapier.Enabled() {
 		zapierStatus = "configured"
 	}
@@ -132,7 +139,7 @@ func (s *Server) platform(w http.ResponseWriter, _ *http.Request) {
 			{"id": "online-serverless", "status": serverlessStatus, "deployment": serverlessDeployment},
 			{"id": "offline-kubernetes", "status": localStatus},
 		},
-		"integrations": map[string]string{"airtable": airtableStatus, "zapier": zapierStatus, "desktopAgent": localStatus},
+		"integrations": map[string]string{"airtable": airtableStatus, "zapier": zapierStatus, "n8n": n8nStatus, "desktopAgent": localStatus},
 		"core":         map[string]string{"incidentDetection": "go-api", "aiAnalysis": "explainable-rules-engine", "remediation": "approval-gated-cli-queue"},
 	})
 }
@@ -198,7 +205,7 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	s.incidents[item.ID] = item
 	s.incidentsMu.Unlock()
-	s.emitZapierEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: item.Description}, 0)
+	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: item.Description}, 0)
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -309,7 +316,7 @@ func (s *Server) runAIAnalysis(w http.ResponseWriter, r *http.Request) {
 		if insight.Severity != "critical" && insight.Severity != "high" {
 			continue
 		}
-		s.emitZapierEvent("ai:"+insight.ID, automation.Event{
+		s.emitAutomationEvent("ai:"+insight.ID, automation.Event{
 			EventType: "cluster.ai_finding", EventID: insight.ID, ClusterID: insight.ClusterID,
 			SourceType: "cloudsentinels-api", Environment: s.config.Environment,
 			Severity: insight.Severity, Title: insight.Title, Summary: insight.Summary,
@@ -318,8 +325,15 @@ func (s *Server) runAIAnalysis(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
-func (s *Server) emitZapierEvent(key string, event automation.Event, cooldown time.Duration) {
-	if s.zapier == nil || !s.zapier.Enabled() {
+func newN8NDispatcher(cfg config.Config) *automation.Dispatcher {
+	if cfg.N8NWebhookURL == "" || cfg.N8NSigningSecret == "" {
+		return nil
+	}
+	return &automation.Dispatcher{URL: cfg.N8NWebhookURL, Secret: cfg.N8NSigningSecret, Client: &http.Client{Timeout: 8 * time.Second}}
+}
+
+func (s *Server) emitAutomationEvent(key string, event automation.Event, cooldown time.Duration) {
+	if (s.zapier == nil || !s.zapier.Enabled()) && (s.n8n == nil || !s.n8n.Enabled()) {
 		return
 	}
 	now := time.Now().UTC()
@@ -330,11 +344,20 @@ func (s *Server) emitZapierEvent(key string, event automation.Event, cooldown ti
 	}
 	s.lastAutomationEvent[key] = now
 	s.automationMu.Unlock()
-	go func() {
-		if err := s.zapier.Send(event); err != nil {
-			s.logger.Warn("Zapier event delivery failed", "event_type", event.EventType, "error", err)
-		}
-	}()
+	if s.zapier != nil && s.zapier.Enabled() {
+		go func() {
+			if err := s.zapier.Send(event); err != nil {
+				s.logger.Warn("Zapier event delivery failed", "event_type", event.EventType, "error", err)
+			}
+		}()
+	}
+	if s.n8n != nil && s.n8n.Enabled() {
+		go func() {
+			if err := s.n8n.Send(event); err != nil {
+				s.logger.Warn("n8n event delivery failed", "event_type", event.EventType, "error", err)
+			}
+		}()
+	}
 }
 
 func (s *Server) zapierCommand(w http.ResponseWriter, r *http.Request) {
@@ -390,11 +413,7 @@ func (s *Server) zapierCommand(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "command_rejected", err.Error())
 		return
 	}
-	if s.zapier != nil && s.zapier.Enabled() {
-		go func() {
-			_ = s.zapier.Send(automation.Event{EventType: "automation.command_queued", EventID: command.ID, ClusterID: command.ClusterID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: "info", Title: command.Action, Summary: "A signed automation request was queued for the registered agent."})
-		}()
-	}
+	s.emitAutomationEvent("command:"+command.ID, automation.Event{EventType: "automation.command_queued", EventID: command.ID, ClusterID: command.ClusterID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: "info", Title: command.Action, Summary: "A signed automation request was queued for the registered agent."}, 0)
 	writeJSON(w, http.StatusAccepted, command)
 }
 
@@ -414,6 +433,20 @@ func (s *Server) testZapier(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "delivered_to_catch_hook"})
 }
 
+func (s *Server) testN8N(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	if s.n8n == nil || !s.n8n.Enabled() {
+		writeError(w, http.StatusServiceUnavailable, "n8n_not_configured", "Configure the private local N8N_WEBHOOK_URL and N8N_SIGNING_SECRET")
+		return
+	}
+	if err := s.n8n.Send(automation.Event{EventType: "cloudsentinels.integration_test", SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: "info", Title: "CloudSentinels n8n webhook test", Summary: "The outbound local n8n webhook connection is being tested."}); err != nil {
+		writeError(w, http.StatusBadGateway, "n8n_delivery_failed", "Local n8n webhook delivery failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "delivered_to_n8n_webhook"})
+}
 func (s *Server) listAutomationCommands(w http.ResponseWriter, r *http.Request) {
 	if !s.authorize(w, r) {
 		return
@@ -490,7 +523,7 @@ func (s *Server) agentTelemetry(w http.ResponseWriter, r *http.Request) {
 		s.automationMu.Lock()
 		delete(s.lastAutomationEvent, "offline:"+telemetry.ClusterID)
 		s.automationMu.Unlock()
-		s.emitZapierEvent("online:"+telemetry.ClusterID, online, 0)
+		s.emitAutomationEvent("online:"+telemetry.ClusterID, online, 0)
 	}
 	degraded := telemetry.WarningEvents > 0 || telemetry.ReadyNodeCount < telemetry.NodeCount || telemetry.HealthyPodCount < telemetry.PodCount
 	wasDegraded := hadPrevious && (previous.WarningEvents > 0 || previous.ReadyNodeCount < previous.NodeCount || previous.HealthyPodCount < previous.PodCount)
@@ -501,12 +534,12 @@ func (s *Server) agentTelemetry(w http.ResponseWriter, r *http.Request) {
 			health.Severity = "critical"
 		}
 		health.Title, health.Summary = "Kubernetes cluster health degraded", "The latest agent heartbeat reports warning events or unavailable nodes/pods; inspect cluster telemetry."
-		s.emitZapierEvent("health:"+telemetry.ClusterID, health, 5*time.Minute)
+		s.emitAutomationEvent("health:"+telemetry.ClusterID, health, 5*time.Minute)
 	} else if wasDegraded {
 		recovered := baseEvent
 		recovered.EventType, recovered.Severity = "cluster.health.recovered", "info"
 		recovered.Title, recovered.Summary = "Kubernetes cluster health recovered", "The latest agent heartbeat reports healthy nodes and pods with no warning events."
-		s.emitZapierEvent("health-recovered:"+telemetry.ClusterID, recovered, 0)
+		s.emitAutomationEvent("health-recovered:"+telemetry.ClusterID, recovered, 0)
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted", "clusterId": telemetry.ClusterID, "collectedAt": telemetry.CollectedAt})
 }
@@ -568,7 +601,7 @@ func (s *Server) localTelemetrySnapshot() []LocalTelemetry {
 			Title:   "Kubernetes agent heartbeat lost",
 			Summary: "No authenticated cluster telemetry has been received for more than two minutes.",
 		}
-		s.emitZapierEvent("offline:"+telemetry.ClusterID, event, 24*time.Hour)
+		s.emitAutomationEvent("offline:"+telemetry.ClusterID, event, 24*time.Hour)
 	}
 	return items
 }

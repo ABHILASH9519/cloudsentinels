@@ -35,7 +35,7 @@ The scripts load the private repository-root `.env.local`. Required keys:
 - `ZAPIER_SIGNING_SECRET` — generated locally; used after a Catch Hook URL is configured.
 - `ZAPIER_CATCH_HOOK_URL` — blank until a Zapier Catch Hook is created.
 
-Do not commit `.env.local` or paste its values into chat. Production authentication still requires the Firebase project configuration. Live Airtable refresh still requires a server-side Airtable PAT; until then the API uses the checked-in sanitized snapshot, which was verified against all 20 current Airtable cluster records and their allowlisted fields.
+Both Zapier and n8n receive the same normalized CloudSentinels event envelope independently; failure of one delivery does not block the other. Use `/api/v1/zapier/test` and `/api/v1/n8n/test` to verify each configured receiver. The n8n editor is local at `http://localhost:5678`. Do not commit `.env.local` or paste its values into chat. Production authentication still requires the Firebase project configuration. Live Airtable refresh still requires a server-side Airtable PAT; until then the API uses the checked-in sanitized snapshot, which was verified against all 20 current Airtable cluster records and their allowlisted fields.
 
 ## Safety boundaries
 
