@@ -1,14 +1,18 @@
+﻿import { getFirebaseIdToken } from "../auth/firebase";
 import { awsConfig } from "./awsConfig";
-import { getAccessToken } from "./oidc";
 
 export async function awsRequest<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const token = await getAccessToken();
+  const token = await getFirebaseIdToken();
   if (!token)
-    throw new Error("Your session has expired. Please sign in again.");
-  const response = await fetch(`${awsConfig.apiUrl}${path}`, {
+    throw new Error("Your Firebase session has expired. Please sign in again.");
+  const base = awsConfig.apiUrl!.replace(/\/$/, "");
+  const normalizedPath = path.startsWith("/api/")
+    ? path
+    : `/api/v1${path.startsWith("/") ? path : `/${path}`}`;
+  const response = await fetch(`${base}${normalizedPath}`, {
     ...init,
     headers: {
       authorization: `Bearer ${token}`,
@@ -19,7 +23,9 @@ export async function awsRequest<T>(
   const body = await response.json().catch(() => ({}));
   if (!response.ok)
     throw new Error(
-      body.error ?? `AWS API request failed (${response.status}).`,
+      body.message ??
+        body.error ??
+        `CloudSentinels API request failed (${response.status}).`,
     );
   return body as T;
 }

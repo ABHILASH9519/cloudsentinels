@@ -27,11 +27,11 @@ func init() {
 	cfg.ExecutionMode = "online-serverless"
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	authenticator, err := auth.New(context.Background(), auth.Config{
-		IssuerURL: cfg.CognitoIssuerURL, ClientID: cfg.CognitoClientID,
+		FirebaseProjectID: cfg.FirebaseProjectID, CredentialsFile: cfg.FirebaseCredentials,
 		LocalToken: cfg.LocalAuthToken, Environment: cfg.Environment, AllowLocalToken: cfg.AllowLocalAuthInProd,
 	})
 	if err != nil {
-		logger.Error("initialize Cognito verification", "error", err)
+		logger.Error("initialize Firebase Authentication", "error", err)
 		os.Exit(1)
 	}
 	var airtableClient *inventory.AirtableClient

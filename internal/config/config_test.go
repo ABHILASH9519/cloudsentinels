@@ -3,24 +3,17 @@ package config
 import "testing"
 
 func TestLoadDefaultsToDevelopmentServer(t *testing.T) {
-	t.Setenv("CLOUDSENTINELS_HTTP_ADDR", "")
-	t.Setenv("CLOUDSENTINELS_EXECUTION_MODE", "")
-	t.Setenv("CLOUDSENTINELS_ENV", "")
-	t.Setenv("CLOUDSENTINELS_VERSION", "")
-	t.Setenv("COGNITO_ISSUER_URL", "")
-	t.Setenv("COGNITO_APP_CLIENT_ID", "")
-	t.Setenv("CLOUDSENTINELS_LOCAL_AUTH_TOKEN", "")
-	t.Setenv("CLOUDSENTINELS_ALLOW_LOCAL_AUTH_IN_PROD", "")
-	t.Setenv("CLOUDSENTINELS_ALLOWED_ORIGINS", "")
-	t.Setenv("AIRTABLE_API_TOKEN", "")
-	t.Setenv("AIRTABLE_BASE_ID", "")
-	t.Setenv("AIRTABLE_SNAPSHOT_PATH", "")
-	t.Setenv("AIRTABLE_SYNC_INTERVAL", "")
-	t.Setenv("ZAPIER_CATCH_HOOK_URL", "")
-	t.Setenv("ZAPIER_SIGNING_SECRET", "")
-	t.Setenv("CLOUDSENTINELS_AGENT_TOKEN", "")
-	t.Setenv("CLOUDSENTINELS_AGENT_TOKENS", "")
-	t.Setenv("CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS", "")
+	for _, key := range []string{
+		"CLOUDSENTINELS_HTTP_ADDR", "CLOUDSENTINELS_EXECUTION_MODE", "CLOUDSENTINELS_ENV",
+		"CLOUDSENTINELS_VERSION", "FIREBASE_PROJECT_ID", "GOOGLE_APPLICATION_CREDENTIALS",
+		"CLOUDSENTINELS_LOCAL_AUTH_TOKEN", "CLOUDSENTINELS_ALLOW_LOCAL_AUTH_IN_PROD",
+		"CLOUDSENTINELS_ALLOWED_ORIGINS", "AIRTABLE_API_TOKEN", "AIRTABLE_BASE_ID",
+		"AIRTABLE_SNAPSHOT_PATH", "AIRTABLE_SYNC_INTERVAL", "ZAPIER_CATCH_HOOK_URL",
+		"ZAPIER_SIGNING_SECRET", "CLOUDSENTINELS_AGENT_TOKEN", "CLOUDSENTINELS_AGENT_TOKENS",
+		"CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS",
+	} {
+		t.Setenv(key, "")
+	}
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -30,11 +23,11 @@ func TestLoadDefaultsToDevelopmentServer(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsPartialCognitoConfig(t *testing.T) {
-	t.Setenv("COGNITO_ISSUER_URL", "https://issuer.example")
-	t.Setenv("COGNITO_APP_CLIENT_ID", "")
+func TestLoadRequiresFirebaseProjectIDForServiceAccount(t *testing.T) {
+	t.Setenv("FIREBASE_PROJECT_ID", "")
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "C:\\firebase\\service-account.json")
 	if _, err := Load(); err == nil {
-		t.Fatal("expected partial Cognito config to fail")
+		t.Fatal("expected Firebase project ID to be required")
 	}
 }
 
@@ -51,6 +44,7 @@ func TestLoadAcceptsSupportedExecutionModes(t *testing.T) {
 	for _, mode := range []string{"online-server", "online-serverless", "offline-kubernetes"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("CLOUDSENTINELS_EXECUTION_MODE", mode)
+			t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
 			if _, err := Load(); err != nil {
 				t.Fatal(err)
 			}

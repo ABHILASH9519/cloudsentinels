@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+﻿import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -12,13 +12,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, User } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { useAwsAuth } from "../aws/AwsAuth";
+import { useFirebaseAuth } from "../auth/FirebaseAuth";
 import { useGetUserProfile, useSaveUserProfile } from "../hooks/useQueries";
 
 export function SettingsPage() {
   const { data: profile, isLoading } = useGetUserProfile();
   const saveProfile = useSaveUserProfile();
-  const { user } = useAwsAuth();
+  const { user } = useFirebaseAuth();
   const [name, setName] = useState("");
 
   const handleSave = async () => {
@@ -68,11 +68,15 @@ export function SettingsPage() {
           )}
           {user && (
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Signed-in account</Label>
+              <Label className="text-xs text-muted-foreground">
+                Signed-in account
+              </Label>
               <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded-md break-all border border-border">
                 {user.email ?? user.id}
               </div>
-              <p className="text-[11px] text-muted-foreground">Authenticated through Amazon Cognito</p>
+              <p className="text-[11px] text-muted-foreground">
+                Authenticated through Google Firebase
+              </p>
             </div>
           )}
           <Button

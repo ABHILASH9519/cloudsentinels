@@ -58,16 +58,23 @@ For real metrics, register one authenticated desktop/cluster agent per target cl
 | Online serverless | Go API Gateway/Lambda adapter with shared inventory and analysis handlers | SAM template is buildable; deployment and secret configuration remain outstanding |
 | Offline Kubernetes | Go desktop agent using kubectl with fixed command arguments | Requires local Docker Desktop/Minikube or another configured kube context |
 
-The connected desktop currently has a Minikube kube context, but the Minikube Docker container and Docker Desktop Linux engine are stopped. The agent correctly refuses to report live telemetry until the API is reachable.
+The connected Windows desktop now runs the existing Minikube profile `cloudsentinels-local` on Docker Desktop. Its single control-plane node is Ready on Kubernetes v1.35.1. The Go API runs locally on `127.0.0.1:18080`, and the read-only host agent is connected to that API. The initial snapshot reported 1 Ready node and 9/9 healthy pods; Kubernetes warning events from the restart window are counted only while they are newer than five minutes.
 
 ## Go API setup
 
 Copy `.env.example` to a private environment file. Set a strong local auth token for local development or configure Cognito issuer + app client for production. Generate a dedicated agent token and Zapier signing secret independently:
 
 ```powershell
-$env:CLOUDSENTINELS_LOCAL_AUTH_TOKEN = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$env:CLOUDSENTINELS_AGENT_TOKEN = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-$env:ZAPIER_SIGNING_SECRET = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+function New-Secret {
+  $bytes = New-Object byte[] 32
+  $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::Create()
+  $rng.GetBytes($bytes)
+  $rng.Dispose()
+  return ([BitConverter]::ToString($bytes)).Replace("-", "").ToLowerInvariant()
+}
+$env:CLOUDSENTINELS_LOCAL_AUTH_TOKEN = New-Secret
+$env:CLOUDSENTINELS_AGENT_TOKEN = New-Secret
+$env:ZAPIER_SIGNING_SECRET = New-Secret
 $env:CLOUDSENTINELS_ALLOWED_ORIGINS = "http://localhost:5173"
 go run ./cmd/cloudsentinels
 ```
@@ -80,7 +87,7 @@ Useful authenticated endpoints:
 - `GET /api/v1/automation/commands`
 - `POST /api/v1/zapier/test`
 
-The React app needs `VITE_CLOUDSENTINELS_API_URL` set to the Go API origin. The Go API validates Cognito ID tokens, not access tokens.
+The React app needs `VITE_CLOUDSENTINELS_API_URL` set to the Go API origin. In production the Go API validates Firebase ID tokens; the private local bearer token is for local development only.
 
 ## Desktop CLI agent
 
@@ -88,15 +95,15 @@ Build a Windows executable:
 
 ```powershell
 go build -trimpath -o cloudsentinels-agent.exe ./cmd/cloudsentinels-agent
-$env:CLOUDSENTINELS_API_URL = "http://127.0.0.1:8080"
+$env:CLOUDSENTINELS_API_URL = "http://127.0.0.1:18080"
 $env:CLOUDSENTINELS_AGENT_TOKEN = "<same dedicated agent token configured on the Go API>"
-$env:CLOUDSENTINELS_AGENT_CLUSTER_ID = "minikube"
-$env:CLOUDSENTINELS_AGENT_CONTEXT = "minikube"
+$env:CLOUDSENTINELS_AGENT_CLUSTER_ID = "cloudsentinels-local"
+$env:CLOUDSENTINELS_AGENT_CONTEXT = "cloudsentinels-local"
 $env:CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS = "false"
 .\cloudsentinels-agent.exe
 ```
 
-The agent collects node/ready-node counts, pod/ready-pod counts, warning event count, node CPU percentage and memory use using read-only kubectl calls. It polls only commands addressed to its configured cluster ID.
+The agent collects node/ready-node counts, pod/ready-pod counts, warning events from the last five minutes, node CPU percentage and memory use using read-only kubectl calls. It polls only commands addressed to its configured cluster ID.
 
 For multiple remote clusters, prefer unique agent tokens per Airtable record ID. Configure `CLOUDSENTINELS_AGENT_TOKENS` on the online server as a private JSON object, for example `{"recAirtableCluster1":"<32+ character token>","recAirtableCluster2":"<different 32+ character token>"}`. When this map is configured, only listed cluster IDs are accepted; the single `CLOUDSENTINELS_AGENT_TOKEN` fallback is disabled. Keep the desktop-only shared token only when no per-cluster map is configured.
 
@@ -172,6 +179,6 @@ The server rejects restart requests unless the server mutation gate is enabled; 
 
 - The command queue and local telemetry cache in this Go bootstrap are in-memory. A restart loses queued commands and recent telemetry. Production serverless/multi-replica deployment must move this to the existing AWS SQS/DynamoDB persistence layer before relying on it.
 - The current AI analysis is an explainable threshold/rules engine, not a trained LLM/ML model. It provides evidence and recommended checks only; it never authorizes remediation.
-- The connected desktop currently has no active Docker Desktop Linux engine; Minikube is stopped.
+- Local development currently uses Minikube profile `cloudsentinels-local` with Docker Desktop Linux engine; restart it with `deploy/local/setup-minikube.ps1`.
 - Airtable live API refresh requires a server-side PAT that is not configured in this desktop session.
 - The online-serverless Go adapter and live Zapier Catch Hook have not been deployed/configured by this code change.

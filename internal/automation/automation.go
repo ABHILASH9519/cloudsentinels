@@ -43,6 +43,9 @@ type Event struct {
 	EventType     string    `json:"eventType"`
 	OccurredAt    time.Time `json:"occurredAt"`
 	ClusterID     string    `json:"clusterId,omitempty"`
+	ClusterName   string    `json:"clusterName,omitempty"`
+	SourceType    string    `json:"sourceType,omitempty"`
+	Environment   string    `json:"environment,omitempty"`
 	Severity      string    `json:"severity,omitempty"`
 	Title         string    `json:"title,omitempty"`
 	Summary       string    `json:"summary,omitempty"`

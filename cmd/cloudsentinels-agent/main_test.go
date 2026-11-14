@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"testing"
+	"time"
 )
 
 func TestAllowedAgentAPIURL(t *testing.T) {
@@ -69,5 +70,18 @@ func TestStableEventIDAndLambdaSignature(t *testing.T) {
 	}
 	if signature == lambdaEventSignature("different-secret-0123456789abcdef", "1794595400", "cluster-a", raw) {
 		t.Fatal("signature must change when the signing secret changes")
+	}
+}
+
+func TestFilterRecentWarningsExcludesHistoricalAndNormalEvents(t *testing.T) {
+	now := time.Now().UTC()
+	recent := kubeItem{Type: "Warning", Reason: "BackOff", LastTimestamp: now.Add(-2 * time.Minute).Format(time.RFC3339Nano)}
+	old := kubeItem{Type: "Warning", Reason: "BackOff", LastTimestamp: now.Add(-20 * time.Minute).Format(time.RFC3339Nano)}
+	normal := kubeItem{Type: "Normal", Reason: "Scheduled", LastTimestamp: now.Format(time.RFC3339Nano)}
+	invalid := kubeItem{Type: "Warning", Reason: "Unknown", LastTimestamp: "not-a-timestamp"}
+
+	filtered := filterRecentWarnings([]kubeItem{recent, old, normal, invalid}, now, 5*time.Minute)
+	if len(filtered) != 1 || filtered[0].Reason != "BackOff" {
+		t.Fatalf("expected only the recent warning event, got %#v", filtered)
 	}
 }

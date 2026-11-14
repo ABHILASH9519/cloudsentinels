@@ -24,11 +24,9 @@ func main() {
 		os.Exit(1)
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
 	authenticator, err := auth.New(context.Background(), auth.Config{
-		IssuerURL: cfg.CognitoIssuerURL, ClientID: cfg.CognitoClientID,
-		LocalToken: cfg.LocalAuthToken, Environment: cfg.Environment,
-		AllowLocalToken: cfg.AllowLocalAuthInProd,
+		FirebaseProjectID: cfg.FirebaseProjectID, CredentialsFile: cfg.FirebaseCredentials,
+		LocalToken: cfg.LocalAuthToken, Environment: cfg.Environment, AllowLocalToken: cfg.AllowLocalAuthInProd,
 	})
 	if err != nil {
 		logger.Error("initialize authentication", "error", err)
@@ -59,21 +57,17 @@ func main() {
 		cancel()
 		inventoryStore.Start(ctx, cfg.AirtableSyncInterval, func(err error) { logger.Warn("scheduled Airtable refresh failed", "error", err) })
 	}
-
 	var dispatcher *automation.Dispatcher
 	if cfg.ZapierCatchHookURL != "" {
 		dispatcher = &automation.Dispatcher{URL: cfg.ZapierCatchHookURL, Secret: cfg.ZapierSigningSecret, Client: &http.Client{Timeout: 8 * time.Second}}
 	}
 	queue := automation.NewQueue()
 	api := httpapi.NewServerWithServices(cfg, logger, authenticator, inventoryStore, queue, dispatcher)
-	server := &http.Server{
-		Addr: cfg.HTTPAddr, Handler: api.Handler(),
-		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
-		WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second,
-	}
+	api.StartTelemetryMonitor(ctx, 30*time.Second)
+	server := &http.Server{Addr: cfg.HTTPAddr, Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		logger.Info("CloudSentinels Go API starting", "address", cfg.HTTPAddr, "execution_mode", cfg.ExecutionMode,
-			"inventory_source", inventoryStore.Snapshot().Source, "zapier_configured", dispatcher != nil)
+			"inventory_source", inventoryStore.Snapshot().Source, "zapier_configured", dispatcher != nil, "firebase_project_configured", cfg.FirebaseProjectID != "")
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("HTTP server failed", "error", err)
 			stop()

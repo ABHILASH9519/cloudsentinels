@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -89,5 +90,137 @@ func TestDesktopAgentTelemetryRequiresSeparateToken(t *testing.T) {
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("expected authenticated telemetry read, got %d", response.Code)
+	}
+}
+
+func TestLocalAgentTelemetryEmitsZapierHealthTransitions(t *testing.T) {
+	events := make(chan automation.Event, 8)
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		var event automation.Event
+		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+			t.Errorf("decode webhook event: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		events <- event
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer hook.Close()
+
+	dispatcher := &automation.Dispatcher{URL: hook.URL, Secret: "local-test-signing-secret-with-more-than-32-bytes"}
+	token := "agent-token-with-at-least-32-characters"
+	server := NewServerWithServices(config.Config{AgentToken: token}, slog.Default(), testAuthenticator{}, nil, nil, dispatcher)
+
+	sendTelemetry := func(readyNodes, healthyPods, warnings int) {
+		t.Helper()
+		payload, err := json.Marshal(LocalTelemetry{
+			ClusterID: "kind-local", Context: "cloudsentinels-local", SourceType: "local-kubernetes", Environment: "local",
+			NodeCount: 1, ReadyNodeCount: readyNodes, PodCount: 1, HealthyPodCount: healthyPods,
+			WarningEvents: warnings, CollectedAt: time.Now().UTC(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/agent/telemetry", bytes.NewReader(payload))
+		request.Header.Set("Authorization", "Bearer "+token)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("expected telemetry accepted, got %d: %s", response.Code, response.Body.String())
+		}
+	}
+	awaitEvent := func(expected string) automation.Event {
+		t.Helper()
+		select {
+		case event := <-events:
+			if event.EventType != expected {
+				t.Fatalf("expected %s event, got %s", expected, event.EventType)
+			}
+			if event.SourceType != "local-kubernetes" || event.Environment != "local" || event.ClusterID != "kind-local" {
+				t.Fatalf("unexpected event routing metadata: %#v", event)
+			}
+			return event
+		case <-time.After(3 * time.Second):
+			t.Fatalf("timed out waiting for %s event", expected)
+			return automation.Event{}
+		}
+	}
+
+	sendTelemetry(0, 0, 1)
+	first := map[string]bool{}
+	for len(first) < 2 {
+		select {
+		case event := <-events:
+			first[event.EventType] = true
+			if event.SourceType != "local-kubernetes" || event.Environment != "local" || event.ClusterID != "kind-local" {
+				t.Fatalf("unexpected event routing metadata: %#v", event)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("timed out waiting for initial cluster events")
+		}
+	}
+	if !first["cluster.online"] || !first["cluster.health.degraded"] {
+		t.Fatalf("expected online and degraded events, got %#v", first)
+	}
+
+	sendTelemetry(1, 1, 0)
+	awaitEvent("cluster.health.recovered")
+
+	server.telemetryMu.Lock()
+	stale := server.localTelemetry["kind-local"]
+	stale.CollectedAt = time.Now().UTC().Add(-3 * time.Minute)
+	server.localTelemetry["kind-local"] = stale
+	server.telemetryMu.Unlock()
+	monitorCtx, cancelMonitor := context.WithCancel(context.Background())
+	defer cancelMonitor()
+	server.StartTelemetryMonitor(monitorCtx, 10*time.Millisecond)
+	awaitEvent("cluster.offline")
+}
+
+func TestAgentTelemetryPreservesRemoteClusterRoutingMetadata(t *testing.T) {
+	events := make(chan automation.Event, 2)
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		var event automation.Event
+		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+			t.Errorf("decode webhook event: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		events <- event
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer hook.Close()
+
+	token := "agent-token-with-at-least-32-characters"
+	server := NewServerWithServices(
+		config.Config{AgentToken: token}, slog.Default(), testAuthenticator{}, nil, nil,
+		&automation.Dispatcher{URL: hook.URL, Secret: "local-test-signing-secret-with-more-than-32-bytes"},
+	)
+	payload, err := json.Marshal(LocalTelemetry{
+		ClusterID: "eks-prod-01", Context: "prod-ap-south-1",
+		SourceType: "aws-eks", Environment: "production",
+		NodeCount: 1, ReadyNodeCount: 1, PodCount: 1, HealthyPodCount: 1,
+		CollectedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/agent/telemetry", bytes.NewReader(payload))
+	request.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected telemetry accepted, got %d: %s", response.Code, response.Body.String())
+	}
+
+	select {
+	case event := <-events:
+		if event.EventType != "cluster.online" || event.SourceType != "aws-eks" || event.Environment != "production" || event.ClusterID != "eks-prod-01" {
+			t.Fatalf("remote cluster routing metadata was not preserved: %#v", event)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for remote cluster online event")
 	}
 }

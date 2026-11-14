@@ -30,6 +30,8 @@ type agent struct {
 	token               string
 	clusterID           string
 	context             string
+	sourceType          string
+	environment         string
 	allowMutations      bool
 	lambdaTelemetryURL  string
 	lambdaSigningSecret string
@@ -81,6 +83,8 @@ func main() {
 		log.Fatal("CLOUDSENTINELS_API_URL must use HTTPS (HTTP is allowed only for localhost or explicitly enabled in-cluster service DNS)")
 	}
 	clusterID := env("CLOUDSENTINELS_AGENT_CLUSTER_ID", "minikube")
+	sourceType := env("CLOUDSENTINELS_AGENT_SOURCE_TYPE", "kubernetes-agent")
+	environment := env("CLOUDSENTINELS_AGENT_ENVIRONMENT", "unknown")
 	lambdaURL := strings.TrimRight(strings.TrimSpace(os.Getenv("CLOUDSENTINELS_LAMBDA_TELEMETRY_URL")), "/")
 	lambdaSecret := strings.TrimSpace(os.Getenv("CLOUDSENTINELS_LAMBDA_SIGNING_SECRET"))
 	if (lambdaURL == "") != (lambdaSecret == "") {
@@ -106,6 +110,7 @@ func main() {
 	}
 	a := &agent{
 		apiURL: apiURL, token: token, clusterID: clusterID, context: ctxName,
+		sourceType: sourceType, environment: environment,
 		allowMutations:     strings.EqualFold(os.Getenv("CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS"), "true"),
 		lambdaTelemetryURL: lambdaURL, lambdaSigningSecret: lambdaSecret,
 		client: &http.Client{Timeout: 15 * time.Second},
@@ -173,11 +178,13 @@ func (a *agent) collectAndSend() bool {
 			}
 		}
 	}
+	recentWarnings := filterRecentWarnings(events.Items, time.Now().UTC(), 5*time.Minute)
 	cpu, memory := readNodeMetrics(ctx)
 	payload := httpapi.LocalTelemetry{
-		ClusterID: a.clusterID, Context: a.context, NodeCount: len(nodes.Items), ReadyNodeCount: readyNodes, PodCount: len(pods.Items),
-		HealthyPodCount: healthy, WarningEvents: len(events.Items), CPUUsagePercent: cpu, MemoryUsageMB: memory,
-		CollectedAt: time.Now().UTC(), Collector: "cloudsentinels-desktop-agent",
+		ClusterID: a.clusterID, Context: a.context, SourceType: a.sourceType, Environment: a.environment,
+		NodeCount: len(nodes.Items), ReadyNodeCount: readyNodes, PodCount: len(pods.Items),
+		HealthyPodCount: healthy, WarningEvents: len(recentWarnings), CPUUsagePercent: cpu, MemoryUsageMB: memory,
+		CollectedAt: time.Now().UTC(), Collector: "cloudsentinels-kubernetes-agent",
 	}
 	if err := a.post("/api/v1/agent/telemetry", payload, nil); err != nil {
 		log.Printf("telemetry upload failed: %v", err)
@@ -185,7 +192,7 @@ func (a *agent) collectAndSend() bool {
 	}
 	log.Printf("telemetry sent: nodes=%d ready_nodes=%d pods=%d ready_pods=%d warning_events=%d cpu=%.1f%%", payload.NodeCount, payload.ReadyNodeCount, payload.PodCount, payload.HealthyPodCount, payload.WarningEvents, payload.CPUUsagePercent)
 	if a.lambdaTelemetryURL != "" {
-		a.forwardClusterSignals(nodes.Items, events.Items, deployments.Items, cpu)
+		a.forwardClusterSignals(nodes.Items, recentWarnings, deployments.Items, cpu)
 	}
 	return true
 }
@@ -206,6 +213,34 @@ func allowedAgentAPIURL(raw string, allowInternalHTTP bool) bool {
 		return true
 	}
 	return allowInternalHTTP && strings.HasSuffix(host, ".svc.cluster.local")
+}
+
+func filterRecentWarnings(events []kubeItem, now time.Time, window time.Duration) []kubeItem {
+	if window <= 0 {
+		return nil
+	}
+	recent := make([]kubeItem, 0, len(events))
+	for _, event := range events {
+		if !strings.EqualFold(event.Type, "Warning") {
+			continue
+		}
+		timestamp := event.LastTimestamp
+		if timestamp == "" {
+			timestamp = event.EventTime
+		}
+		if timestamp == "" {
+			timestamp = event.FirstTimestamp
+		}
+		occurredAt, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			continue
+		}
+		age := now.Sub(occurredAt)
+		if age >= 0 && age <= window {
+			recent = append(recent, event)
+		}
+	}
+	return recent
 }
 
 func mapKubernetesWarning(event kubeItem) (eventType, severity string, ok bool) {

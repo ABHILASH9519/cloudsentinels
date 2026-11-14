@@ -15,8 +15,8 @@ type Config struct {
 	ExecutionMode        string
 	Environment          string
 	BuildVersion         string
-	CognitoIssuerURL     string
-	CognitoClientID      string
+	FirebaseProjectID    string
+	FirebaseCredentials  string
 	LocalAuthToken       string
 	AllowLocalAuthInProd bool
 	AllowedOrigins       []string
@@ -41,8 +41,8 @@ func Load() (Config, error) {
 		ExecutionMode:        strings.ToLower(env("CLOUDSENTINELS_EXECUTION_MODE", "online-server")),
 		Environment:          strings.ToLower(env("CLOUDSENTINELS_ENV", "development")),
 		BuildVersion:         env("CLOUDSENTINELS_VERSION", "dev"),
-		CognitoIssuerURL:     env("COGNITO_ISSUER_URL", ""),
-		CognitoClientID:      env("COGNITO_APP_CLIENT_ID", ""),
+		FirebaseProjectID:    env("FIREBASE_PROJECT_ID", ""),
+		FirebaseCredentials:  env("GOOGLE_APPLICATION_CREDENTIALS", ""),
 		LocalAuthToken:       env("CLOUDSENTINELS_LOCAL_AUTH_TOKEN", ""),
 		AllowLocalAuthInProd: boolEnv("CLOUDSENTINELS_ALLOW_LOCAL_AUTH_IN_PROD"),
 		AllowedOrigins:       splitList(env("CLOUDSENTINELS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")),
@@ -64,8 +64,8 @@ func Load() (Config, error) {
 	if cfg.HTTPAddr == "" {
 		return Config{}, fmt.Errorf("CLOUDSENTINELS_HTTP_ADDR cannot be empty")
 	}
-	if (cfg.CognitoIssuerURL == "") != (cfg.CognitoClientID == "") {
-		return Config{}, fmt.Errorf("COGNITO_ISSUER_URL and COGNITO_APP_CLIENT_ID must be configured together")
+	if cfg.FirebaseCredentials != "" && cfg.FirebaseProjectID == "" {
+		return Config{}, fmt.Errorf("FIREBASE_PROJECT_ID is required with GOOGLE_APPLICATION_CREDENTIALS")
 	}
 	if cfg.Environment == "production" && cfg.LocalAuthToken != "" && !cfg.AllowLocalAuthInProd {
 		return Config{}, fmt.Errorf("local authentication is disabled in production")
@@ -105,7 +105,6 @@ func parseAgentTokens(raw string) (map[string]string, error) {
 	}
 	return tokens, nil
 }
-
 func env(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value

@@ -29,6 +29,8 @@ type Authenticator interface {
 type LocalTelemetry struct {
 	ClusterID       string    `json:"clusterId"`
 	Context         string    `json:"context"`
+	SourceType      string    `json:"sourceType,omitempty"`
+	Environment     string    `json:"environment,omitempty"`
 	NodeCount       int       `json:"nodeCount"`
 	ReadyNodeCount  int       `json:"readyNodeCount"`
 	PodCount        int       `json:"podCount"`
@@ -196,7 +198,7 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	s.incidents[item.ID] = item
 	s.incidentsMu.Unlock()
-	s.emitZapierEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, Severity: string(item.Severity), Title: item.Title, Summary: item.Description}, 0)
+	s.emitZapierEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: item.Description}, 0)
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -309,6 +311,7 @@ func (s *Server) runAIAnalysis(w http.ResponseWriter, r *http.Request) {
 		}
 		s.emitZapierEvent("ai:"+insight.ID, automation.Event{
 			EventType: "cluster.ai_finding", EventID: insight.ID, ClusterID: insight.ClusterID,
+			SourceType: "cloudsentinels-api", Environment: s.config.Environment,
 			Severity: insight.Severity, Title: insight.Title, Summary: insight.Summary,
 		}, 10*time.Minute)
 	}
@@ -389,7 +392,7 @@ func (s *Server) zapierCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.zapier != nil && s.zapier.Enabled() {
 		go func() {
-			_ = s.zapier.Send(automation.Event{EventType: "automation.command_queued", EventID: command.ID, ClusterID: command.ClusterID, Severity: "info", Title: command.Action, Summary: "A signed automation request was queued for the local agent."})
+			_ = s.zapier.Send(automation.Event{EventType: "automation.command_queued", EventID: command.ID, ClusterID: command.ClusterID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: "info", Title: command.Action, Summary: "A signed automation request was queued for the registered agent."})
 		}()
 	}
 	writeJSON(w, http.StatusAccepted, command)
@@ -403,7 +406,7 @@ func (s *Server) testZapier(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "zapier_not_configured", "Configure the private Zapier Catch Hook URL and signing secret")
 		return
 	}
-	err := s.zapier.Send(automation.Event{EventType: "cloudsentinels.integration_test", Severity: "info", Title: "CloudSentinels webhook test", Summary: "The outbound Zapier webhook connection is being tested."})
+	err := s.zapier.Send(automation.Event{EventType: "cloudsentinels.integration_test", SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: "info", Title: "CloudSentinels webhook test", Summary: "The outbound Zapier webhook connection is being tested."})
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "zapier_delivery_failed", "Zapier webhook delivery failed")
 		return
@@ -458,19 +461,52 @@ func (s *Server) agentTelemetry(w http.ResponseWriter, r *http.Request) {
 	if !s.authorizeAgent(w, r, telemetry.ClusterID) {
 		return
 	}
-	if telemetry.ClusterID == "" || len(telemetry.ClusterID) > 128 || telemetry.Context == "" || len(telemetry.Context) > 128 || telemetry.NodeCount < 0 || telemetry.ReadyNodeCount < 0 || telemetry.ReadyNodeCount > telemetry.NodeCount || telemetry.PodCount < 0 || telemetry.HealthyPodCount < 0 || telemetry.HealthyPodCount > telemetry.PodCount || telemetry.WarningEvents < 0 || telemetry.CPUUsagePercent < 0 || telemetry.CPUUsagePercent > 100 || telemetry.MemoryUsageMB < 0 {
+	telemetry.SourceType = strings.ToLower(strings.TrimSpace(telemetry.SourceType))
+	telemetry.Environment = strings.ToLower(strings.TrimSpace(telemetry.Environment))
+	if telemetry.ClusterID == "" || len(telemetry.ClusterID) > 128 || telemetry.Context == "" || len(telemetry.Context) > 128 || telemetry.NodeCount < 0 || telemetry.ReadyNodeCount < 0 || telemetry.ReadyNodeCount > telemetry.NodeCount || telemetry.PodCount < 0 || telemetry.HealthyPodCount < 0 || telemetry.HealthyPodCount > telemetry.PodCount || telemetry.WarningEvents < 0 || telemetry.CPUUsagePercent < 0 || telemetry.CPUUsagePercent > 100 || telemetry.MemoryUsageMB < 0 || !validTelemetryLabel(telemetry.SourceType, 64) || !validTelemetryLabel(telemetry.Environment, 32) {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_telemetry", "Telemetry fields are outside allowed bounds")
 		return
 	}
 	if telemetry.CollectedAt.IsZero() {
 		telemetry.CollectedAt = time.Now().UTC()
 	}
-	telemetry.Collector = "cloudsentinels-desktop-agent"
+	if strings.TrimSpace(telemetry.SourceType) == "" {
+		telemetry.SourceType = "kubernetes-agent"
+	}
+	if strings.TrimSpace(telemetry.Environment) == "" {
+		telemetry.Environment = "unknown"
+	}
+	telemetry.Collector = "cloudsentinels-kubernetes-agent"
 	s.telemetryMu.Lock()
+	previous, hadPrevious := s.localTelemetry[telemetry.ClusterID]
 	s.localTelemetry[telemetry.ClusterID] = telemetry
 	s.telemetryMu.Unlock()
-	if telemetry.WarningEvents > 0 {
-		s.emitZapierEvent("warning:"+telemetry.ClusterID, automation.Event{EventType: "cluster.warning", ClusterID: telemetry.ClusterID, Severity: "high", Title: "Kubernetes warning events detected", Summary: "The desktop agent reported warning events; inspect the latest telemetry and cluster events."}, 5*time.Minute)
+
+	baseEvent := automation.Event{ClusterID: telemetry.ClusterID, ClusterName: telemetry.Context, SourceType: telemetry.SourceType, Environment: telemetry.Environment}
+	if !hadPrevious || time.Since(previous.CollectedAt) > 2*time.Minute {
+		online := baseEvent
+		online.EventType, online.Severity = "cluster.online", "info"
+		online.Title, online.Summary = "Kubernetes cluster connected", "The CloudSentinels agent has reported a fresh, authenticated cluster heartbeat."
+		s.automationMu.Lock()
+		delete(s.lastAutomationEvent, "offline:"+telemetry.ClusterID)
+		s.automationMu.Unlock()
+		s.emitZapierEvent("online:"+telemetry.ClusterID, online, 0)
+	}
+	degraded := telemetry.WarningEvents > 0 || telemetry.ReadyNodeCount < telemetry.NodeCount || telemetry.HealthyPodCount < telemetry.PodCount
+	wasDegraded := hadPrevious && (previous.WarningEvents > 0 || previous.ReadyNodeCount < previous.NodeCount || previous.HealthyPodCount < previous.PodCount)
+	if degraded {
+		health := baseEvent
+		health.EventType, health.Severity = "cluster.health.degraded", "high"
+		if telemetry.NodeCount > 0 && telemetry.ReadyNodeCount == 0 {
+			health.Severity = "critical"
+		}
+		health.Title, health.Summary = "Kubernetes cluster health degraded", "The latest agent heartbeat reports warning events or unavailable nodes/pods; inspect cluster telemetry."
+		s.emitZapierEvent("health:"+telemetry.ClusterID, health, 5*time.Minute)
+	} else if wasDegraded {
+		recovered := baseEvent
+		recovered.EventType, recovered.Severity = "cluster.health.recovered", "info"
+		recovered.Title, recovered.Summary = "Kubernetes cluster health recovered", "The latest agent heartbeat reports healthy nodes and pods with no warning events."
+		s.emitZapierEvent("health-recovered:"+telemetry.ClusterID, recovered, 0)
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted", "clusterId": telemetry.ClusterID, "collectedAt": telemetry.CollectedAt})
 }
@@ -482,12 +518,57 @@ func (s *Server) getAgentTelemetry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": s.localTelemetrySnapshot()})
 }
 
+func validTelemetryLabel(value string, maxLength int) bool {
+	if len(value) > maxLength {
+		return false
+	}
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '-' || char == '_' || char == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func (s *Server) StartTelemetryMonitor(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = s.localTelemetrySnapshot()
+			}
+		}
+	}()
+}
+
 func (s *Server) localTelemetrySnapshot() []LocalTelemetry {
 	s.telemetryMu.RLock()
-	defer s.telemetryMu.RUnlock()
 	items := make([]LocalTelemetry, 0, len(s.localTelemetry))
 	for _, t := range s.localTelemetry {
 		items = append(items, t)
+	}
+	s.telemetryMu.RUnlock()
+
+	for _, telemetry := range items {
+		if telemetry.CollectedAt.IsZero() || time.Since(telemetry.CollectedAt) <= 2*time.Minute {
+			continue
+		}
+		event := automation.Event{
+			EventType: "cluster.offline", EventID: "offline-" + telemetry.ClusterID,
+			ClusterID: telemetry.ClusterID, ClusterName: telemetry.Context,
+			SourceType: telemetry.SourceType, Environment: telemetry.Environment, Severity: "critical",
+			Title:   "Kubernetes agent heartbeat lost",
+			Summary: "No authenticated cluster telemetry has been received for more than two minutes.",
+		}
+		s.emitZapierEvent("offline:"+telemetry.ClusterID, event, 24*time.Hour)
 	}
 	return items
 }
@@ -537,7 +618,7 @@ func mergeLocalTelemetry(clusters []inventory.Cluster, telemetry []LocalTelemetr
 
 func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
 	if s.authenticator == nil {
-		writeError(w, http.StatusServiceUnavailable, "authentication_unconfigured", "Protected API routes are disabled until Cognito or local authentication is configured")
+		writeError(w, http.StatusServiceUnavailable, "authentication_unconfigured", "Protected API routes are disabled until Firebase Authentication or local development authentication is configured")
 		return false
 	}
 	if _, err := s.authenticator.Authenticate(r); err != nil {

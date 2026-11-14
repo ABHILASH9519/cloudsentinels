@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -7,7 +7,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { useAwsAuth } from "./aws/AwsAuth";
+import { useFirebaseAuth } from "./auth/FirebaseAuth";
 import { useAwsActor } from "./aws/useAwsActor";
 import { Layout } from "./components/Layout";
 import { AIInsightsPage } from "./pages/AIInsightsPage";
@@ -23,12 +23,12 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 10000 } },
 });
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isSignedIn, isLoaded, error } = useAwsAuth();
+  const { isSignedIn, isLoaded, error } = useFirebaseAuth();
   if (!isLoaded)
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-sm text-muted-foreground">
-          Initializing AWS authentication…
+          Initializing AWS authenticationÃ¢â‚¬Â¦
         </p>
       </div>
     );
@@ -41,7 +41,7 @@ function AuthenticatedWorkspace({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-sm text-muted-foreground">
-          Connecting to AWS services…
+          Connecting to AWS servicesÃ¢â‚¬Â¦
         </p>
       </div>
     );
@@ -49,9 +49,11 @@ function AuthenticatedWorkspace({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6">
-          <h1 className="text-lg font-semibold">AWS backend unavailable</h1>
+          <h1 className="text-lg font-semibold">
+            CloudSentinels API unavailable
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your Cognito session is active, but the API could not be
+            Your Firebase session is active, but the API could not be
             initialized.
           </p>
           <div
