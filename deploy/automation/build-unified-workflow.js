@@ -31,6 +31,8 @@ normalize.parameters.jsCode = normalize.parameters.jsCode.replace(bodyLine, body
 
 const awsEventBridgeCode = fs.readFileSync(path.join(nodesDir, "aws-eventbridge-connector.js"), "utf8");
 const awsLambdaCode = fs.readFileSync(path.join(nodesDir, "aws-lambda-serverless-connector.js"), "utf8");
+const dockerDesktopCode = fs.readFileSync(path.join(nodesDir, "docker-desktop-kubernetes-connector.js"), "utf8");
+const minikubeCode = fs.readFileSync(path.join(nodesDir, "minikube-kubernetes-connector.js"), "utf8");
 const policyCode = fs.readFileSync(path.join(nodesDir, "unified-remediation-policy.js"), "utf8");
 const runbookCode = fs.readFileSync(path.join(nodesDir, "shared-remediation-runbook.js"), "utf8");
 
@@ -50,6 +52,18 @@ const awsLambdaNode = codeNode(
   awsLambdaCode,
   [1020, 300]
 );
+const dockerDesktopNode = codeNode(
+  "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1005",
+  "Docker Desktop Kubernetes Connector",
+  dockerDesktopCode,
+  [1540, 300]
+);
+const minikubeNode = codeNode(
+  "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1006",
+  "Local Minikube Kubernetes Connector",
+  minikubeCode,
+  [1800, 300]
+);
 const policyNode = codeNode(
   "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1001",
   "Unified Remediation Policy",
@@ -66,26 +80,30 @@ const runbookNode = codeNode(
 workflow.nodes = workflow.nodes.filter((node) => ![
   "AWS EventBridge / SQS Connector",
   "AWS Lambda / Serverless Connector",
+  "Docker Desktop Kubernetes Connector",
+  "Local Minikube Kubernetes Connector",
   "Unified Remediation Policy",
   "Build Shared Remediation Runbook"
 ].includes(node.name));
-workflow.nodes.push(awsEventBridgeNode, awsLambdaNode, policyNode, runbookNode);
+workflow.nodes.push(awsEventBridgeNode, awsLambdaNode, dockerDesktopNode, minikubeNode, policyNode, runbookNode);
 
-// Lay out the full flow so the two AWS integration stages are visible on the main path.
+// Lay out all four provider/cluster adapters visibly on the single shared main path.
 const positions = {
   "CloudSentinels Event Webhook": [240, 300],
   "Validate and Normalize Event": [500, 300],
   "AWS EventBridge / SQS Connector": [760, 300],
   "AWS Lambda / Serverless Connector": [1020, 300],
-  "Unified Remediation Policy": [1280, 300],
-  "Critical Event?": [1540, 300],
-  "Prepare Critical Alert": [1800, 80],
-  "Degraded Event?": [1800, 400],
-  "Prepare Degraded Alert": [2060, 200],
-  "Recovery Event?": [2060, 520],
-  "Prepare Recovery Notice": [2320, 400],
-  "Prepare General Audit Event": [2320, 620],
-  "Build Shared Remediation Runbook": [2580, 300]
+  "Docker Desktop Kubernetes Connector": [1280, 300],
+  "Local Minikube Kubernetes Connector": [1540, 300],
+  "Unified Remediation Policy": [1800, 300],
+  "Critical Event?": [2060, 300],
+  "Prepare Critical Alert": [2320, 80],
+  "Degraded Event?": [2320, 400],
+  "Prepare Degraded Alert": [2580, 200],
+  "Recovery Event?": [2580, 520],
+  "Prepare Recovery Notice": [2840, 400],
+  "Prepare General Audit Event": [2840, 620],
+  "Build Shared Remediation Runbook": [3100, 300]
 };
 for (const node of workflow.nodes) {
   if (positions[node.name]) node.position = positions[node.name];
@@ -98,6 +116,12 @@ workflow.connections["AWS EventBridge / SQS Connector"] = {
   main: [[{ node: "AWS Lambda / Serverless Connector", type: "main", index: 0 }]]
 };
 workflow.connections["AWS Lambda / Serverless Connector"] = {
+  main: [[{ node: "Docker Desktop Kubernetes Connector", type: "main", index: 0 }]]
+};
+workflow.connections["Docker Desktop Kubernetes Connector"] = {
+  main: [[{ node: "Local Minikube Kubernetes Connector", type: "main", index: 0 }]]
+};
+workflow.connections["Local Minikube Kubernetes Connector"] = {
   main: [[{ node: "Unified Remediation Policy", type: "main", index: 0 }]]
 };
 workflow.connections["Unified Remediation Policy"] = {
@@ -109,11 +133,13 @@ for (const terminal of ["Prepare Critical Alert", "Prepare Degraded Alert", "Pre
 }
 delete workflow.connections["Build Shared Remediation Runbook"];
 
-if (workflow.nodes.length !== 13) throw new Error("Unexpected workflow node count: " + workflow.nodes.length);
+if (workflow.nodes.length !== 15) throw new Error("Unexpected workflow node count: " + workflow.nodes.length);
 const expected = [
   ["Validate and Normalize Event", "AWS EventBridge / SQS Connector"],
   ["AWS EventBridge / SQS Connector", "AWS Lambda / Serverless Connector"],
-  ["AWS Lambda / Serverless Connector", "Unified Remediation Policy"],
+  ["AWS Lambda / Serverless Connector", "Docker Desktop Kubernetes Connector"],
+  ["Docker Desktop Kubernetes Connector", "Local Minikube Kubernetes Connector"],
+  ["Local Minikube Kubernetes Connector", "Unified Remediation Policy"],
   ["Unified Remediation Policy", "Critical Event?"]
 ];
 for (const [from, to] of expected) {

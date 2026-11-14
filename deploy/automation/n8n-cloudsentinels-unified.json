@@ -61,7 +61,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1540,
+        2060,
         300
       ]
     },
@@ -75,7 +75,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1800,
+        2320,
         80
       ]
     },
@@ -108,7 +108,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        1800,
+        2320,
         400
       ]
     },
@@ -122,7 +122,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2060,
+        2580,
         200
       ]
     },
@@ -155,7 +155,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2060,
+        2580,
         520
       ]
     },
@@ -169,7 +169,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2320,
+        2840,
         400
       ]
     },
@@ -183,7 +183,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2320,
+        2840,
         620
       ]
     },
@@ -218,6 +218,34 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
+        "jsCode": "﻿// Explicit adapter for the Docker Desktop built-in Kubernetes cluster.\nreturn $input.all().map(({ json: e }) => {\n  const clusterId = String(e.clusterId || \"\").toLowerCase();\n  const clusterName = String(e.clusterName || \"\").toLowerCase();\n  const source = String(e.sourceType || \"\").toLowerCase();\n  const isDockerDesktop = clusterId === \"docker-desktop-kubernetes\" ||\n    clusterName === \"docker-desktop\" || clusterName === \"docker-desktop-kubernetes\" ||\n    clusterId === \"docker-desktop\" || source.includes(\"docker-desktop\");\n  if (!isDockerDesktop) return { json: e };\n  return { json: {\n    ...e,\n    sourceType: e.sourceType || \"kubernetes.docker-desktop\",\n    environment: e.environment || \"local\",\n    ingestConnector: \"docker-desktop-kubernetes-agent\",\n    kubernetes: { provider: \"Docker Desktop\", context: \"docker-desktop\",\n      clusterId: \"docker-desktop-kubernetes\", mode: \"local\", diagnostics: [\n        \"nodes\", \"pods\", \"warning-events\", \"deployments\", \"cpu-memory\"\n      ], mutationEnabled: false, approvalRequiredForChanges: true }\n  }};\n});\r\n"
+      },
+      "id": "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1005",
+      "name": "Docker Desktop Kubernetes Connector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "﻿// Explicit adapter for the standalone local Minikube Kubernetes cluster.\nreturn $input.all().map(({ json: e }) => {\n  const clusterId = String(e.clusterId || \"\").toLowerCase();\n  const clusterName = String(e.clusterName || \"\").toLowerCase();\n  const source = String(e.sourceType || \"\").toLowerCase();\n  const isMinikube = clusterId === \"cloudsentinels-local\" ||\n    clusterName === \"cloudsentinels-local\" || clusterName === \"minikube\" ||\n    source.includes(\"minikube\");\n  if (!isMinikube) return { json: e };\n  return { json: {\n    ...e,\n    sourceType: e.sourceType || \"kubernetes.minikube\",\n    environment: e.environment || \"local\",\n    ingestConnector: \"minikube-kubernetes-agent\",\n    kubernetes: { provider: \"Minikube\", context: \"cloudsentinels-local\",\n      clusterId: \"cloudsentinels-local\", mode: \"local\", diagnostics: [\n        \"nodes\", \"pods\", \"warning-events\", \"deployments\", \"cpu-memory\"\n      ], mutationEnabled: false, approvalRequiredForChanges: true }\n  }};\n});\r\n"
+      },
+      "id": "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1006",
+      "name": "Local Minikube Kubernetes Connector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
         "jsCode": "const e = $input.first().json;\nconst type = String(e.eventType || \"\").toLowerCase();\nconst source = String(e.sourceType || \"\").toLowerCase();\nconst text = [type, source, e.title, e.summary, e.service, e.resourceId, e.resourceState].join(\" \").toLowerCase();\n\nlet target = \"cloudsentinels-core\";\nlet adapter = \"core-incident-policy\";\nlet actions = [];\nlet mutationActions = [];\nlet status = \"observe-and-audit\";\nlet reason = \"Event is recorded and triaged; no target-specific mutation adapter is selected.\";\n\nif (/lambda|serverless/.test(text)) {\n  target = \"aws-lambda\";\n  adapter = \"aws-lambda-readonly\";\n  actions = [\"inspect-errors\", \"inspect-throttles\", \"inspect-duration\", \"inspect-logs\", \"check-concurrency\"];\n  status = \"manual-review\";\n  reason = \"Lambda diagnostics are supported by monitoring; version-alias rollback or configuration changes are not enabled in this workflow.\";\n} else if (/ec2|aws-server|instance-state|status-check|cpu-high/.test(text)) {\n  target = \"aws-ec2\";\n  adapter = \"aws-ec2-readonly\";\n  actions = [\"inspect-instance-state\", \"inspect-status-checks\", \"inspect-cpu-metrics\", \"inspect-system-logs\"];\n  status = \"manual-review\";\n  reason = \"EC2 monitoring is read-only. SSM access and an approved instance remediation adapter are not yet configured.\";\n} else if (/n8n-delivery|dlq|dead.?letter|eventbridge/.test(text)) {\n  target = \"aws-event-pipeline\";\n  adapter = \"aws-sqs-readonly\";\n  actions = [\"inspect-eventbridge-rules\", \"inspect-sqs-queue-age\", \"inspect-delivery-dlq\"];\n  status = \"manual-review\";\n  reason = \"AWS event delivery diagnostics are available; queue purging, target rewiring and retry-policy changes require separate operator approval.\";\n} else if (/kubernetes|k8s|podcrashloop|deploymentunhealthy|nodenotready|memorypressure|cputhreshold/.test(text)) {\n  target = \"kubernetes\";\n  adapter = \"cloudsentinels-agent\";\n  actions = [\"collect-snapshot\"];\n  status = \"diagnostic-ready\";\n  reason = \"The authenticated local agent can collect a cluster snapshot. Mutating commands remain allowlisted and approval-gated.\";\n  if (type.includes(\"deploymentunhealthy\") && e.namespace && e.resourceName) {\n    actions.push(\"rollout-status\");\n    mutationActions = [\"restart-deployment\", \"rollback-deployment\"];\n    actions.push(...mutationActions);\n    status = \"approval-required\";\n    reason = \"A specific deployment was identified. Restart or rollback can only be queued after signed human approval and is limited by the agent action and namespace allowlists.\";\n  } else if (type.includes(\"podcrashloop\")) {\n    actions.push(\"rollout-status\");\n    reason = \"Capture diagnostics and identify the owning deployment before any restart; the event identifies a pod, not a safe deployment target.\";\n  } else if (type.includes(\"nodenotready\") || type.includes(\"memorypressure\")) {\n    reason = \"Capture diagnostics and escalate. Node drain, eviction, and destructive node operations are not in the agent allowlist.\";\n  }\n} else if (/guardduty|securityhub|threat|security|unauthorized|credential|intrusion|malware/.test(text)) {\n  target = \"security-event\";\n  adapter = \"security-evidence-review\";\n  actions = [\"preserve-event-evidence\", \"review-cloudtrail-and-guardduty\", \"human-containment-review\"];\n  status = \"security-review-required\";\n  reason = \"Security events are escalated for human investigation; automatic isolation or credential changes are deliberately disabled.\";\n}\n\nconst lifecycle = [\n  \"ingest-and-authenticate\",\n  \"normalize-and-validate\",\n  \"correlate-and-deduplicate-by-event-id\",\n  \"classify-severity-and-target\",\n  \"collect-read-only-diagnostics\",\n  \"evaluate-target-specific-allowlist\",\n  \"require-signed-human-approval-for-mutations\",\n  \"execute-only-through-authorized-target-adapter\",\n  \"verify-health-and-rollout\",\n  \"rollback-or-escalate-on-verification-failure\",\n  \"write-audit-and-recovery-event\"\n];\n\nreturn [{json:{\n  ...e,\n  target,\n  remediation: {\n    target,\n    adapter,\n    status,\n    reason,\n    recommendedActions: actions,\n    mutationActions,\n    requiresHumanApproval: mutationActions.length > 0 || status === \"manual-review\" || status === \"security-review-required\",\n    canExecuteFromN8n: false,\n    remediationExecuted: false,\n    idempotencyKey: e.eventId\n  },\n  sharedLifecycle: lifecycle,\n  remediationExecuted: false\n}}];\n"
       },
       "id": "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1001",
@@ -225,7 +253,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1280,
+        1800,
         300
       ]
     },
@@ -239,7 +267,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2580,
+        3100,
         300
       ]
     }
@@ -333,6 +361,28 @@
       ]
     },
     "AWS Lambda / Serverless Connector": {
+      "main": [
+        [
+          {
+            "node": "Docker Desktop Kubernetes Connector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Docker Desktop Kubernetes Connector": {
+      "main": [
+        [
+          {
+            "node": "Local Minikube Kubernetes Connector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Local Minikube Kubernetes Connector": {
       "main": [
         [
           {

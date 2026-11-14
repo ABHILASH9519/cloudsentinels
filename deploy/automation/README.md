@@ -11,7 +11,7 @@ CloudSentinels uses one local n8n workflow for the shared incident lifecycle acr
 - Source definition: [n8n-cloudsentinels-unified.json](./n8n-cloudsentinels-unified.json)
 - Rebuild, import, publish and restart local n8n: .\deploy\\automation\\publish-unified-workflow.ps1
 
-The previous event-triage workflow has been unpublished. The unified workflow is the active local n8n entry point. Its visible main path now includes **AWS EventBridge / SQS Connector** and **AWS Lambda / Serverless Connector** nodes between event normalization and the shared remediation policy. These are explicit in-workflow adapters; AWS transport remains EventBridge → dedicated SQS → local poller → webhook.
+The previous event-triage workflow has been unpublished. The unified workflow is the active local n8n entry point. Its visible main path includes **AWS EventBridge / SQS Connector**, **AWS Lambda / Serverless Connector**, **Docker Desktop Kubernetes Connector**, and **Local Minikube Kubernetes Connector** between event normalization and the shared remediation policy. These are explicit in-workflow adapters; AWS transport remains EventBridge → dedicated SQS → local poller → webhook, while both local Kubernetes agents report through the Go API → webhook.
 
 ## Shared incident lifecycle
 
@@ -68,13 +68,18 @@ Stop it:
 .\deploy\agent\local\stop-agent.ps1 -ClusterId cloudsentinels-local
 ~~~
 
-The Docker Desktop built-in Kubernetes feature is currently disabled. The screenshot shows its **Create cluster** screen. After selecting Create cluster and confirming the `docker-desktop` context is Ready, attach it with the helper:
+Docker Desktop built-in Kubernetes is enabled and its `docker-desktop` context is Ready. Both local clusters have explicit, visible adapters in the active unified n8n workflow:
+
+- **Docker Desktop Kubernetes Connector** — matches cluster ID `docker-desktop-kubernetes` / context `docker-desktop`.
+- **Local Minikube Kubernetes Connector** — matches cluster ID `cloudsentinels-local` / context `cloudsentinels-local`.
+
+Both connector nodes enrich their matching event with provider, context, cluster identity and read-only diagnostic capabilities, then pass it into the same Unified Remediation Policy and Build Shared Remediation Runbook. They do not create separate remediation workflows.
 
 ~~~powershell
 .\deploy\agent\local\attach-local-clusters.ps1 -IncludeDockerDesktop
 ~~~
 
-This starts one isolated Go agent per cluster, both forwarding to the same API and unified n8n workflow. A separate stale kubeconfig context named `minikube` exists but is not the active standalone cluster; use `cloudsentinels-local`.
+This starts one isolated Go agent per cluster; both forward to the same API and n8n webhook. A separate stale kubeconfig context named `minikube` exists but is not the active standalone cluster; use `cloudsentinels-local`.
 
 ## AWS → local n8n bridge
 
