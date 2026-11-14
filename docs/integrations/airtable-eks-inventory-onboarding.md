@@ -8,7 +8,7 @@
 
 ## Important: inventory is not a deployable cluster definition
 
-The records provide labels, environment/status, node/pod counts, utilization snapshots, namespaces, replica counts, and repository references. They do not provide validated container images, ports, probes, resource requests/limits, service accounts, secrets, ingress rules, storage classes, network policies, autoscaling settings, or a trustworthy cluster endpoint/credential. Several values are clearly demo fixtures (example.com/company.com-style hostnames, example GitHub repositories, and historical timestamps).
+The records provide labels, environment/status, node/pod counts, utilization snapshots, namespaces, replica counts, and repository references. They do not provide validated container images, ports, probes, resource requests/limits, service accounts, secrets, ingress rules, storage classes, network policies, autoscaling settings, or a trustworthy cluster endpoint/credential. Some fields contain placeholder-like hostnames and repository references, and child-table timestamps are historical; validate them with the cluster owner and live Kubernetes API before using them operationally.
 
 Consequently this importer is **inventory-only**. It must not create EKS clusters or deploy workloads from the records. Workload manifests must come from the real application repositories and reviewed Helm/Kustomize sources.
 

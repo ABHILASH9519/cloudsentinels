@@ -1,10 +1,13 @@
-name: Go service CI
+name: CloudSentinels Go CI
 
 on:
   push:
     branches:
+      - main
       - feat/golang-four-layer-core
       - feat/golang-review-hardening
+      - feat/airtable-cluster-monitoring-zapier
+  workflow_dispatch:
   pull_request:
     paths:
       - "go.mod"
@@ -12,6 +15,13 @@ on:
       - "cmd/**"
       - "internal/**"
       - "deploy/golang/**"
+      - "deploy/agent/**"
+      - "deploy/eks/**"
+      - "src/frontend/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - "Makefile"
       - ".github/workflows/go.yml"
       - ".dockerignore"
 
@@ -19,7 +29,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  go:
+    name: Go API, agent and Lambda
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,15 +39,65 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.23.x"
-          cache: false
+          cache: true
       - name: Format check
-        run: |
-          test -z "$(gofmt -l cmd internal)"
+        run: test -z "$(gofmt -l cmd internal)"
       - name: Vet
         run: go vet ./...
-      - name: Test
+      - name: Race-enabled tests
         run: go test -race -cover ./...
-      - name: Build
+      - name: Build online API
         run: CGO_ENABLED=0 go build -trimpath ./cmd/cloudsentinels
-      - name: Container build
+      - name: Build Kubernetes agent
+        run: CGO_ENABLED=0 go build -trimpath ./cmd/cloudsentinels-agent
+      - name: Cross-build Lambda ARM64 bootstrap
+        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -tags lambda.norpc -trimpath -o /tmp/cloudsentinels-lambda ./cmd/cloudsentinels-lambda
+      - name: Build API container
         run: docker build -f deploy/golang/Dockerfile -t cloudsentinels:ci .
+      - name: Build Kubernetes agent container
+        run: docker build -f deploy/agent/Dockerfile -t cloudsentinels-agent:ci .
+
+  frontend:
+    name: React UI typecheck, lint and production build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm check
+      - name: Production build
+        run: pnpm build
+
+  zapier-notify:
+    name: Notify Zapier after successful Go and UI checks
+    needs: [go, frontend]
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      ZAPIER_WEBHOOK_ID: ${{ secrets.ZAPIER_WEBHOOK_ID }}
+    steps:
+      - name: Explain skipped notification when Zapier is not configured
+        if: env.ZAPIER_WEBHOOK_ID == ''
+        run: echo "::notice::Zapier notification skipped. Add the repository secret ZAPIER_WEBHOOK_ID to enable it."
+      - name: Call Zapier Webhook
+        if: env.ZAPIER_WEBHOOK_ID != ''
+        uses: gpuliyar/zapier-webhook-action@v1.0.0
+        with:
+          webhook-id: ${{ secrets.ZAPIER_WEBHOOK_ID }}
+          method: POST
+          silent: false
+          message: >-
+            {"event":"cloudsentinels.ci.passed","repository":"${{ github.repository }}","branch":"${{ github.head_ref || github.ref_name }}","commit":"${{ github.sha }}","workflow":"${{ github.workflow }}","run":"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}

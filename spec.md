@@ -1,42 +1,36 @@
-# CloudSentinels - AI-Powered DevOps Assistant
+# CloudSentinels — Go-first cloud and Kubernetes observability
 
-## Current State
-New project. No existing code.
+## Product goal
 
-## Requested Changes (Diff)
+CloudSentinels combines a normalized Airtable cluster inventory, real Kubernetes telemetry, explainable incident triage and approval-gated operational workflows in one application.
 
-### Add
-- Role-based authentication (Admin, Engineer, Viewer) using built-in Internet Identity
-- Incident Dashboard: create, view, and manage incidents with AI-generated root cause summaries and fix suggestions (pushed in from external Python/AI backend)
-- Live Monitoring Hub: display real-time metrics (CPU, memory, error rates), active alerts feed, and anomaly detection results ingested via HTTP API
-- Incident Management: assign incidents to users, comment, update status (Open, In Progress, Resolved), track history
-- AI Insights Panel: store and display AI summaries, anomaly findings, and suggested fixes
-- Metrics Visualization: charts showing system health trends over time
-- HTTP ingestion API endpoint for external Python backend to push logs, alerts, metrics, and AI analysis results
+## Technology boundaries
 
-### Modify
-- N/A
+- Core backend: Go HTTP API, Go Kubernetes agent and Go AWS Lambda adapter.
+- Frontend: React + TypeScript dashboard; it is the presentation layer, not the backend runtime.
+- Identity: Amazon Cognito OIDC for web users; dedicated bearer credentials for cluster agents.
+- Inventory: Airtable REST API with a sanitized snapshot fallback.
+- Cloud runtime: AWS API Gateway, Lambda, DynamoDB, EventBridge, SQS and Secrets Manager.
+- Automation: Zapier Catch Hooks, HMAC-signed callbacks and GitHub Actions notifications.
+- Kubernetes: Docker-backed local Minikube and remote in-cluster agents with read-only RBAC by default.
 
-### Remove
-- N/A
+The deployed AWS Operations Lambda still serves persistent incident/alert/profile workflows in Node.js, and the EventBridge/SQS/Zapier relay workers are also Node.js. Porting these deployed handlers to Go is an explicit remaining migration task; do not describe the entire AWS runtime as Go until that work is complete.
 
-## Implementation Plan
-1. Backend (Motoko):
-   - User roles: Admin, Engineer, Viewer
-   - Incidents: id, title, severity, status, source, rawLog, aiSummary, rootCause, suggestedFix, assignee, createdAt, updatedAt
-   - Comments: id, incidentId, author, text, createdAt
-   - Metrics: id, name, value, unit, timestamp, source
-   - Alerts: id, title, severity, source, message, status, timestamp
-   - HTTP ingestion endpoints to receive data from external backend
-   - CRUD for incidents, comments, alerts, metrics
-   - Role-based access control
+## Functional requirements
 
-2. Frontend:
-   - Login page with Internet Identity auth
-   - Sidebar navigation: Dashboard, Incidents, Monitoring, AI Insights, Settings
-   - Dashboard overview: incident counts by severity, recent alerts, system health summary
-   - Incidents list with filters (status, severity), detail view with AI analysis and comments
-   - Create incident form (manual entry or paste raw log)
-   - Monitoring hub: metrics charts (line/area charts), live alerts feed
-   - AI Insights panel: list of AI summaries, anomaly reports, fix suggestions
-   - Settings: user management (Admin only), role assignment
+1. Read the approved Airtable cluster fields and preserve the same cluster IDs across online and local Kubernetes views.
+2. Collect real node, pod, warning-event, CPU and memory telemetry from connected Kubernetes agents.
+3. Display inventory provenance, telemetry source, collection time and stale/offline state.
+4. Analyze health using explainable deterministic rules and return evidence and safe recommended checks.
+5. Support Cognito-authenticated application routes and agent-specific authentication.
+6. Send sanitized application events to Zapier and verify signed inbound command requests.
+7. Keep mutating Kubernetes actions disabled unless human approval and scoped RBAC are explicitly configured.
+8. Validate the Go API, agent, Lambda ARM64 build, Docker images and frontend with GitHub Actions.
+
+## Delivery boundaries
+
+- Airtable-reported CPU and memory are inventory values, not streaming metrics.
+- A connected agent is required for live Kubernetes telemetry.
+- The current rules engine is not a trained ML model or LLM.
+- In-memory Go queues and telemetry caches are not durable production storage.
+- EKS provisioning and EC2 hosting are separate infrastructure operations and must be verified in the target AWS account.

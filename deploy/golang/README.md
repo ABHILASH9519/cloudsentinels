@@ -1,34 +1,57 @@
-# CloudSentinels Go service
+# CloudSentinels Go services
 
-This directory contains the first Go runtime slice for the four-layer architecture.
+## API server
 
-## Run locally
-
-```sh
-go test ./...
+```powershell
+go test -race ./...
 go run ./cmd/cloudsentinels
 ```
 
-The service listens on `:8080` by default.
+The API listens on `:8080` by default. It serves the sanitized Airtable snapshot and periodically refreshes directly from Airtable when `AIRTABLE_API_TOKEN` is configured.
+
+## Services
+
+| Binary | Purpose |
+|---|---|
+| `cmd/cloudsentinels` | Online Go HTTP API, inventory sync, monitoring, AI triage, Zapier webhooks and desktop-agent command broker |
+| `cmd/cloudsentinels-lambda` | API Gateway HTTP API adapter for the same shared Go handlers in Lambda |
+| `cmd/cloudsentinels-agent` | Desktop/cluster-adjacent agent using fixed kubectl arguments only |
 
 ## Execution modes
 
-Set `CLOUDSENTINELS_EXECUTION_MODE` to one of:
+- `online-server`: persistent Go API; local agent command broker and telemetry cache live in this process.
+- `online-serverless`: API Gateway/Lambda adapter; shared inventory/monitoring/analysis API. Do not use it as the local CLI command queue because Lambda memory is ephemeral.
+- `offline-kubernetes`: desktop agent reads a local kube context and sends telemetry outbound to the online-server API.
 
-- `online-server`
-- `online-serverless`
-- `offline-kubernetes`
+## Airtable and monitoring endpoints
 
-Other settings:
+- `GET /api/v1/inventory/clusters`
+- `POST /api/v1/inventory/refresh`
+- `GET /api/v1/monitoring/summary`
+- `GET /api/v1/ai/insights`
+- `POST /api/v1/ai/analyze`
 
-- `CLOUDSENTINELS_HTTP_ADDR` (default `:8080`)
-- `CLOUDSENTINELS_ENV` (default `development`)
-- `CLOUDSENTINELS_VERSION` (default `dev`)
+The cluster inventory includes 20 Airtable cluster rows in the checked-in sanitized snapshot. The Airtable adapter fetches only an explicit allowlist of cluster and node fields; API endpoints and credential-like fields are never requested. Node/pod child-table data is not treated as live because current Airtable links are incomplete and timestamps are historical.
 
-## Current implementation boundary
+## Zapier and local CLI automation
 
-The health, readiness and platform-capability endpoints are live. Incident endpoints are intentionally fail-closed until an AWS Cognito or local-session authenticator is wired into the server. The current incident collection is process-memory demo storage and is not durable or suitable for multi-replica production use.
+- Outbound Catch Hook: set `ZAPIER_CATCH_HOOK_URL` and `ZAPIER_SIGNING_SECRET`.
+- Inbound signed command: `POST /api/v1/zapier/commands` on the online-server API.
+- Agent endpoints: `GET /api/v1/agent/commands?clusterId=...`, `POST /api/v1/agent/commands/{id}/result`, and `POST /api/v1/agent/telemetry`.
+- Agent authentication uses a separate 32+ character `CLOUDSENTINELS_AGENT_TOKEN`.
+- CLI allowlist: `collect-snapshot`, `rollout-status`, and approval-gated `restart-deployment`. No arbitrary shell execution is supported.
 
-The next slices are: Cognito JWT/JWKS verification, local session and kubeconfig credential adapters, durable PostgreSQL/DynamoDB repositories, Kubernetes client-go adapter, AWS SDK v2 adapters, the shared detection/analysis/policy engine, and signed Zapier event/approval integration.
+Mutations are disabled unless both server and local agent explicitly set `CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS=true`; a restart also requires a signed Zapier request with `approvalStatus=approved` and `approvedBy`. Keep the default false.
 
-Do not enable mutating remediation until target-scoped permissions, approval policy, idempotency, audit events, timeout handling and post-action verification are implemented and tested.
+## Production boundary
+
+This is an integration milestone, not yet a complete production deployment:
+- Inventory and local telemetry caches and the CLI command queue are in-memory/process-local.
+- Lambda uses the same API handlers, but local command queue and agent telemetry must remain on the persistent online-server or be moved to SQS/DynamoDB before multi-instance production use.
+- The AI triage is an explainable deterministic rules engine, not a trained ML/LLM inference service. It is advisory and cannot authorize actions.
+- The Lambda SAM template is buildable but not deployed from this desktop.
+- Live Airtable refresh needs a server-side PAT; this desktop does not currently have one configured.
+- Live Zapier delivery needs a Catch Hook URL and signing secret.
+- Local Minikube is stopped because the Docker Desktop Linux engine is unavailable; no real local cluster metrics have been collected in this session.
+
+See the [Airtable + Zapier + desktop agent integration](../../docs/integrations/airtable-zapier-desktop-agent.md) and [final-review checklist](../../docs/review/airtable-monitoring-final-review.md) for setup and acceptance gates.

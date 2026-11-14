@@ -1,0 +1,134 @@
+# CloudSentinels AWS server + Lambda monitoring
+
+This is an additive, read-only monitoring integration for the existing CloudSentinels AWS environment.
+
+## What it monitors
+
+| Workload | Region | Signals |
+|---|---|---|
+| Existing EC2 server | **eu-north-1** | Instance state changes, EC2 status-check failures, sustained CPU above 80% |
+| Operations API Lambda | **ap-south-1** | Errors, throttles, duration approaching the configured timeout |
+| Existing automation processor Lambda | **ap-south-1** | Errors, throttles, duration approaching the configured timeout |
+| Monitoring delivery pipeline | **ap-south-1** | Queue age and processing dead-letter messages |
+
+The current EC2 target is **i-04ddd1baceeaa4186** (tagged CloudSentinel Server). It was last observed in the **stopped** state. Instance state-change events are still monitored while it is stopped. CPU and status-check metrics become useful when the instance is running.
+
+## Architecture
+
+~~~text
+EC2 default EventBridge bus (eu-north-1)
+  ├─ instance state changes
+  └─ CloudWatch alarm state changes
+          │ cross-region PutEvents (scoped IAM role)
+          ▼
+CloudSentinels EventBridge bus (ap-south-1)
+          │
+          ▼
+AWSMonitoringQueue ──► AWSMonitoringProcessor Lambda
+          │                     │
+          ▼                     ▼
+   Processing DLQ          Existing DynamoDB table
+                                │
+                                ▼
+                   USER#<AutomationOwnerId>
+                   AUTOMATION#<time>#<event-id>
+                                │
+                                ▼
+                     GET /automation/events
+                     (authenticated dashboard)
+
+CloudWatch alarm events for Lambda (ap-south-1)
+          │ default EventBridge bus
+          └──────────────► AWSMonitoringQueue
+~~~
+
+The processor writes the same owner-scoped automation activity key shape consumed by the existing authenticated GET /automation/events endpoint. This is why deployment requires AutomationOwnerId: it must be the exact authenticated user's subject/UID accepted by the API (Firebase UID after the Firebase-auth migration), not an email address.
+
+## Safety boundaries
+
+- This stack does not start, stop, reboot, terminate, resize, or otherwise mutate EC2.
+- It does not deploy code to or change configuration on the monitored Lambda functions.
+- It does not invoke remediation actions.
+- CloudWatch alarms are informational signals. An active alarm is recorded as PENDING_APPROVAL; no AWS action is attached.
+- Event processing is idempotent and uses SQS partial-batch failure responses.
+- Failed EventBridge delivery and repeated Lambda processing failures have separate dead-letter queues.
+- No EC2 guest agent is installed. Memory, filesystem, process, and application-level metrics require a later CloudWatch Agent/SSM configuration with an instance role and explicit authorization.
+
+## Deployment prerequisites
+
+1. AWS CLI v2 installed and authenticated in the local PowerShell session.
+2. Existing CloudFormation stacks cloudsentinels-core and cloudsentinels-runtime in ap-south-1.
+3. Existing central EventBridge bus cloudsentinels-domain-events.
+4. Existing private artifact bucket cloudsentinels-sam-artifacts-<account-id>.
+5. The authenticated CloudSentinels user's exact UID/subject for AutomationOwnerId.
+6. Permission to create additive monitoring resources in ap-south-1 and eu-north-1, including IAM role creation and iam:PassRole.
+
+The deployment script refuses to create a new artifact bucket automatically. It also does not change the EC2 instance state.
+
+## Deploy
+
+From the repository root in PowerShell:
+
+~~~powershell
+aws login
+.\deploy\aws\monitoring\deploy.ps1 -AutomationOwnerId "<authenticated-user-uid>"
+~~~
+
+The script reads existing core/runtime stack outputs, installs Lambda package dependencies, runs processor tests, packages and validates the central SAM template, deploys the central monitoring stack, and then deploys the regional EC2 forwarding/alarms stack.
+
+Defaults:
+- Central region: ap-south-1
+- EC2 region: eu-north-1
+- EC2 instance: i-04ddd1baceeaa4186
+
+Override the instance or regions explicitly if the monitored resource changes.
+
+## Forward AWS events into the single local n8n workflow
+
+The n8n bridge is a separate additive stack so it does not attach a second consumer to the existing AWSMonitoringQueue:
+
+- n8n-bridge-template.yaml creates a dedicated SQS queue/DLQ, EventBridge rules for the central domain bus, Lambda CloudWatch alarms, GuardDuty and Security Hub findings, and CloudWatch alarms for the Operations API and Automation Processor Lambdas.
+- server-template.yaml forwards the existing EC2 server's state changes and alarm state changes from eu-north-1 into the central domain bus.
+- deploy-n8n-bridge.ps1 deploys both stacks and deliberately rejects the AWS root identity. Use a least-privileged IAM role/profile with CloudFormation, EventBridge, SQS, CloudWatch, and scoped IAM role permissions.
+- deploy/automation/poll-aws-events.ps1 long-polls the dedicated queue and forwards each EventBridge envelope to the local n8n unified webhook. It deletes an SQS message only after n8n returns a successful workflow response.
+
+From the repository root:
+
+~~~powershell
+aws sso login --profile <least-privileged-profile>
+.\deploy\\aws\\monitoring\\deploy-n8n-bridge.ps1 -AwsProfile <least-privileged-profile>
+~~~
+
+Use the returned N8NEventQueueUrl to start the local poller:
+
+~~~powershell
+.\deploy\\automation\\poll-aws-events.ps1 -QueueUrl <N8NEventQueueUrl> -Region ap-south-1 -AwsProfile <least-privileged-profile>
+~~~
+
+The AWS stacks are deployed successfully. The local AWS CLI currently has no authenticated profile, so the local SQS poller is not yet running. A least-privilege consumer policy is ready to attach to the local SSO role: `arn:aws:iam::115484989078:policy/CloudSentinelsN8NLocalPoller`. Authenticate that profile with `aws sso login` and start the poller. The existing EC2 instance remains stopped; this integration never starts it.
+
+## Verify
+
+~~~powershell
+.\deploy\aws\monitoring\status.ps1
+~~~
+
+Check:
+- Both CloudFormation stacks report CREATE_COMPLETE or UPDATE_COMPLETE.
+- The EC2 state matches the expected operator-managed state.
+- CloudWatch alarms are not unexpectedly in ALARM.
+- The monitoring SQS queue age remains low and the processing DLQ is empty.
+- After a real instance or Lambda alarm event, the authenticated dashboard's GET /automation/events returns the new activity row.
+
+A successful stack deployment alone does not prove a real alarm has fired or a dashboard event has been read. Verify those separately.
+
+## Local processor tests
+
+~~~powershell
+npm install --prefix .\deploy\aws\monitoring\processor
+npm test --prefix .\deploy\aws\monitoring\processor
+~~~
+
+## Cost notes
+
+The integration adds CloudWatch metric alarms, SQS queues, Lambda invocations, EventBridge events, and cross-region event delivery. Charges depend on actual usage and current AWS pricing. Review AWS Budgets/Cost Explorer before enabling this continuously.

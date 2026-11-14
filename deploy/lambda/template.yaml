@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: CloudSentinels Go serverless HTTP adapter (shared inventory and explainable analysis)
+
+Globals:
+  Function:
+    Runtime: provided.al2023
+    Handler: bootstrap
+    Architectures:
+      - arm64
+    Timeout: 30
+    MemorySize: 512
+    Tracing: Active
+
+Parameters:
+  CognitoIssuerURL:
+    Type: String
+    Description: HTTPS Cognito User Pool issuer URL
+  CognitoAppClientID:
+    Type: String
+    Description: Cognito app client ID used as ID-token audience
+  AllowedOrigins:
+    Type: String
+    Default: https://app.example.com
+  AirtableSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional Secrets Manager ARN with JSON key token
+  ZapierSecretArn:
+    Type: String
+    Default: ""
+    Description: Optional Secrets Manager ARN with JSON keys catchHookUrl and signingSecret
+
+Conditions:
+  HasAirtableSecret: !Not [!Equals [!Ref AirtableSecretArn, ""]]
+  HasZapierSecret: !Not [!Equals [!Ref ZapierSecretArn, ""]]
+
+Resources:
+  CloudSentinelsHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedOrigins
+        AllowHeaders:
+          - authorization
+          - content-type
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+
+  CloudSentinelsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ../..
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          CLOUDSENTINELS_EXECUTION_MODE: online-serverless
+          CLOUDSENTINELS_ENV: production
+          CLOUDSENTINELS_VERSION: lambda
+          CLOUDSENTINELS_ALLOWED_ORIGINS: !Ref AllowedOrigins
+          AIRTABLE_BASE_ID: app3xn3iXAsm7MgA7
+          AIRTABLE_SNAPSHOT_PATH: /var/task/airtable-inventory.snapshot.json
+          COGNITO_ISSUER_URL: !Ref CognitoIssuerURL
+          COGNITO_APP_CLIENT_ID: !Ref CognitoAppClientID
+          AIRTABLE_API_TOKEN: !If [HasAirtableSecret, !Sub "{{resolve:secretsmanager:${AirtableSecretArn}:SecretString:token}}", ""]
+          ZAPIER_CATCH_HOOK_URL: !If [HasZapierSecret, !Sub "{{resolve:secretsmanager:${ZapierSecretArn}:SecretString:catchHookUrl}}", ""]
+          ZAPIER_SIGNING_SECRET: !If [HasZapierSecret, !Sub "{{resolve:secretsmanager:${ZapierSecretArn}:SecretString:signingSecret}}", ""]
+          CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS: "false"
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CloudSentinelsHttpApi
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CloudSentinelsHttpApi
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  CloudSentinelsApiUrl:
+    Description: HTTPS API endpoint for the Go serverless adapter
+    Value: !Sub "https://${CloudSentinelsHttpApi}.execute-api.${AWS::Region}.amazonaws.com"

@@ -9,3 +9,30 @@ src/backend/secrets/
 /cloudsentinels.exe
 *.test
 coverage.out
+
+# JavaScript dependencies and generated frontend output
+/node_modules/
+**/node_modules/
+src/frontend/dist/
+.pnpm-store/
+
+# Python test/runtime cache
+__pycache__/
+*.py[cod]
+
+# Local submission demo processes, logs and generated binary
+.local-demo-*
+
+# Local Kubernetes agent runtime artifacts
+.local-cloudsentinels-agent.exe
+.local-cloudsentinels-agent.pid
+
+# Local Cognito-backed operational runtime artifacts
+.local-server-*
+
+# Frontend build output (generated in CI/deployments)
+src/frontend/dist/
+
+# Local Windows build artifacts
+*.exe
+*.exe~

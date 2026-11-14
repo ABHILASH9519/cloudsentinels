@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bell, CheckCheck, Database, Loader2, Plus } from "lucide-react";
+import { Bell, CheckCheck, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import {
   Legend,
@@ -32,19 +32,21 @@ import {
 import { toast } from "sonner";
 import { SeverityBadge } from "../components/SeverityBadge";
 import { StatusBadge } from "../components/StatusBadge";
+import { useClusterMonitoring } from "../hooks/useClusterData";
 import {
   useAddAlert,
   useAddMetric,
   useGetActiveAlerts,
   useGetAutomationEvents,
   useGetRecentMetrics,
-  useImportDemoData,
   useUpdateAlertStatus,
 } from "../hooks/useQueries";
 
 const LINE_COLORS = ["#22d3ee", "#10b981", "#f59e0b", "#ef4444", "#a855f7"];
 
 export function MonitoringPage() {
+  const clusterMonitoring = useClusterMonitoring();
+  const clusterSummary = clusterMonitoring.data;
   const { data: alerts, isLoading: alertsLoading } = useGetActiveAlerts();
   const { data: metrics, isLoading: metricsLoading } = useGetRecentMetrics(50n);
   const {
@@ -55,7 +57,6 @@ export function MonitoringPage() {
   const addAlert = useAddAlert();
   const addMetric = useAddMetric();
   const updateAlertStatus = useUpdateAlertStatus();
-  const importDemoData = useImportDemoData();
 
   const [alertOpen, setAlertOpen] = useState(false);
   const [metricOpen, setMetricOpen] = useState(false);
@@ -123,19 +124,6 @@ export function MonitoringPage() {
     }
   };
 
-  const handleImportDemoData = async () => {
-    try {
-      const result = await importDemoData.mutateAsync();
-      toast.success(
-        `Sample data loaded: ${result.incidentsImported} incidents, ${result.metricsImported} metrics, ${result.alertsImported} alerts`,
-      );
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to import sample data",
-      );
-    }
-  };
-
   const handleAck = async (id: bigint) => {
     try {
       await updateAlertStatus.mutateAsync({ id, status: "acknowledged" });
@@ -166,20 +154,6 @@ export function MonitoringPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={handleImportDemoData}
-            disabled={importDemoData.isPending}
-            title="Adds fictional demo records to this workspace; safe to retry"
-            data-ocid="monitoring.import_demo.button"
-          >
-            {importDemoData.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Database className="mr-2 h-4 w-4" />
-            )}
-            Load sample data
-          </Button>
           <Dialog open={alertOpen} onOpenChange={setAlertOpen}>
             <DialogTrigger asChild>
               <Button
@@ -364,6 +338,56 @@ export function MonitoringPage() {
         </div>
       </div>
 
+      <section className="space-y-3">
+        <div>
+          <h2 className="font-display text-base font-semibold text-foreground">Kubernetes cluster telemetry</h2>
+          <p className="text-xs text-muted-foreground">Live agent readings are shown separately from Airtable inventory-reported values.</p>
+        </div>
+        {clusterMonitoring.isError && (
+          <Card className="border-rose-300/20"><CardContent className="p-4 text-sm text-rose-200">
+            {clusterMonitoring.error instanceof Error ? clusterMonitoring.error.message : "Cluster telemetry API unavailable."}
+          </CardContent></Card>
+        )}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Card className="mission-panel"><CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">Airtable cluster records</div>
+            <div className="mt-2 text-2xl font-semibold text-foreground">{clusterSummary?.dataQuality.clusterRecordCount ?? "—"}</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">Source inventory</div>
+          </CardContent></Card>
+          <Card className="mission-panel"><CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">Connected Kubernetes agents</div>
+            <div className="mt-2 text-2xl font-semibold text-foreground">{clusterSummary?.localAgent.length ?? "—"}</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">Fresh agent heartbeats</div>
+          </CardContent></Card>
+          <Card className="mission-panel"><CardContent className="p-4">
+            <div className="text-xs text-muted-foreground">Live local nodes / pods</div>
+            <div className="mt-2 text-2xl font-semibold text-foreground">
+              {clusterSummary ? `${clusterSummary.localAgent.reduce((n, a) => n + a.readyNodeCount, 0)} / ${clusterSummary.localAgent.reduce((n, a) => n + a.podCount, 0)}` : "—"}
+            </div>
+            <div className="mt-1 text-[10px] text-muted-foreground">Collected from Kubernetes API</div>
+          </CardContent></Card>
+        </div>
+        {clusterSummary?.localAgent.map((agent) => (
+          <Card key={agent.clusterId} className="mission-panel">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <div className="text-sm font-medium text-foreground">{agent.context}</div>
+                <div className="font-mono text-[10px] text-muted-foreground">{agent.collector} · {agent.clusterId}</div>
+              </div>
+              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                <span>{agent.readyNodeCount}/{agent.nodeCount} nodes ready</span>
+                <span>{agent.podCount} pods</span>
+                <span>{agent.warningEvents} warning events</span>
+                <span>Seen {new Date(agent.collectedAt).toLocaleTimeString()}</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        {clusterSummary?.dataQuality.notes.map((note) => (
+          <p key={note} className="text-[10px] leading-relaxed text-muted-foreground">{note}</p>
+        ))}
+      </section>
+
       {/* Active Alerts */}
       <Card className="bg-card border-border">
         <CardHeader className="pb-2">
@@ -539,6 +563,11 @@ export function MonitoringPage() {
                     {event.clusterName && (
                       <p className="text-[10px] font-mono text-muted-foreground">
                         cluster · {event.clusterName}
+                      </p>
+                    )}
+                    {event.resourceId && (
+                      <p className="text-[10px] font-mono text-muted-foreground">
+                        resource · {event.resourceId}{event.resourceState ? ` · ${event.resourceState}` : ""}
                       </p>
                     )}
                     {event.recommendedAction && (

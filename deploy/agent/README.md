@@ -1,69 +1,57 @@
-# CloudSentinels cluster telemetry agent
+# CloudSentinels cluster agent
 
-The agent is a **read-only Kubernetes event collector**. It polls Warning events, classifies a small allowlist of operational signals, and submits signed telemetry to the CloudSentinels API. It does not run kubectl apply/delete/scale, change workloads, or execute remediation.
+The Go agent collects Kubernetes node/pod/deployment health, warning events and available CPU/memory metrics. It reports telemetry to the Go API and forwards individual cluster signals through the authenticated agent-event endpoint. The Go API signs and dispatches normalized events to the single local n8n workflow.
 
-## Supported signals
+## Local Windows host mode
 
-| Kubernetes signal | CloudSentinels event | Default severity |
-|---|---|---|
-| Pod restart back-off / CrashLoopBackOff | `PodCrashLoopBackOff` | high |
-| NodeNotReady | `NodeNotReady` | critical |
-| OOMKilled / Evicted / MemoryPressure | `MemoryPressure` | high |
-| Unhealthy / FailedScheduling / FailedCreate | `DeploymentUnhealthy` | medium |
+Use the host mode when the Kubernetes API is local to the developer workstation and the Go API is listening on loopback.
 
-CPU and API-latency event types are reserved for a future metrics collector; this agent does not fabricate them from Kubernetes Events.
+~~~powershell
+.\deploy\agent\local\start-agent.ps1 -ClusterId cloudsentinels-local -Context cloudsentinels-local -ApiUrl http://127.0.0.1:8082 -AllowedNamespaces cloudsentinels-system -EnableApprovedRemediation
+~~~
 
-## Configure the API
+The script:
 
-Create a Secrets Manager secret in `ap-south-1` with a JSON object keyed by cluster ID:
+- Loads the existing agent bearer token from the repository .env.local without printing it.
+- Builds the Go agent.
+- Creates a context-scoped kubeconfig copy under %LOCALAPPDATA%\CloudSentinels\agents and restricts its file ACL to the current user and SYSTEM.
+- Runs the agent as a background process with a 30-second collection interval.
+- Enables only the existing approved-remediation code path when the switch is supplied.
+- Restricts mutating commands to the configured namespace allowlist (default: cloudsentinels-system).
 
-```json
-{
-  "demo-cluster": {
-    "ownerId": "<Cognito user sub>",
-    "clusterName": "demo-cluster",
-    "signingSecret": "<at least 32 random characters>"
-  }
-}
-```
+Stop the agent and remove its context-scoped kubeconfig:
 
-Generate the signing secret locally with `openssl rand -hex 32`. Do not commit the secret or put it in GitHub source. Set the runtime CloudFormation parameter `ClusterAgentSecretArn` to the resulting secret ARN. The Operations Lambda receives only `secretsmanager:GetSecretValue` for that secret.
+~~~powershell
+.\deploy\agent\local\stop-agent.ps1 -ClusterId cloudsentinels-local
+~~~
 
-The public `POST /telemetry/events` route does not accept Cognito credentials. It requires:
-- `x-cs-cluster-id`
-- `x-cs-timestamp` (Unix seconds, maximum five-minute clock skew)
-- `x-cs-signature` (HMAC-SHA256 over `timestamp + "." + cluster ID + "." + exact request body`)
+### Attach both local Kubernetes clusters to the same n8n workflow
 
-A valid event creates an owner-scoped active alert and publishes a domain event for the automation processor. Duplicate event IDs are idempotently acknowledged. The DynamoDB idempotency marker expires after 30 days via the table TTL setting.
+The standalone local Minikube context is `cloudsentinels-local`. Docker Desktop Kubernetes is a separate cluster and appears as `docker-desktop` only after it is created in Docker Desktop.
 
-## Run locally
+1. In Docker Desktop, open **Kubernetes** and select **Create cluster**. Wait until `docker desktop kubernetes status` reports `State: enabled` and `kubectl config get-contexts` includes `docker-desktop`.
+2. Run this helper to start/restart the per-cluster Go agents:
 
-Requirements: Python 3.10+, `kubectl`, a working kubeconfig with permission to list Warning events, and a registered cluster secret.
+~~~powershell
+.\deploy\agent\local\attach-local-clusters.ps1 -IncludeDockerDesktop
+~~~
 
-```bash
-export CLOUDSENTINELS_API_URL="https://<api-id>.execute-api.ap-south-1.amazonaws.com/v1"
-export CLOUDSENTINELS_CLUSTER_ID="demo-cluster"
-export CLOUDSENTINELS_SIGNING_SECRET="<secret-from-secrets-manager>"
-python3 deploy/agent/cluster_agent.py --once
-python3 deploy/agent/cluster_agent.py
-```
+Both agents send telemetry and normalized cluster events to the same Go API and the same local n8n unified workflow. If Docker Desktop Kubernetes has not been created yet, the helper keeps the Minikube agent attached and reports the missing Docker context without failing the Minikube path.
 
-The collector polls every 30 seconds by default. It keeps a SQLite retry spool locally and remembers acknowledged event IDs for 30 days. Set `POLL_INTERVAL_SECONDS` or use `--poll-interval` to change the interval. Use `--spool` to choose the local database path.
+The local host process uses the selected user's kubeconfig identity for Kubernetes API access. Do not run this mode with an untrusted kubeconfig. Mutation actions remain restricted by the fixed action allowlist, signed human approval and namespace allowlist. For production clusters, prefer the in-cluster Deployment and dedicated ServiceAccount/RBAC manifests below.
 
-Run its unit tests with:
+## In-cluster mode
 
-```bash
-python3 -m unittest discover -s deploy/agent -p 'test_*.py'
-```
+- agent-deployment.yaml is a deployment template; replace the image, API URL, cluster ID and token secret reference before applying.
+- agent-readonly-rbac.yaml grants cluster-wide read-only access to nodes, pods, events, deployments, ReplicaSets and metrics.
+- agent-remediation-role-local.yaml is a sample namespace-scoped Role/RoleBinding for deployment get/patch inside cloudsentinels-system only.
+- Mutations are disabled in the Deployment template by default. Keep them disabled until the command approval and namespace policy have been reviewed.
 
-## Container / Kubernetes preparation
+The local Minikube cluster currently has the read-only ClusterRole/ClusterRoleBinding and the cloudsentinels-system scoped Role/RoleBinding applied. The active host agent currently uses its context-scoped kubeconfig; the in-cluster Deployment remains a template and is not deployed.
 
-Build the container from this directory:
+## Agent event API
 
-```bash
-docker build -t cloudsentinels-agent:local deploy/agent
-```
-
-The template `cluster-agent-deployment.template.yaml` contains a read-only ClusterRole limited to listing and watching Kubernetes Events. It is a deployment template only; **do not apply it to EKS before the review**. Create the Kubernetes Secret `cloudsentinels-agent-credentials` out-of-band with keys `api-url`, `cluster-id`, and `signing-secret`, render `${IMAGE_REF}` with your registry image, and review the namespace, RBAC, image, and resource limits before applying.
-
-The local collector and its tests can be built without creating an EKS cluster or deploying any Kubernetes workload.
+- POST /api/v1/agent/telemetry — authenticated cluster snapshot.
+- POST /api/v1/agent/events — authenticated, bounded cluster signal with event ID, severity, resource kind/name, namespace and timestamp.
+- GET /api/v1/agent/commands?clusterId=<id> — retrieve commands for the authenticated cluster.
+- Command results are reported to the Go API; only restart-deployment and rollback-deployment are mutating actions in the current agent allowlist.

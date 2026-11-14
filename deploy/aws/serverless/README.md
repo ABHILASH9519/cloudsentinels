@@ -92,6 +92,10 @@ The core stack is intentionally retained. Do not delete it as a normal stop acti
 
 See [n8n / Zapier automation](../../automation/README.md) for the EventBridge → SQS event path, and [Zapier self-healing setup](../../../docs/zapier-self-healing-setup.md) for the Catch Hook → human approval → signed AWS command workflow and adapter contract. The command endpoint can queue approvals without enabling cluster changes; live remediation remains off until a real adapter is deployed and explicitly enabled.
 
+## AWS server and Lambda monitoring
+
+See [AWS monitoring integration](../monitoring/README.md) for read-only monitoring of the existing EC2 server in eu-north-1 and the deployed Operations/AutomationProcessor Lambda functions in ap-south-1. It forwards EC2 state and CloudWatch alarm events into the authenticated automation activity feed, with SQS retries and dead-letter queues. Deployment is a separate additive CloudFormation operation; it does not start/stop EC2 or execute remediation.
+
 ## Current API
 
 - `GET /health` — unauthenticated health probe.

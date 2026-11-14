@@ -1,17 +1,16 @@
-FROM python:3.12-slim
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/cloudsentinels-agent ./cmd/cloudsentinels-agent
 
-ARG KUBECTL_VERSION=v1.32.0
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
-    && curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
-    && chmod 0755 /usr/local/bin/kubectl \
-    && apt-get purge -y --auto-remove curl \
-    && rm -rf /var/lib/apt/lists/*
+FROM registry.k8s.io/kubectl:v1.31.4 AS kubectl
 
-WORKDIR /app
-COPY cluster_agent.py /app/cluster_agent.py
-RUN mkdir -p /data && chown -R 65532:65532 /app /data
-USER 65532:65532
-
-ENV SPOOL_DB_PATH=/data/events.sqlite3
-ENTRYPOINT ["python", "/app/cluster_agent.py"]
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/cloudsentinels-agent /cloudsentinels-agent
+COPY --from=kubectl /bin/kubectl /usr/local/bin/kubectl
+USER nonroot:nonroot
+ENTRYPOINT ["/cloudsentinels-agent"]

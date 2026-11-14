@@ -1,9 +1,34 @@
 import { Button } from "@/components/ui/button";
 import { Activity, BrainCircuit, Shield, Zap } from "lucide-react";
-import { useAwsAuth } from "../aws/AwsAuth";
+import { type FormEvent, useState } from "react";
+import { useFirebaseAuth } from "../auth/FirebaseAuth";
+
 export function LoginPage({ authError }: { authError?: string | null }) {
-  const { signIn, error, isLoaded } = useAwsAuth();
-  const message = authError || error;
+  const { signIn, signInEmail, signUpEmail, error, isLoaded, isConfigured } =
+    useFirebaseAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [formError, setFormError] = useState<string | null>(null);
+  const message = formError || authError || error;
+
+  async function submitEmail(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setFormError(null);
+    try {
+      if (mode === "signup") await signUpEmail(email.trim(), password);
+      else await signInEmail(email.trim(), password);
+    } catch (reason) {
+      setFormError(
+        reason instanceof Error ? reason.message : "Firebase sign-in failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-login min-h-screen bg-background grid-bg flex items-center justify-center p-4">
       <div className="relative w-full max-w-sm">
@@ -15,7 +40,7 @@ export function LoginPage({ authError }: { authError?: string | null }) {
             CloudSentinels
           </h1>
           <p className="text-muted-foreground text-sm">
-            AI-powered self-healing for Kubernetes & live clusters
+            AI-powered operations for connected Kubernetes clusters
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 mb-8">
@@ -38,8 +63,16 @@ export function LoginPage({ authError }: { authError?: string | null }) {
             Sign in securely
           </h2>
           <p className="text-sm text-muted-foreground mb-5">
-            Sign in with your CloudSentinels account, secured by Amazon Cognito.
+            Your account is secured by Google Firebase Authentication.
           </p>
+          {!isConfigured && (
+            <div
+              role="status"
+              className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
+            >
+              Firebase is not connected yet. Add the four VITE_FIREBASE_* values from your Firebase Web App configuration to src/frontend/.env.local, then restart the frontend.
+            </div>
+          )}
           {message && (
             <div
               role="alert"
@@ -52,17 +85,76 @@ export function LoginPage({ authError }: { authError?: string | null }) {
             </div>
           )}
           <Button
-            className="w-full bg-primary/90 hover:bg-primary text-primary-foreground font-semibold"
+            className="w-full"
             onClick={() => void signIn()}
-            disabled={!isLoaded}
+            disabled={!isLoaded || !isConfigured || busy}
           >
             <span className="flex items-center gap-2">
               <Shield className="w-4 h-4" />
-              Continue with Amazon Cognito
+              Continue with Google
             </span>
           </Button>
+          <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            OR EMAIL
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <form
+            onSubmit={(event) => void submitEmail(event)}
+            className="space-y-3"
+          >
+            <label className="block text-xs text-muted-foreground">
+              Email address
+              <input
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            <label className="block text-xs text-muted-foreground">
+              Password
+              <input
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                type="password"
+                autoComplete={
+                  mode === "signup" ? "new-password" : "current-password"
+                }
+                minLength={6}
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+            <Button
+              className="w-full"
+              type="submit"
+              variant="secondary"
+              disabled={!isLoaded || !isConfigured || busy}
+            >
+              {busy
+                ? "Please wait…"
+                : mode === "signup"
+                  ? "Create account"
+                  : "Sign in with email"}
+            </Button>
+          </form>
+          <button
+            type="button"
+            className="mt-3 w-full text-xs text-primary hover:underline"
+            onClick={() => {
+              setMode(mode === "signin" ? "signup" : "signin");
+              setFormError(null);
+            }}
+          >
+            {mode === "signin"
+              ? "New here? Create an account"
+              : "Already have an account? Sign in"}
+          </button>
           <p className="mt-4 text-xs text-muted-foreground text-center">
-            Protected by AWS Cognito · Authorization Code + PKCE
+            Firebase ID tokens are verified by the CloudSentinels Go API.
           </p>
         </div>
         <p className="text-center text-xs text-muted-foreground mt-6">

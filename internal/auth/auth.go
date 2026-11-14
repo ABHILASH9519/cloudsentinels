@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
-	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
+	firebase "firebase.google.com/go/v4"
+	firebaseauth "firebase.google.com/go/v4/auth"
+	"google.golang.org/api/option"
 )
 
 type Principal struct {
@@ -20,11 +20,12 @@ type Principal struct {
 }
 
 type Config struct {
-	IssuerURL       string
-	ClientID        string
-	LocalToken      string
-	Environment     string
-	AllowLocalToken bool
+	FirebaseProjectID string
+	CredentialsFile   string
+	CredentialsJSON   string
+	LocalToken        string
+	Environment       string
+	AllowLocalToken   bool
 }
 
 type Authenticator interface {
@@ -32,30 +33,38 @@ type Authenticator interface {
 }
 
 type authenticator struct {
-	verifier   *oidc.IDTokenVerifier
-	localToken []byte
+	firebaseClient *firebaseauth.Client
+	localToken     []byte
 }
 
 func New(ctx context.Context, cfg Config) (Authenticator, error) {
-	issuer := strings.TrimSpace(cfg.IssuerURL)
-	clientID := strings.TrimSpace(cfg.ClientID)
-	if (issuer == "") != (clientID == "") {
-		return nil, errors.New("Cognito issuer URL and app client ID must be configured together")
-	}
-
 	a := &authenticator{}
-	if issuer != "" {
-		parsedIssuer, err := url.ParseRequestURI(issuer)
-		if err != nil || parsedIssuer.Scheme != "https" || parsedIssuer.Host == "" {
-			return nil, errors.New("Cognito issuer URL must be a valid HTTPS URL")
+	projectID := strings.TrimSpace(cfg.FirebaseProjectID)
+	credentialsFile := strings.TrimSpace(cfg.CredentialsFile)
+	credentialsJSON := strings.TrimSpace(cfg.CredentialsJSON)
+	if credentialsFile != "" && credentialsJSON != "" {
+		return nil, errors.New("configure only one of GOOGLE_APPLICATION_CREDENTIALS or FIREBASE_SERVICE_ACCOUNT_JSON")
+	}
+	if (credentialsFile != "" || credentialsJSON != "") && projectID == "" {
+		return nil, errors.New("FIREBASE_PROJECT_ID is required when Firebase service-account credentials are configured")
+	}
+	if projectID != "" {
+		firebaseConfig := &firebase.Config{ProjectID: projectID}
+		var options []option.ClientOption
+		if credentialsFile != "" {
+			options = append(options, option.WithCredentialsFile(credentialsFile))
+		} else if credentialsJSON != "" {
+			options = append(options, option.WithCredentialsJSON([]byte(credentialsJSON)))
 		}
-		discoveryCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-		defer cancel()
-		provider, err := oidc.NewProvider(discoveryCtx, issuer)
+		app, err := firebase.NewApp(ctx, firebaseConfig, options...)
 		if err != nil {
-			return nil, fmt.Errorf("initialize Cognito OIDC provider: %w", err)
+			return nil, fmt.Errorf("initialize Firebase Admin SDK: %w", err)
 		}
-		a.verifier = provider.Verifier(&oidc.Config{ClientID: clientID})
+		client, err := app.Auth(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("initialize Firebase Authentication client: %w", err)
+		}
+		a.firebaseClient = client
 	}
 
 	localToken := strings.TrimSpace(cfg.LocalToken)
@@ -68,7 +77,7 @@ func New(ctx context.Context, cfg Config) (Authenticator, error) {
 		}
 		a.localToken = []byte(localToken)
 	}
-	if a.verifier == nil && len(a.localToken) == 0 {
+	if a.firebaseClient == nil && len(a.localToken) == 0 {
 		return nil, nil
 	}
 	return a, nil
@@ -86,35 +95,25 @@ func (a *authenticator) Authenticate(r *http.Request) (Principal, error) {
 	if raw == "" {
 		return Principal{}, errors.New("empty bearer token")
 	}
-
 	if len(a.localToken) > 0 && len(raw) == len(a.localToken) &&
 		subtle.ConstantTimeCompare([]byte(raw), a.localToken) == 1 {
 		return Principal{Subject: "local-operator", Roles: []string{"operator", "admin"}}, nil
 	}
-	if a.verifier == nil {
+	if a.firebaseClient == nil {
 		return Principal{}, errors.New("token did not match configured local credentials")
 	}
-
-	token, err := a.verifier.Verify(r.Context(), raw)
+	token, err := a.firebaseClient.VerifyIDTokenAndCheckRevoked(r.Context(), raw)
 	if err != nil {
-		return Principal{}, fmt.Errorf("verify Cognito ID token: %w", err)
+		return Principal{}, fmt.Errorf("verify Firebase ID token: %w", err)
 	}
-	var claims struct {
-		Subject     string   `json:"sub"`
-		Email       string   `json:"email"`
-		TokenUse    string   `json:"token_use"`
-		Groups      []string `json:"cognito:groups"`
-		LegacyGroup []string `json:"groups"`
+	email, _ := token.Claims["email"].(string)
+	roles := []string{}
+	if rawRoles, ok := token.Claims["roles"].([]any); ok {
+		for _, role := range rawRoles {
+			if value, ok := role.(string); ok && strings.TrimSpace(value) != "" {
+				roles = append(roles, value)
+			}
+		}
 	}
-	if err := token.Claims(&claims); err != nil {
-		return Principal{}, fmt.Errorf("decode Cognito claims: %w", err)
-	}
-	if claims.Subject == "" || (claims.TokenUse != "" && claims.TokenUse != "id") {
-		return Principal{}, errors.New("token is not a valid Cognito ID-token identity")
-	}
-	roles := claims.Groups
-	if len(roles) == 0 {
-		roles = claims.LegacyGroup
-	}
-	return Principal{Subject: claims.Subject, Email: claims.Email, Roles: roles}, nil
+	return Principal{Subject: token.UID, Email: email, Roles: roles}, nil
 }

@@ -64,7 +64,7 @@ The relay sends only the following allow-listed fields (unknown fields are dropp
   "occurredAt": "2026-11-10T08:00:00.000Z",
   "severity": "critical",
   "resourceId": "<alert-id>",
-  "clusterRef": "demo-cluster",
+  "clusterRef": "<airtable-cluster-record-id>",
   "status": "PENDING_APPROVAL",
   "risk": "high",
   "recommendedAction": "replace-or-recover-node",
@@ -159,3 +159,70 @@ The HMAC headers are provided for downstream verification. A Zapier Catch Hook d
 A live synthetic EventBridge test exposed an existing Lambda packaging defect in the deployed Automation Processor: Node.js 22 was loading `automation/index.js` as CommonJS even though it uses ES-module imports. This caused `Runtime.UserCodeSyntaxError: Cannot use import statement outside a module`, leaving the SQS message unprocessed and no automation record in DynamoDB.
 
 This branch now includes `automation/package.json` with `"type": "module"` and pinned AWS SDK v3 runtime dependencies, plus the equivalent package manifest for the new Zapier relay. The API function already had its own ES-module package manifest. The fix is committed but **must be deployed to the existing runtime stack** before treating event processing as healthy. CI now runs `sam build` to install each function's dependencies and catch packaging issues before deployment.
+
+
+---
+
+## Go-first integration: Airtable inventory, AI findings and desktop CLI
+
+The new Go-first branch adds a separate integration path documented in [Airtable + Zapier + desktop agent](../../docs/integrations/airtable-zapier-desktop-agent.md). It uses the Cloud-Sentinel Airtable inventory, the shared Go analysis engine, signed Zapier webhooks and a desktop agent that polls the online-server API.
+
+- Outbound Go events include `incident.created`, `cluster.ai_finding`, `cluster.warning`, and `cloudsentinels.integration_test`.
+- Inbound Zapier commands use `POST /api/v1/zapier/commands` with `X-CS-Timestamp` and `X-CS-Signature` HMAC-SHA256 headers.
+- The desktop agent accepts only `collect-snapshot`, `rollout-status`, and approval-gated `restart-deployment`; it never executes arbitrary shell or PowerShell.
+- Use the online-server API as the persistent command broker. The Lambda adapter is stateless and deliberately rejects local CLI command enqueueing.
+- Mutations require an approved signed request and both server-side and local-agent opt-in flags. Both flags default to false.
+
+This Go webhook path is separate from the existing AWS EventBridge/SQS Zapier relay described above. Neither path is considered live until its own secrets, endpoint and delivery checks are configured.
+
+
+## Go API + local cluster event automation (shared Catch Hook)
+
+The Go service sends a single normalized event envelope to one Zapier Catch Hook. Use Paths or Filters in Zapier to route by `eventType`, `sourceType`, `environment`, and `severity`; do not create one webhook per cluster.
+
+Current Go event types:
+- `incident.created`
+- `cluster.ai_finding`
+- `cluster.warning`
+- `cluster.online`
+- `cluster.offline`
+- `cluster.health.degraded`
+- `cluster.health.recovered`
+- `automation.command_queued`
+- `cloudsentinels.integration_test`
+
+The AWS relay normalizes raw EventBridge names to the same Paths contract: `IncidentCreated` → `incident.created`, `IncidentUpdated` → `incident.updated`, `AlertCreated`/`AlertUpdated` → `alert.created`/`alert.updated`, Kubernetes node/pod/deployment/capacity events → `cluster.health.degraded`, and API latency events → `server.health.degraded`. The original EventBridge name remains in `sourceEventType` for traceability. CloudWatch alarms map to `serverless.invocation_failed` / `serverless.invocation_recovered` or `server.health.failed` / `server.health.recovered`.
+
+The event envelope uses `schemaVersion`, `eventId`, `eventType`, `occurredAt`, `clusterId`, `clusterName`, `sourceType`, `environment`, `severity`, `title`, and a sanitized `summary`. The local agent is identified as `sourceType=local-kubernetes`, `environment=local`. Airtable record IDs remain the cluster identifiers when a local agent is paired to an Airtable record; the dedicated local kind cluster uses its own local ID until explicitly mapped.
+
+Recommended Zap Paths:
+1. **Critical / offline:** `severity=critical` OR `eventType=cluster.offline` → on-call Slack/Teams + email.
+2. **Degraded / warning:** `cluster.health.degraded`, `cluster.warning`, or `server.health.degraded` → operations channel.
+3. **Recovery:** `cluster.online`, `cluster.health.recovered`, `serverless.invocation_recovered`, or `server.health.recovered` → recovery update; never infer recovery from webhook receipt alone.
+4. **Incident / AI finding:** `incident.created`, `incident.updated`, `alert.created`, `alert.updated`, or `cluster.ai_finding` → create/update a ticket using `eventId` as the deduplication key.
+5. **Command audit:** `automation.command_queued` → audit channel only; the command remains subject to CloudSentinels policy and the local agent allowlist.
+
+For the Go API, configure `ZAPIER_CATCH_HOOK_URL` and `ZAPIER_SIGNING_SECRET` together in the server's private environment. The URL is a bearer secret; never place it in frontend variables, manifests, workflow YAML, or Git. The Go dispatcher signs the exact JSON request body with HMAC-SHA256 and sends `X-CS-Timestamp`, `X-CS-Signature`, and `X-CS-Event-ID`. A standard Catch Hook does not validate those headers itself; use a verification step or an authenticated verifier if inbound trust decisions depend on them.
+
+To validate the outbound connection, authenticate to the Go API and POST to `/api/v1/zapier/test`. A successful response means Zapier accepted the webhook request, not that every downstream Zap action completed. Then use **Load Samples** in the Zap editor, add Paths/Filters and destination actions, test each path, and only then turn the Zap on.
+
+The Go API emits online/offline and health-transition events for registered Kubernetes agents. A background monitor checks heartbeat age every 30 seconds, so offline alerts do not depend on a dashboard being open. AWS Lambda invocation failures and service-health failures are routed through the CloudWatch/EventBridge alarm path described below; these AWS paths remain inactive until the stack is deployed and an actual alarm test is received. The AWS relay remains separately gated by its Secrets Manager secret and scoped deployment.
+
+**Safety:** all Zapier-triggered commands remain read-only by default. Keep `CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS=false` on both server and agent. Do not add Zapier steps for restart, scale, delete, apply, shell, or deployment actions.
+
+
+## CloudWatch alarm routing for serverless and service health
+
+When `ZapierWebhookSecretArn` is supplied at deployment, the same relay queue also receives CloudWatch alarm state-change events from the **default EventBridge bus** for alarm names beginning `cloudsentinels-`. This is separate from the custom CloudSentinels domain-event bus.
+
+The relay maps Lambda function/processor/worker errors to:
+- `serverless.invocation_failed` when the alarm enters `ALARM`.
+- `serverless.invocation_recovered` when the alarm returns to `OK`.
+
+Other CloudSentinels queue and delivery health alarms map to:
+- `server.health.failed` on `ALARM`.
+- `server.health.recovered` on `OK`.
+
+These alarm notifications are sanitized from the CloudWatch alarm name and state; they do not require a DynamoDB incident record and do not include raw logs or credentials. The EventBridge rule targets the existing Zapier relay SQS queue and uses the existing delivery DLQ. The relay treats webhook acceptance as delivery only, not as proof of downstream recovery.
+
+This infrastructure is code-ready but remains inactive until the CloudFormation/SAM stack is deployed with the private Secrets Manager webhook secret. Validate the SAM template and run a controlled CloudWatch alarm transition test before enabling the Zap. Do not create synthetic production failures merely to test notifications.

@@ -21,6 +21,10 @@ const ALLOWED_EVENTS = new Set([
   "MemoryPressure",
   "DeploymentUnhealthy",
   "ApiLatencyHigh",
+  "serverless.invocation_failed",
+  "serverless.invocation_recovered",
+  "server.health.failed",
+  "server.health.recovered",
 ]);
 
 async function getConfig() {
@@ -45,12 +49,33 @@ async function getConfig() {
 }
 
 const EVENT_POLICIES = {
-  PodCrashLoopBackOff: { action: "restart-pod", risk: "medium", requiresApproval: false },
-  NodeNotReady: { action: "replace-or-recover-node", risk: "high", requiresApproval: true },
-  CpuThresholdExceeded: { action: "scale-workload", risk: "medium", requiresApproval: true },
+  IncidentCreated: { action: "review-incident", risk: "medium", requiresApproval: false },
+  IncidentUpdated: { action: "review-incident-update", risk: "low", requiresApproval: false },
+  AlertCreated: { action: "review-alert", risk: "medium", requiresApproval: false },
+  AlertUpdated: { action: "review-alert-update", risk: "low", requiresApproval: false },
+  PodCrashLoopBackOff: { action: "inspect-pod-crash-loop", risk: "medium", requiresApproval: false },
+  NodeNotReady: { action: "inspect-node-readiness", risk: "high", requiresApproval: true },
+  CpuThresholdExceeded: { action: "inspect-node-capacity", risk: "medium", requiresApproval: true },
   MemoryPressure: { action: "diagnose-memory-pressure", risk: "low", requiresApproval: false },
-  DeploymentUnhealthy: { action: "rollback-deployment", risk: "high", requiresApproval: true },
-  ApiLatencyHigh: { action: "scale-or-investigate-service", risk: "medium", requiresApproval: true },
+  DeploymentUnhealthy: { action: "inspect-deployment", risk: "high", requiresApproval: true },
+  ApiLatencyHigh: { action: "inspect-service-latency", risk: "medium", requiresApproval: true },
+  "serverless.invocation_failed": { action: "inspect-lambda-error", risk: "low", requiresApproval: false },
+  "serverless.invocation_recovered": { action: "none", risk: "low", requiresApproval: false },
+  "server.health.failed": { action: "inspect-service-health", risk: "low", requiresApproval: false },
+  "server.health.recovered": { action: "none", risk: "low", requiresApproval: false },
+};
+
+const NORMALIZED_EVENT_TYPES = {
+  IncidentCreated: "incident.created",
+  IncidentUpdated: "incident.updated",
+  AlertCreated: "alert.created",
+  AlertUpdated: "alert.updated",
+  PodCrashLoopBackOff: "cluster.health.degraded",
+  NodeNotReady: "cluster.health.degraded",
+  CpuThresholdExceeded: "cluster.health.degraded",
+  MemoryPressure: "cluster.health.degraded",
+  DeploymentUnhealthy: "cluster.health.degraded",
+  ApiLatencyHigh: "server.health.degraded",
 };
 
 function safeString(value, max = 200) {
@@ -59,27 +84,63 @@ function safeString(value, max = 200) {
     : undefined;
 }
 
-function toPayload(event, storedEvent) {
+export function isCloudWatchAlarmEvent(event) {
+  const detail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+  const state = detail.state?.value;
+  return event?.source === "aws.cloudwatch"
+    && event?.["detail-type"] === "CloudWatch Alarm State Change"
+    && typeof detail.alarmName === "string"
+    && detail.alarmName.startsWith("cloudsentinels-")
+    && (state === "ALARM" || state === "OK");
+}
+
+function cloudWatchEventType(detail) {
+  const alarmName = safeString(detail.alarmName, 128) ?? "";
+  const isLambdaAlarm = /(function-errors|processor-errors|worker-errors|relay-errors)/i.test(alarmName);
+  if (isLambdaAlarm) {
+    return detail.state?.value === "ALARM"
+      ? "serverless.invocation_failed"
+      : "serverless.invocation_recovered";
+  }
+  return detail.state?.value === "ALARM" ? "server.health.failed" : "server.health.recovered";
+}
+
+export function toPayload(event, storedEvent = {}) {
   const detail = event.detail && typeof event.detail === "object" ? event.detail : {};
   const resource = detail.resource && typeof detail.resource === "object" ? detail.resource : {};
-  const eventType = safeString(event["detail-type"], 80);
-  const policy = EVENT_POLICIES[eventType] ?? {};
+  const cloudWatchAlarm = isCloudWatchAlarmEvent(event);
+  const alarmName = cloudWatchAlarm ? safeString(detail.alarmName, 128) : undefined;
+  const alarmState = cloudWatchAlarm ? safeString(detail.state?.value, 32) : undefined;
+  const previousState = cloudWatchAlarm ? safeString(detail.previousState?.value, 32) : undefined;
+  const sourceEventType = safeString(event["detail-type"], 80);
+  const policyEventType = cloudWatchAlarm ? cloudWatchEventType(detail) : sourceEventType;
+  const eventType = NORMALIZED_EVENT_TYPES[policyEventType] ?? policyEventType;
+  const policy = EVENT_POLICIES[policyEventType] ?? EVENT_POLICIES[eventType] ?? {};
   const payload = {
     schemaVersion: "1",
     eventId: safeString(event.id, 128),
     ownerId: safeString(storedEvent.ownerId, 128),
     eventTime: safeString(storedEvent.eventTime, 40),
     eventType,
+    sourceEventType,
     source: safeString(event.source, 80),
+    sourceType: cloudWatchAlarm ? "aws-cloudwatch" : safeString(detail.sourceType ?? event.source, 80),
+    environment: safeString(detail.environment ?? process.env.CLOUDSENTINELS_ENV ?? "aws", 32),
     occurredAt: safeString(event.time, 40),
-    severity: safeString(detail.severity ?? detail.priority, 32),
+    severity: cloudWatchAlarm
+      ? (alarmState === "ALARM" ? "critical" : "info")
+      : safeString(detail.severity ?? detail.priority, 32),
+    title: cloudWatchAlarm ? `CloudSentinels alarm: ${alarmName}` : safeString(detail.title, 200),
+    summary: cloudWatchAlarm
+      ? `CloudWatch alarm state changed from ${previousState ?? "unknown"} to ${alarmState ?? "unknown"}.`
+      : safeString(detail.summary, 500),
     incidentId: safeString(
-      detail.incidentId ?? (eventType?.startsWith("Incident") ? resource.id : undefined),
+      detail.incidentId ?? (policyEventType?.startsWith("Incident") ? resource.id : undefined),
       128,
     ),
-    resourceId: safeString(detail.resourceId ?? resource.id, 128),
+    resourceId: cloudWatchAlarm ? alarmName : safeString(detail.resourceId ?? resource.id, 128),
     clusterRef: safeString(storedEvent.clusterName ?? detail.clusterName ?? detail.clusterArn ?? detail.cluster, 256),
-    status: safeString(detail.status, 64),
+    status: cloudWatchAlarm ? alarmState : safeString(detail.status, 64),
     risk: safeString(storedEvent.risk ?? detail.risk ?? policy.risk, 32),
     recommendedAction: safeString(storedEvent.recommendedAction ?? detail.recommendedAction ?? policy.action, 80),
     requiresApproval: storedEvent.requiresApproval === true || detail.requiresApproval === true || policy.requiresApproval === true,
@@ -89,27 +150,35 @@ function toPayload(event, storedEvent) {
 }
 
 async function deliver(event, config) {
-  if (!tableName) throw new Error("TABLE_NAME is not configured for the Zapier relay.");
   if (typeof event.id !== "string" || !event.id) {
     throw new Error("Automation event is missing its EventBridge id.");
   }
-  const detail = event.detail && typeof event.detail === "object" ? event.detail : {};
-  const ownerId = safeString(detail.userId, 128);
-  const eventTime = safeString(event.time, 40);
-  const key = ownerId && eventTime
-    ? { PK: `USER#${ownerId}`, SK: `AUTOMATION#${eventTime}#${event.id}` }
-    : { PK: "SYSTEM#AUTOMATION", SK: `EVENT#${event.id}` };
-  const stored = await db.send(new GetCommand({
-    TableName: tableName,
-    Key: key,
-  }));
-  if (!stored.Item) {
-    // The processor and relay consume separate SQS queues. Retry the relay until
-    // the processor has persisted the authoritative policy decision.
-    throw new Error("Automation event record is not ready; retrying before Zapier delivery.");
+
+  const cloudWatchAlarm = isCloudWatchAlarmEvent(event);
+  let storedEvent = {};
+  if (!cloudWatchAlarm) {
+    if (!tableName) throw new Error("TABLE_NAME is not configured for the Zapier relay.");
+    const detail = event.detail && typeof event.detail === "object" ? event.detail : {};
+    const ownerId = safeString(detail.userId, 128);
+    const eventTime = safeString(event.time, 40);
+    const key = ownerId && eventTime
+      ? { PK: `USER#${ownerId}`, SK: `AUTOMATION#${eventTime}#${event.id}` }
+      : { PK: "SYSTEM#AUTOMATION", SK: `EVENT#${event.id}` };
+    const stored = await db.send(new GetCommand({
+      TableName: tableName,
+      Key: key,
+    }));
+    if (!stored.Item) {
+      // The processor and relay consume separate SQS queues. Retry the relay until
+      // the processor has persisted the authoritative policy decision.
+      throw new Error("Automation event record is not ready; retrying before Zapier delivery.");
+    }
+    storedEvent = stored.Item;
   }
-  const payload = toPayload(event, stored.Item);
-  if (!payload.eventId || !payload.eventType || !ALLOWED_EVENTS.has(payload.eventType)) {
+  const payload = toPayload(event, storedEvent);
+  const allowlistedSourceType = payload.sourceEventType ?? payload.eventType;
+  if (!payload.eventId || !payload.eventType
+    || (!ALLOWED_EVENTS.has(allowlistedSourceType) && !ALLOWED_EVENTS.has(payload.eventType))) {
     console.info("Skipping unsupported or malformed event", {
       eventId: payload.eventId ?? "missing",
       eventType: payload.eventType ?? "missing",
@@ -154,7 +223,7 @@ export async function handler(event) {
   for (const record of event.Records ?? []) {
     try {
       const domainEvent = JSON.parse(record.body ?? "{}");
-      if (!ALLOWED_EVENTS.has(domainEvent["detail-type"])) continue;
+      if (!ALLOWED_EVENTS.has(domainEvent["detail-type"]) && !isCloudWatchAlarmEvent(domainEvent)) continue;
       config ??= await getConfig();
       await deliver(domainEvent, config);
     } catch (error) {
