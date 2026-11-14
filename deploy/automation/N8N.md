@@ -29,9 +29,12 @@ n8n does not execute arbitrary kubectl, shell or AWS CLI commands. It always rep
 
 ## Local cluster connection
 
-The active Minikube context cloudsentinels-local is connected through the Go agent. The agent reports telemetry and individual warning/health events to the Go API at http://127.0.0.1:8082. The API forwards normalized events to this workflow.
+Both local Kubernetes contexts are connected through independent Go agents:
 
-Start the agent with deploy/agent/local/start-agent.ps1. The default mutation namespace allowlist is cloudsentinels-system. Docker Desktop Kubernetes is not enabled yet; after enabling it in Docker Desktop Settings → Kubernetes and confirming the docker-desktop context exists, start a second agent using cluster ID cloudsentinels-docker-desktop and context docker-desktop.
+- Minikube: context `cloudsentinels-local`, cluster ID `cloudsentinels-local`.
+- Docker Desktop built-in Kubernetes: context `docker-desktop`, cluster ID `docker-desktop-kubernetes` (kind, one control-plane node, Kubernetes 1.34.3).
+
+Both agents report telemetry every 30 seconds to the Go API at `http://127.0.0.1:8082`. The API forwards normalized online/degraded/recovery and agent events to the active n8n workflow. Both agent processes and both webhook smoke tests were verified on 2026-11-15. Use `deploy/agent/local/attach-local-clusters.ps1 -IncludeDockerDesktop` to attach/restart both agents. The script preserves the original kubeconfig between contexts. The default mutation namespace allowlist is `cloudsentinels-system`; remediation remains approval-gated.
 
 ## Go API configuration
 
