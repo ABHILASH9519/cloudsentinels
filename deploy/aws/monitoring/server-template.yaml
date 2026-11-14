@@ -1,0 +1,193 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudSentinels read-only EC2 server monitoring and cross-region event forwarding.
+
+Parameters:
+  InstanceId:
+    Type: String
+    Default: i-04ddd1baceeaa4186
+    AllowedPattern: '^i-[0-9a-f]{8,17}$'
+    Description: Existing CloudSentinels EC2 instance to monitor. This stack never starts or stops it.
+  CentralEventBusArn:
+    Type: String
+    AllowedPattern: '^arn:[^:]+:events:[^:]+:[0-9]{12}:event-bus/.+$'
+    Description: Existing central CloudSentinels EventBridge bus ARN in ap-south-1.
+
+Resources:
+  EventForwardingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-aws-server-forwarding-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  EventForwardingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cloudsentinels-aws-server-event-forwarder
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn:
+                  - !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/cloudsentinels-aws-server-instance-state
+                  - !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/cloudsentinels-aws-server-alarm-state
+      Policies:
+        - PolicyName: PublishToCentralCloudSentinelsBus
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: !Ref CentralEventBusArn
+
+  EC2StateChangeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cloudsentinels-aws-server-instance-state
+      Description: Forwards state changes for the configured CloudSentinels EC2 instance.
+      EventBusName: default
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.ec2
+        detail-type:
+          - EC2 Instance State-change Notification
+        detail:
+          instance-id:
+            - !Ref InstanceId
+      Targets:
+        - Id: CentralCloudSentinelsBus
+          Arn: !Ref CentralEventBusArn
+          RoleArn: !GetAtt EventForwardingRole.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt EventForwardingDLQ.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 3600
+            MaximumRetryAttempts: 12
+
+  EC2AlarmStateChangeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cloudsentinels-aws-server-alarm-state
+      Description: Forwards CloudWatch state changes for CloudSentinels EC2 alarms.
+      EventBusName: default
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - CloudWatch Alarm State Change
+        detail:
+          alarmName:
+            - prefix: cloudsentinels-aws-server-
+          state:
+            value:
+              - ALARM
+              - OK
+      Targets:
+        - Id: CentralCloudSentinelsBus
+          Arn: !Ref CentralEventBusArn
+          RoleArn: !GetAtt EventForwardingRole.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt EventForwardingDLQ.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 3600
+            MaximumRetryAttempts: 12
+
+  EventForwardingDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref EventForwardingDLQ
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt EventForwardingDLQ.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !GetAtt EC2StateChangeRule.Arn
+                  - !GetAtt EC2AlarmStateChangeRule.Arn
+
+  EC2StatusCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-aws-server-status-check-failed
+      AlarmDescription: EC2 system or instance status checks are failing.
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref InstanceId
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+  EC2CPUHighAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-aws-server-cpu-high
+      AlarmDescription: EC2 CPU utilization exceeded 80 percent for two consecutive periods.
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref InstanceId
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+  EventForwardingDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-aws-server-forwarding-dlq
+      AlarmDescription: EventBridge could not forward EC2 or server alarm events to the central region.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt EventForwardingDLQ.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+Outputs:
+  MonitoredInstanceId:
+    Value: !Ref InstanceId
+  StateChangeRuleName:
+    Value: !Ref EC2StateChangeRule
+  AlarmStateRuleName:
+    Value: !Ref EC2AlarmStateChangeRule
+  StatusCheckAlarmName:
+    Value: !Ref EC2StatusCheckAlarm
+  CPUAlarmName:
+    Value: !Ref EC2CPUHighAlarm
+  ForwardingDLQUrl:
+    Value: !Ref EventForwardingDLQ

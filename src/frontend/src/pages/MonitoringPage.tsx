@@ -565,6 +565,11 @@ export function MonitoringPage() {
                         cluster · {event.clusterName}
                       </p>
                     )}
+                    {event.resourceId && (
+                      <p className="text-[10px] font-mono text-muted-foreground">
+                        resource · {event.resourceId}{event.resourceState ? ` · ${event.resourceState}` : ""}
+                      </p>
+                    )}
                     {event.recommendedAction && (
                       <p className="text-[11px] text-cyan-200">
                         Recommended: {event.recommendedAction}

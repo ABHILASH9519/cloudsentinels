@@ -1,0 +1,424 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CloudSentinels central AWS monitoring pipeline for EC2 server and Lambda runtime signals.
+
+Parameters:
+  ApplicationTableName:
+    Type: String
+    Description: Existing CloudSentinels DynamoDB table name.
+  AutomationOwnerId:
+    Type: String
+    AllowedPattern: '^[A-Za-z0-9._:@+-]{1,128}$'
+    Description: Firebase Auth UID whose authenticated dashboard will display AWS monitoring activity.
+  EventBusName:
+    Type: String
+    Default: cloudsentinels-domain-events
+  InstanceId:
+    Type: String
+    AllowedPattern: '^i-[0-9a-f]{8,17}$'
+    Description: EC2 instance monitored in the regional server stack.
+  OperationsFunctionName:
+    Type: String
+    Description: Existing CloudSentinels Operations API Lambda function name.
+  AutomationProcessorFunctionName:
+    Type: String
+    Description: Existing CloudSentinels automation processor Lambda function name.
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 20
+    MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref ApplicationTableName
+        AUTOMATION_OWNER_ID: !Ref AutomationOwnerId
+
+Resources:
+  AWSMonitoringProcessingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-aws-monitoring-processing-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  AWSMonitoringDeliveryDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-aws-monitoring-delivery-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  AWSMonitoringQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-aws-monitoring-events
+      VisibilityTimeout: 120
+      MessageRetentionPeriod: 345600
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt AWSMonitoringProcessingDLQ.Arn
+        maxReceiveCount: 5
+
+  AWSMonitoringProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cloudsentinels-aws-monitoring-processor
+      CodeUri: processor/
+      Handler: index.handler
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref ApplicationTableName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:ChangeMessageVisibility
+                - sqs:GetQueueAttributes
+                - sqs:GetQueueUrl
+              Resource: !GetAtt AWSMonitoringQueue.Arn
+      Events:
+        MonitoringQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AWSMonitoringQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 2
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+
+  AWSMonitoringQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref AWSMonitoringQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt AWSMonitoringQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !GetAtt AWSMonitoringEC2StateRule.Arn
+                  - !GetAtt AWSMonitoringServerAlarmRule.Arn
+                  - !GetAtt AWSMonitoringLambdaAlarmRule.Arn
+
+  AWSMonitoringDeliveryDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref AWSMonitoringDeliveryDLQ
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt AWSMonitoringDeliveryDLQ.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !GetAtt AWSMonitoringEC2StateRule.Arn
+                  - !GetAtt AWSMonitoringServerAlarmRule.Arn
+                  - !GetAtt AWSMonitoringLambdaAlarmRule.Arn
+
+  AWSMonitoringEC2StateRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cloudsentinels-aws-monitoring-ec2-state
+      EventBusName: !Ref EventBusName
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.ec2
+        detail-type:
+          - EC2 Instance State-change Notification
+        detail:
+          instance-id:
+            - !Ref InstanceId
+      Targets:
+        - Id: AWSMonitoringQueue
+          Arn: !GetAtt AWSMonitoringQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt AWSMonitoringDeliveryDLQ.Arn
+
+  AWSMonitoringServerAlarmRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cloudsentinels-aws-monitoring-server-alarms
+      EventBusName: !Ref EventBusName
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - CloudWatch Alarm State Change
+        detail:
+          alarmName:
+            - prefix: cloudsentinels-aws-server-
+          state:
+            value:
+              - ALARM
+              - OK
+      Targets:
+        - Id: AWSMonitoringQueue
+          Arn: !GetAtt AWSMonitoringQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt AWSMonitoringDeliveryDLQ.Arn
+
+  AWSMonitoringLambdaAlarmRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cloudsentinels-aws-monitoring-lambda-alarms
+      EventBusName: default
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - CloudWatch Alarm State Change
+        detail:
+          alarmName:
+            - prefix: cloudsentinels-lambda-
+          state:
+            value:
+              - ALARM
+              - OK
+      Targets:
+        - Id: AWSMonitoringQueue
+          Arn: !GetAtt AWSMonitoringQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt AWSMonitoringDeliveryDLQ.Arn
+
+  OperationsFunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-operations-errors
+      AlarmDescription: Operations API Lambda reported one or more invocation errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OperationsFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  OperationsFunctionThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-operations-throttles
+      AlarmDescription: Operations API Lambda invocations were throttled.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OperationsFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  OperationsFunctionDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-operations-duration
+      AlarmDescription: Operations API Lambda duration is approaching its configured timeout.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OperationsFunctionName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 12000
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AutomationProcessorErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-automation-errors
+      AlarmDescription: Existing automation processor Lambda reported one or more invocation errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AutomationProcessorFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AutomationProcessorThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-automation-throttles
+      AlarmDescription: Existing automation processor Lambda invocations were throttled.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AutomationProcessorFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AutomationProcessorDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-automation-duration
+      AlarmDescription: Existing automation processor Lambda duration is approaching its configured timeout.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AutomationProcessorFunctionName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 12000
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AWSMonitoringProcessorErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-monitoring-processor-errors
+      AlarmDescription: AWS monitoring processor Lambda reported one or more invocation errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AWSMonitoringProcessor
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AWSMonitoringProcessorThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-monitoring-processor-throttles
+      AlarmDescription: AWS monitoring processor Lambda invocations were throttled.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AWSMonitoringProcessor
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AWSMonitoringProcessorDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-monitoring-processor-duration
+      AlarmDescription: AWS monitoring processor duration is approaching its configured timeout.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AWSMonitoringProcessor
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 16000
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AWSMonitoringQueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-monitoring-queue-age
+      AlarmDescription: AWS monitoring events are waiting too long for processing.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AWSMonitoringQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 60
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AWSMonitoringProcessingDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-monitoring-dlq
+      AlarmDescription: AWS monitoring messages exhausted processing retries.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AWSMonitoringProcessingDLQ.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  AWSMonitoringDeliveryDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-monitoring-delivery-dlq
+      AlarmDescription: EventBridge could not deliver AWS monitoring events to the central SQS queue.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AWSMonitoringDeliveryDLQ.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  MonitoringProcessorFunctionName:
+    Value: !Ref AWSMonitoringProcessor
+  MonitoringQueueUrl:
+    Value: !Ref AWSMonitoringQueue
+  MonitoringProcessingDLQUrl:
+    Value: !Ref AWSMonitoringProcessingDLQ
+  MonitoringDeliveryDLQUrl:
+    Value: !Ref AWSMonitoringDeliveryDLQ

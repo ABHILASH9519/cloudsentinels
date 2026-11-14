@@ -73,6 +73,7 @@ export interface AutomationEvent {
   resourceId: string | null;
   severity: string | null;
   reason: string;
+  resourceState?: string | null;
   recoveryVerified: boolean;
 }
 
