@@ -49,6 +49,12 @@ type Event struct {
 	Severity      string    `json:"severity,omitempty"`
 	Title         string    `json:"title,omitempty"`
 	Summary       string    `json:"summary,omitempty"`
+	ResourceID    string    `json:"resourceId,omitempty"`
+	ResourceKind  string    `json:"resourceKind,omitempty"`
+	ResourceName  string    `json:"resourceName,omitempty"`
+	Namespace     string    `json:"namespace,omitempty"`
+	Region        string    `json:"region,omitempty"`
+	Service       string    `json:"service,omitempty"`
 }
 
 type Queue struct {

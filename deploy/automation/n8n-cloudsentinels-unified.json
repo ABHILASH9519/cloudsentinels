@@ -1,0 +1,357 @@
+{
+  "name": "CloudSentinels - Unified Multi-Cluster Self-Healing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cloudsentinels/unified-events",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "2b2c8e4f-4e9f-4b73-b22a-0a6e9f02c5c1",
+      "name": "CloudSentinels Event Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "c9e9d79b-0a9c-49f2-ae32-82d16d97c7e5"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const allowed = ['schemaVersion','eventId','eventType','occurredAt','clusterId','clusterName','sourceType','environment','severity','title','summary','resourceId','resourceKind','resourceName','namespace','region','service','accountId','action','resourceState'];\nconst items = $input.all();\nconst getHeader = (headers, name) => {\n  const key = Object.keys(headers || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());\n  return key ? headers[key] : undefined;\n};\nconst parseObject = (value, label) => {\n  if (typeof value === 'string') {\n    try { value = JSON.parse(value); }\n    catch { throw new Error(`Invalid ${label}: expected a JSON object`); }\n  }\n  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};\n};\nreturn items.flatMap((item, index) => {\n  const root = parseObject(item.json, 'webhook input');\n  const headers = parseObject(root.headers, 'webhook headers');\n  let body = root.body !== undefined ? parseObject(root.body, 'request body') : root;\nconst isEventBridge = Boolean(body && body.id && body.source && body[\"detail-type\"]);\nif (isEventBridge) {\n  const envelope = body;\n  const detail = parseObject(envelope.detail, \"EventBridge detail\");\n  const alarmName = String(detail.alarmName || \"\");\n  const state = detail.state && typeof detail.state === \"object\" ? detail.state.value : detail.state;\n  const eventType = String(envelope[\"detail-type\"] || \"AWS EventBridge Event\");\n  let severity = \"info\";\n  if (eventType.toLowerCase().includes(\"cloudwatch alarm\") && state === \"ALARM\") {\n    severity = /statuscheckfailed|errors|dead.?letter|dlq/i.test(alarmName) ? \"critical\" : \"high\";\n  } else if (eventType.toLowerCase().includes(\"instance state-change\")) {\n    severity = detail.state === \"terminated\" ? \"critical\" : [\"stopped\", \"stopping\", \"shutting-down\"].includes(detail.state) ? \"medium\" : \"low\";\n  } else if (envelope.source === \"aws.guardduty\") {\n    const score = Number(detail.severity || 0);\n    severity = score >= 7 ? \"critical\" : score >= 4 ? \"high\" : \"medium\";\n  } else if (envelope.source === \"aws.securityhub\") {\n    const label = String(detail.findings?.[0]?.Severity?.Label || \"\").toLowerCase();\n    severity = label === \"critical\" ? \"critical\" : label === \"high\" ? \"high\" : label === \"medium\" ? \"medium\" : \"low\";\n  }\n  const finding = detail.findings?.[0] || {};\n  body = {\n    ...detail,\n    eventId: envelope.id,\n    eventType,\n    occurredAt: envelope.time,\n    sourceType: envelope.source,\n    region: envelope.region,\n    accountId: envelope.account,\n    resourceId: detail[\"instance-id\"] || alarmName || detail.functionName || detail.resource?.resourceId || finding.Resources?.[0]?.Id || \"\",\n    resourceState: state || \"\",\n    service: envelope.source === \"aws.guardduty\" ? \"AWS/GuardDuty\" : envelope.source === \"aws.securityhub\" ? \"AWS/SecurityHub\" : alarmName.toLowerCase().includes(\"lambda\") ? \"AWS/Lambda\" : alarmName.toLowerCase().includes(\"server\") ? \"AWS/EC2\" : \"AWS\",\n    severity,\n    title: alarmName || detail[\"instance-id\"] || finding.Title || detail.title || eventType,\n    summary: detail.state && typeof detail.state === \"object\" ? (detail.state.reason || detail.state.value || \"CloudWatch alarm state changed\") : (finding.Description || detail.description || detail.message || detail.reason || String(state || \"AWS event received\"))\n  };\n}\n\n  // Accept common event wrappers used by API gateways and event relays.\n  for (const key of ['data', 'detail', 'payload']) {\n    if ((!body.eventId || !body.eventType) && body[key] !== undefined) {\n      const nested = parseObject(body[key], key);\n      if (Object.keys(nested).length) body = nested;\n    }\n  }\n  const headerEventId = getHeader(headers, 'x-cs-event-id');\n  const eventId = String(body.eventId || headerEventId || '').trim();\n  const eventType = String(body.eventType || '').trim();\n  if (!eventId && !eventType && Object.keys(body).length === 0) {\n    // n8n editor can execute this node without webhook input. Treat that as a no-op,\n    // not a failed workflow; a real event must include both required identifiers.\n    return [];\n  }\n  if (!eventId || !eventType) {\n    const keys = Object.keys(body).slice(0, 20).join(', ') || '(none)';\n    throw new Error(`Invalid CloudSentinels event at item ${index + 1}: eventId and eventType are required. Received keys: ${keys}. Send a JSON object with both fields.`);\n  }\n  if (eventId.length > 128 || eventType.length > 80) throw new Error('Rejected event: eventId or eventType exceeds the allowed length');\n  const event = {};\n  for (const key of allowed) if (body[key] !== undefined) event[key] = body[key];\n  event.eventId = eventId;\n  event.eventType = eventType;\n  event.severity = String(event.severity || 'info').toLowerCase();\n  const validSeverities = ['critical','high','degraded','warning','medium','low','info'];\n  if (!validSeverities.includes(event.severity)) event.severity = 'info';\n  const type = eventType.toLowerCase();\n  let route = 'general';\n  if (type.includes('recover') || type.includes('online') || type.includes('healthy')) route = 'recovery';\n  else if (event.severity === 'critical' || type.includes('offline') || type.includes('notready')) route = 'critical';\n  else if (['high','degraded','warning','medium'].includes(event.severity) || type.includes('degraded') || type.includes('warning') || type.includes('crashloop')) route = 'degraded';\n  const safe = (value, max) => String(value || '').replace(/[\\u0000-\\u001f\\u007f]/g, ' ').slice(0, max);\n  return { json: { ...event, title: safe(event.title || eventType, 180), summary: safe(event.summary, 1000), clusterName: safe(event.clusterName, 120), route, receivedAt: new Date().toISOString(), receiver: 'n8n-local', signaturePresent: Boolean(getHeader(headers, 'x-cs-signature') && getHeader(headers, 'x-cs-timestamp')), autoRemediation: false } };\n});"
+      },
+      "id": "c4f6cb77-5a12-4d5f-8d0d-0a64b6b1a8a0",
+      "name": "Validate and Normalize Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a40f1e34-8d9b-4b3f-82b5-000000000001",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a40f1e34-8d9b-4b3f-82b5-000000000002",
+      "name": "Critical Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map(({json:e}) => ({json:{...e, triage:{queue:'critical', priority:'P1', recommendedChannels:['on-call','incident-channel','email'], requiresHumanReview:true, responseTarget:'immediate'}, outcome:'critical_alert_prepared', notificationDispatched:false, remediationExecuted:false}}));"
+      },
+      "id": "a40f1e34-8d9b-4b3f-82b5-000000000003",
+      "name": "Prepare Critical Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b40f1e34-8d9b-4b3f-82b5-000000000001",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "degraded",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b40f1e34-8d9b-4b3f-82b5-000000000002",
+      "name": "Degraded Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map(({json:e}) => ({json:{...e, triage:{queue:'degraded', priority:'P2', recommendedChannels:['operations-channel'], requiresHumanReview:true, responseTarget:'within-15-minutes'}, outcome:'degraded_alert_prepared', notificationDispatched:false, remediationExecuted:false}}));"
+      },
+      "id": "b40f1e34-8d9b-4b3f-82b5-000000000003",
+      "name": "Prepare Degraded Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c40f1e34-8d9b-4b3f-82b5-000000000001",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "recovery",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c40f1e34-8d9b-4b3f-82b5-000000000002",
+      "name": "Recovery Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map(({json:e}) => ({json:{...e, triage:{queue:'recovery', priority:'P3', recommendedChannels:['operations-channel'], requiresHumanReview:false, responseTarget:'record-and-close'}, outcome:'recovery_notice_prepared', notificationDispatched:false, remediationExecuted:false}}));"
+      },
+      "id": "c40f1e34-8d9b-4b3f-82b5-000000000003",
+      "name": "Prepare Recovery Notice",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map(({json:e}) => ({json:{...e, triage:{queue:'general-audit', priority:'P4', recommendedChannels:['audit-log'], requiresHumanReview:false, responseTarget:'normal-processing'}, outcome:'event_audit_prepared', notificationDispatched:false, remediationExecuted:false}}));"
+      },
+      "id": "d40f1e34-8d9b-4b3f-82b5-000000000003",
+      "name": "Prepare General Audit Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const e = $input.first().json;\nconst type = String(e.eventType || \"\").toLowerCase();\nconst source = String(e.sourceType || \"\").toLowerCase();\nconst text = [type, source, e.title, e.summary, e.service, e.resourceId, e.resourceState].join(\" \").toLowerCase();\n\nlet target = \"cloudsentinels-core\";\nlet adapter = \"core-incident-policy\";\nlet actions = [];\nlet mutationActions = [];\nlet status = \"observe-and-audit\";\nlet reason = \"Event is recorded and triaged; no target-specific mutation adapter is selected.\";\n\nif (/lambda|serverless/.test(text)) {\n  target = \"aws-lambda\";\n  adapter = \"aws-lambda-readonly\";\n  actions = [\"inspect-errors\", \"inspect-throttles\", \"inspect-duration\", \"inspect-logs\", \"check-concurrency\"];\n  status = \"manual-review\";\n  reason = \"Lambda diagnostics are supported by monitoring; version-alias rollback or configuration changes are not enabled in this workflow.\";\n} else if (/ec2|aws-server|instance-state|status-check|cpu-high/.test(text)) {\n  target = \"aws-ec2\";\n  adapter = \"aws-ec2-readonly\";\n  actions = [\"inspect-instance-state\", \"inspect-status-checks\", \"inspect-cpu-metrics\", \"inspect-system-logs\"];\n  status = \"manual-review\";\n  reason = \"EC2 monitoring is read-only. SSM access and an approved instance remediation adapter are not yet configured.\";\n} else if (/n8n-delivery|dlq|dead.?letter|eventbridge/.test(text)) {\n  target = \"aws-event-pipeline\";\n  adapter = \"aws-sqs-readonly\";\n  actions = [\"inspect-eventbridge-rules\", \"inspect-sqs-queue-age\", \"inspect-delivery-dlq\"];\n  status = \"manual-review\";\n  reason = \"AWS event delivery diagnostics are available; queue purging, target rewiring and retry-policy changes require separate operator approval.\";\n} else if (/kubernetes|k8s|podcrashloop|deploymentunhealthy|nodenotready|memorypressure|cputhreshold/.test(text)) {\n  target = \"kubernetes\";\n  adapter = \"cloudsentinels-agent\";\n  actions = [\"collect-snapshot\"];\n  status = \"diagnostic-ready\";\n  reason = \"The authenticated local agent can collect a cluster snapshot. Mutating commands remain allowlisted and approval-gated.\";\n  if (type.includes(\"deploymentunhealthy\") && e.namespace && e.resourceName) {\n    actions.push(\"rollout-status\");\n    mutationActions = [\"restart-deployment\", \"rollback-deployment\"];\n    actions.push(...mutationActions);\n    status = \"approval-required\";\n    reason = \"A specific deployment was identified. Restart or rollback can only be queued after signed human approval and is limited by the agent action and namespace allowlists.\";\n  } else if (type.includes(\"podcrashloop\")) {\n    actions.push(\"rollout-status\");\n    reason = \"Capture diagnostics and identify the owning deployment before any restart; the event identifies a pod, not a safe deployment target.\";\n  } else if (type.includes(\"nodenotready\") || type.includes(\"memorypressure\")) {\n    reason = \"Capture diagnostics and escalate. Node drain, eviction, and destructive node operations are not in the agent allowlist.\";\n  }\n} else if (/guardduty|securityhub|threat|security|unauthorized|credential|intrusion|malware/.test(text)) {\n  target = \"security-event\";\n  adapter = \"security-evidence-review\";\n  actions = [\"preserve-event-evidence\", \"review-cloudtrail-and-guardduty\", \"human-containment-review\"];\n  status = \"security-review-required\";\n  reason = \"Security events are escalated for human investigation; automatic isolation or credential changes are deliberately disabled.\";\n}\n\nconst lifecycle = [\n  \"ingest-and-authenticate\",\n  \"normalize-and-validate\",\n  \"correlate-and-deduplicate-by-event-id\",\n  \"classify-severity-and-target\",\n  \"collect-read-only-diagnostics\",\n  \"evaluate-target-specific-allowlist\",\n  \"require-signed-human-approval-for-mutations\",\n  \"execute-only-through-authorized-target-adapter\",\n  \"verify-health-and-rollout\",\n  \"rollback-or-escalate-on-verification-failure\",\n  \"write-audit-and-recovery-event\"\n];\n\nreturn [{json:{\n  ...e,\n  target,\n  remediation: {\n    target,\n    adapter,\n    status,\n    reason,\n    recommendedActions: actions,\n    mutationActions,\n    requiresHumanApproval: mutationActions.length > 0 || status === \"manual-review\" || status === \"security-review-required\",\n    canExecuteFromN8n: false,\n    remediationExecuted: false,\n    idempotencyKey: e.eventId\n  },\n  sharedLifecycle: lifecycle,\n  remediationExecuted: false\n}}];\n"
+      },
+      "id": "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1001",
+      "name": "Unified Remediation Policy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const e = $input.first().json;\nconst r = e.remediation || {};\nconst procedure = {\n  incidentId: e.eventId,\n  target: r.target || \"cloudsentinels-core\",\n  adapter: r.adapter || \"core-incident-policy\",\n  severity: e.severity || \"info\",\n  priority: e.triage?.priority || \"P4\",\n  status: r.status || \"observe-and-audit\",\n  reason: r.reason || \"No remediation rule matched.\",\n  recommendedActions: r.recommendedActions || [],\n  mutationActions: r.mutationActions || [],\n  requiresHumanApproval: Boolean(r.requiresHumanApproval),\n  executionBoundary: \"n8n-plans-only; CloudSentinels API and target agent enforce authorization\",\n  executionStatus: \"NOT_EXECUTED\",\n  verificationRequired: true,\n  failurePath: \"retain-evidence-and-escalate\",\n  audit: {\n    eventId: e.eventId,\n    sourceType: e.sourceType || \"unknown\",\n    clusterId: e.clusterId || null,\n    region: e.region || null,\n    resourceId: e.resourceId || null,\n    resourceKind: e.resourceKind || null,\n    resourceName: e.resourceName || null,\n    namespace: e.namespace || null\n  }\n};\nreturn [{json:{...e, sharedRemediationProcedure:procedure, remediationExecuted:false}}];\n"
+      },
+      "id": "f7b8d32e-7d25-4e3f-9e21-7e8e3e4a1002",
+      "name": "Build Shared Remediation Runbook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "CloudSentinels Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate and Normalize Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Normalize Event": {
+      "main": [
+        [
+          {
+            "node": "Unified Remediation Policy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Event?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Critical Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Degraded Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Degraded Event?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Degraded Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recovery Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recovery Event?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Recovery Notice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare General Audit Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unified Remediation Policy": {
+      "main": [
+        [
+          {
+            "node": "Critical Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Critical Alert": {
+      "main": [
+        [
+          {
+            "node": "Build Shared Remediation Runbook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Degraded Alert": {
+      "main": [
+        [
+          {
+            "node": "Build Shared Remediation Runbook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Recovery Notice": {
+      "main": [
+        [
+          {
+            "node": "Build Shared Remediation Runbook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare General Audit Event": {
+      "main": [
+        [
+          {
+            "node": "Build Shared Remediation Runbook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "id": "cloudsentinelsUnified"
+}

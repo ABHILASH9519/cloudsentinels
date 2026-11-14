@@ -83,6 +83,30 @@ Defaults:
 
 Override the instance or regions explicitly if the monitored resource changes.
 
+## Forward AWS events into the single local n8n workflow
+
+The n8n bridge is a separate additive stack so it does not attach a second consumer to the existing AWSMonitoringQueue:
+
+- n8n-bridge-template.yaml creates a dedicated SQS queue/DLQ, EventBridge rules for the central domain bus, Lambda CloudWatch alarms, GuardDuty and Security Hub findings, and CloudWatch alarms for the Operations API and Automation Processor Lambdas.
+- server-template.yaml forwards the existing EC2 server's state changes and alarm state changes from eu-north-1 into the central domain bus.
+- deploy-n8n-bridge.ps1 deploys both stacks and deliberately rejects the AWS root identity. Use a least-privileged IAM role/profile with CloudFormation, EventBridge, SQS, CloudWatch, and scoped IAM role permissions.
+- deploy/automation/poll-aws-events.ps1 long-polls the dedicated queue and forwards each EventBridge envelope to the local n8n unified webhook. It deletes an SQS message only after n8n returns a successful workflow response.
+
+From the repository root:
+
+~~~powershell
+aws sso login --profile <least-privileged-profile>
+.\deploy\\aws\\monitoring\\deploy-n8n-bridge.ps1 -AwsProfile <least-privileged-profile>
+~~~
+
+Use the returned N8NEventQueueUrl to start the local poller:
+
+~~~powershell
+.\deploy\\automation\\poll-aws-events.ps1 -QueueUrl <N8NEventQueueUrl> -Region ap-south-1 -AwsProfile <least-privileged-profile>
+~~~
+
+The AWS stacks are deployed successfully. The local AWS CLI currently has no authenticated profile, so the local SQS poller is not yet running. A least-privilege consumer policy is ready to attach to the local SSO role: `arn:aws:iam::115484989078:policy/CloudSentinelsN8NLocalPoller`. Authenticate that profile with `aws sso login` and start the poller. The existing EC2 instance remains stopped; this integration never starts it.
+
 ## Verify
 
 ~~~powershell

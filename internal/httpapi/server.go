@@ -42,6 +42,21 @@ type LocalTelemetry struct {
 	Collector       string    `json:"collector"`
 }
 
+type AgentEvent struct {
+	ClusterID    string    `json:"clusterId"`
+	ClusterName  string    `json:"clusterName"`
+	EventID      string    `json:"eventId"`
+	EventType    string    `json:"eventType"`
+	Severity     string    `json:"severity"`
+	Title        string    `json:"title"`
+	Summary      string    `json:"summary"`
+	ResourceID   string    `json:"resourceId,omitempty"`
+	ResourceKind string    `json:"resourceKind,omitempty"`
+	ResourceName string    `json:"resourceName,omitempty"`
+	Namespace    string    `json:"namespace,omitempty"`
+	OccurredAt   time.Time `json:"occurredAt,omitempty"`
+}
+
 type Server struct {
 	config              config.Config
 	logger              *slog.Logger
@@ -99,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/agent/commands", s.agentCommands)
 	mux.HandleFunc("POST /api/v1/agent/commands/{id}/result", s.agentCommandResult)
 	mux.HandleFunc("POST /api/v1/agent/telemetry", s.agentTelemetry)
+	mux.HandleFunc("POST /api/v1/agent/events", s.agentEvent)
 	mux.HandleFunc("GET /api/v1/agent/telemetry", s.getAgentTelemetry)
 	return s.requestLogger(securityHeaders(s.cors(mux)))
 }
@@ -587,6 +603,47 @@ func (s *Server) agentTelemetry(w http.ResponseWriter, r *http.Request) {
 		s.emitAutomationEvent("health-recovered:"+telemetry.ClusterID, recovered, 0)
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted", "clusterId": telemetry.ClusterID, "collectedAt": telemetry.CollectedAt})
+}
+
+func (s *Server) agentEvent(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	var input AgentEvent
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_agent_event", "Agent event JSON is invalid")
+		return
+	}
+	if !s.authorizeAgent(w, r, input.ClusterID) {
+		return
+	}
+	input.EventID = strings.TrimSpace(input.EventID)
+	input.EventType = strings.ToLower(strings.TrimSpace(input.EventType))
+	input.Severity = strings.ToLower(strings.TrimSpace(input.Severity))
+	input.ResourceKind = strings.ToLower(strings.TrimSpace(input.ResourceKind))
+	input.ResourceName = strings.ToLower(strings.TrimSpace(input.ResourceName))
+	input.Namespace = strings.ToLower(strings.TrimSpace(input.Namespace))
+	input.Title = strings.TrimSpace(input.Title)
+	input.Summary = strings.TrimSpace(input.Summary)
+	if !validTelemetryLabel(input.EventID, 128) || input.EventID == "" || !validTelemetryLabel(input.EventType, 100) || input.EventType == "" || !validTelemetryLabel(input.Severity, 16) || input.Title == "" || len(input.Title) > 180 || len(input.Summary) > 1000 || len(input.ClusterName) > 128 || !validTelemetryLabel(input.ResourceKind, 64) || !validTelemetryLabel(input.ResourceName, 128) || !validTelemetryLabel(input.Namespace, 128) || len(input.ResourceID) > 256 {
+		writeError(w, http.StatusUnprocessableEntity, "invalid_agent_event", "Agent event fields are outside allowed bounds")
+		return
+	}
+	switch input.Severity {
+	case "critical", "high", "medium", "low", "info", "warning", "degraded":
+	default:
+		writeError(w, http.StatusUnprocessableEntity, "invalid_agent_event", "Agent event severity is not supported")
+		return
+	}
+	if input.OccurredAt.IsZero() {
+		input.OccurredAt = time.Now().UTC()
+	}
+	event := automation.Event{
+		SchemaVersion: "1", EventID: input.EventID, EventType: input.EventType, OccurredAt: input.OccurredAt,
+		ClusterID: input.ClusterID, ClusterName: input.ClusterName, SourceType: "kubernetes-agent", Environment: "local",
+		Severity: input.Severity, Title: input.Title, Summary: input.Summary,
+		ResourceID: input.ResourceID, ResourceKind: input.ResourceKind, ResourceName: input.ResourceName, Namespace: input.Namespace,
+	}
+	s.emitAutomationEvent("agent-event:"+input.ClusterID+":"+input.EventID, event, 5*time.Minute)
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted", "eventId": input.EventID, "clusterId": input.ClusterID})
 }
 
 func (s *Server) getAgentTelemetry(w http.ResponseWriter, r *http.Request) {

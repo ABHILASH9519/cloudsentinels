@@ -7,10 +7,6 @@ Parameters:
     Default: i-04ddd1baceeaa4186
     AllowedPattern: '^i-[0-9a-f]{8,17}$'
     Description: Existing CloudSentinels EC2 instance to monitor. This stack never starts or stops it.
-  CentralEventBusArn:
-    Type: String
-    AllowedPattern: '^arn:[^:]+:events:[^:]+:[0-9]{12}:event-bus/.+$'
-    Description: Existing central CloudSentinels EventBridge bus ARN in ap-south-1.
 
 Resources:
   EventForwardingDLQ:
@@ -46,7 +42,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - events:PutEvents
-                Resource: !Ref CentralEventBusArn
+                Resource: arn:aws:events:ap-south-1:115484989078:event-bus/cloudsentinels-domain-events
 
   EC2StateChangeRule:
     Type: AWS::Events::Rule
@@ -65,13 +61,10 @@ Resources:
             - !Ref InstanceId
       Targets:
         - Id: CentralCloudSentinelsBus
-          Arn: !Ref CentralEventBusArn
+          Arn: arn:aws:events:ap-south-1:115484989078:event-bus/cloudsentinels-domain-events
           RoleArn: !GetAtt EventForwardingRole.Arn
           DeadLetterConfig:
             Arn: !GetAtt EventForwardingDLQ.Arn
-          RetryPolicy:
-            MaximumEventAgeInSeconds: 3600
-            MaximumRetryAttempts: 12
 
   EC2AlarmStateChangeRule:
     Type: AWS::Events::Rule
@@ -94,13 +87,10 @@ Resources:
               - OK
       Targets:
         - Id: CentralCloudSentinelsBus
-          Arn: !Ref CentralEventBusArn
+          Arn: arn:aws:events:ap-south-1:115484989078:event-bus/cloudsentinels-domain-events
           RoleArn: !GetAtt EventForwardingRole.Arn
           DeadLetterConfig:
             Arn: !GetAtt EventForwardingDLQ.Arn
-          RetryPolicy:
-            MaximumEventAgeInSeconds: 3600
-            MaximumRetryAttempts: 12
 
   EventForwardingDLQPolicy:
     Type: AWS::SQS::QueuePolicy

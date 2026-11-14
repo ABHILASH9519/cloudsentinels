@@ -1,25 +1,57 @@
-# CloudSentinels desktop Kubernetes agent
+# CloudSentinels cluster agent
 
-The Go agent is intended to run on the operator's desktop or a trusted cluster-adjacent host. It makes outbound HTTPS calls to the Go API and executes a small fixed kubectl allowlist.
+The Go agent collects Kubernetes node/pod/deployment health, warning events and available CPU/memory metrics. It reports telemetry to the Go API and forwards individual cluster signals through the authenticated agent-event endpoint. The Go API signs and dispatches normalized events to the single local n8n workflow.
 
-## Build (Windows)
+## Local Windows host mode
 
-```powershell
-go build -trimpath -o cloudsentinels-agent.exe ./cmd/cloudsentinels-agent
-```
+Use the host mode when the Kubernetes API is local to the developer workstation and the Go API is listening on loopback.
 
-Set `CLOUDSENTINELS_API_URL`, `CLOUDSENTINELS_AGENT_TOKEN` (same dedicated token configured on the Go API), and `CLOUDSENTINELS_AGENT_CLUSTER_ID`. The default cluster ID is `minikube`. Set `CLOUDSENTINELS_AGENT_CONTEXT` if the current kubectl context should not be used. For multiple remote clusters, configure a private `CLOUDSENTINELS_AGENT_TOKENS` JSON map on the API keyed by Airtable record ID; each cluster agent must have its own unique token, and only IDs in that map are accepted.
+~~~powershell
+.\deploy\agent\local\start-agent.ps1 -ClusterId cloudsentinels-local -Context cloudsentinels-local -ApiUrl http://127.0.0.1:8082 -AllowedNamespaces cloudsentinels-system -EnableApprovedRemediation
+~~~
 
-Run with `CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS=false`. It collects node/pod/event data and top metrics every 30 seconds and polls only commands for its cluster ID.
+The script:
 
-## Safety
+- Loads the existing agent bearer token from the repository .env.local without printing it.
+- Builds the Go agent.
+- Creates a context-scoped kubeconfig copy under %LOCALAPPDATA%\CloudSentinels\agents and restricts its file ACL to the current user and SYSTEM.
+- Runs the agent as a background process with a 30-second collection interval.
+- Enables only the existing approved-remediation code path when the switch is supplied.
+- Restricts mutating commands to the configured namespace allowlist (default: cloudsentinels-system).
 
-- No arbitrary shell or command string is accepted.
-- `collect-snapshot` and `rollout-status` are read-only.
-- `restart-deployment` and `rollback-deployment` require signed webhook approval plus server and local mutation flags explicitly enabled. Both verify rollout status after the change. Use `POST /api/v1/remediation/preview` first; it is always dry-run and never queues a command.
-- No delete, scale, exec, apply, credential export or arbitrary scripts are supported. Rollback reverts the Deployment to its previous rollout revision; inspect rollout history and application data compatibility before approval.
-- Use a least-privilege kubeconfig/RBAC identity. Do not use a cluster-admin context for routine monitoring.
+Stop the agent and remove its context-scoped kubeconfig:
 
-An in-cluster deployment template and read-only RBAC are in `kubernetes/`. Build the container with `Dockerfile`, publish it to your registry, create the `cloudsentinels-agent-token` Secret, replace the manifest placeholders, and apply `agent-readonly-rbac.yaml` plus `agent-deployment.yaml`. Use the Airtable record ID as the agent cluster ID so telemetry merges into the matching inventory row.
+~~~powershell
+.\deploy\agent\local\stop-agent.ps1 -ClusterId cloudsentinels-local
+~~~
 
-The API command queue and telemetry cache are currently process-local. For production multi-replica use, move command delivery and telemetry history to durable SQS/DynamoDB storage and enable persistent audit records before relying on the API for operational response.
+### Attach both local Kubernetes clusters to the same n8n workflow
+
+The standalone local Minikube context is `cloudsentinels-local`. Docker Desktop Kubernetes is a separate cluster and appears as `docker-desktop` only after it is created in Docker Desktop.
+
+1. In Docker Desktop, open **Kubernetes** and select **Create cluster**. Wait until `docker desktop kubernetes status` reports `State: enabled` and `kubectl config get-contexts` includes `docker-desktop`.
+2. Run this helper to start/restart the per-cluster Go agents:
+
+~~~powershell
+.\deploy\agent\local\attach-local-clusters.ps1 -IncludeDockerDesktop
+~~~
+
+Both agents send telemetry and normalized cluster events to the same Go API and the same local n8n unified workflow. If Docker Desktop Kubernetes has not been created yet, the helper keeps the Minikube agent attached and reports the missing Docker context without failing the Minikube path.
+
+The local host process uses the selected user's kubeconfig identity for Kubernetes API access. Do not run this mode with an untrusted kubeconfig. Mutation actions remain restricted by the fixed action allowlist, signed human approval and namespace allowlist. For production clusters, prefer the in-cluster Deployment and dedicated ServiceAccount/RBAC manifests below.
+
+## In-cluster mode
+
+- agent-deployment.yaml is a deployment template; replace the image, API URL, cluster ID and token secret reference before applying.
+- agent-readonly-rbac.yaml grants cluster-wide read-only access to nodes, pods, events, deployments, ReplicaSets and metrics.
+- agent-remediation-role-local.yaml is a sample namespace-scoped Role/RoleBinding for deployment get/patch inside cloudsentinels-system only.
+- Mutations are disabled in the Deployment template by default. Keep them disabled until the command approval and namespace policy have been reviewed.
+
+The local Minikube cluster currently has the read-only ClusterRole/ClusterRoleBinding and the cloudsentinels-system scoped Role/RoleBinding applied. The active host agent currently uses its context-scoped kubeconfig; the in-cluster Deployment remains a template and is not deployed.
+
+## Agent event API
+
+- POST /api/v1/agent/telemetry — authenticated cluster snapshot.
+- POST /api/v1/agent/events — authenticated, bounded cluster signal with event ID, severity, resource kind/name, namespace and timestamp.
+- GET /api/v1/agent/commands?clusterId=<id> — retrieve commands for the authenticated cluster.
+- Command results are reported to the Go API; only restart-deployment and rollback-deployment are mutating actions in the current agent allowlist.

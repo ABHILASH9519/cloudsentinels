@@ -1,44 +1,59 @@
 # CloudSentinels + local n8n
 
-The local n8n instance is an optional, independent automation destination. CloudSentinels continues to support Zapier; when both URLs are configured, the Go API fans each normalized event out to both receivers independently. A failure at one receiver does not prevent the other delivery.
+The local n8n instance is the single workflow orchestrator for cluster and AWS events. The Go API remains the authenticated event gateway for Kubernetes agents and signs events before dispatch. Zapier remains a separate optional destination.
 
 ## Local runtime
 
-- Docker image: `n8nio/n8n:latest` (the existing pulled image is reused).
-- Container: `n8n`, bound only to `127.0.0.1:5678`.
-- Persistent storage: existing Docker volume `n8n_data` mounted at `/home/node/.n8n`.
-- Editor: <http://localhost:5678>.
-- Production webhook: `http://127.0.0.1:5678/webhook/cloudsentinels/events`.
-- Time zone: `Asia/Kolkata`; restart policy: `unless-stopped`.
+- Docker image: n8nio/n8n:latest.
+- Container: n8n, bound only to 127.0.0.1:5678.
+- Persistent storage: Docker volume n8n_data mounted at /home/node/.n8n.
+- Editor: http://localhost:5678.
+- Active workflow: CloudSentinels - Unified Multi-Cluster Self-Healing (ID cloudsentinelsUnified).
+- Webhook: http://127.0.0.1:5678/webhook/cloudsentinels/unified-events.
+- Webhook response mode: lastNode.
+- Publish/update helper: deploy/automation/publish-unified-workflow.ps1.
+- Time zone: Asia/Kolkata; restart policy: unless-stopped.
 
-## Workflow
+## Workflow behavior
 
-`CloudSentinels - Event Triage and Routing` is active and imported from `n8n-cloudsentinels-events.json`.
+The active workflow accepts:
+- CloudSentinels normalized JSON events.
+- Authenticated Kubernetes agent events forwarded by the Go API.
+- AWS EventBridge envelopes delivered by the local SQS poller.
 
-1. **Webhook intake** accepts the normalized CloudSentinels POST event.
-2. **Validate and Normalize Event** requires `eventId` and `eventType`, bounds key text fields, allowlists event fields, normalizes severity, classifies the route, and carries the delivery headers' presence as diagnostic metadata.
-3. **Critical Event?** routes critical/offline/not-ready events to **Prepare Critical Alert** (P1, on-call/incident/email destinations recommended, human review required).
-4. **Degraded Event?** routes high/warning/medium degradation events to **Prepare Degraded Alert** (P2, operations channel recommended, human review required).
-5. **Recovery Event?** routes recovery/online/healthy events to **Prepare Recovery Notice** (P3, operations channel recommended).
-6. All remaining events reach **Prepare General Audit Event** (P4).
+It validates and normalizes each event, derives severity and target, routes the event through the shared triage branches, and produces a shared remediation runbook. The runbook includes the target adapter, diagnostic actions, mutation actions (if any), approval requirement, verification requirement and audit metadata.
 
-Each branch produces a structured triage record in the n8n execution output. This makes routing testable now and provides a clean hand-off contract for notification integrations. No Slack, Teams, email, ticketing, or other external destination credentials were supplied, so the branch nodes prepare (but do not dispatch) notifications. The workflow never runs Kubernetes mutations or remediation.
+The shared lifecycle is intake → normalize → correlate → classify → diagnose → allowlist policy → signed human approval → authorized adapter → verify → rollback/escalate → audit.
 
-**Security note:** the Go dispatcher signs requests with HMAC-SHA256 and sends `X-CS-Timestamp`, `X-CS-Signature`, and `X-CS-Event-ID`. The current workflow records whether the signature headers are present; it does not independently verify the HMAC. Keep n8n bound to loopback and do not expose port 5678 publicly. Do not treat header presence as cryptographic authentication.
+n8n does not execute arbitrary kubectl, shell or AWS CLI commands. It always reports remediationExecuted=false. Kubernetes mutation commands remain in the Go agent and require signed human approval plus the agent namespace allowlist. EC2 and Lambda actions are currently read-only diagnostics. GuardDuty/Security Hub events require human security review; automatic isolation and credential changes are disabled.
+
+## Local cluster connection
+
+The active Minikube context cloudsentinels-local is connected through the Go agent. The agent reports telemetry and individual warning/health events to the Go API at http://127.0.0.1:8082. The API forwards normalized events to this workflow.
+
+Start the agent with deploy/agent/local/start-agent.ps1. The default mutation namespace allowlist is cloudsentinels-system. Docker Desktop Kubernetes is not enabled yet; after enabling it in Docker Desktop Settings → Kubernetes and confirming the docker-desktop context exists, start a second agent using cluster ID cloudsentinels-docker-desktop and context docker-desktop.
 
 ## Go API configuration
 
-Keep these in the ignored repository-root `.env.local`:
+Keep the following in the ignored repository-root .env.local:
 
-```dotenv
-N8N_WEBHOOK_URL=http://127.0.0.1:5678/webhook/cloudsentinels/events
+~~~dotenv
+N8N_WEBHOOK_URL=http://127.0.0.1:5678/webhook/cloudsentinels/unified-events
 N8N_SIGNING_SECRET=<separate random secret, at least 32 characters>
-```
+~~~
 
-Zapier remains configured separately with `ZAPIER_CATCH_HOOK_URL` and `ZAPIER_SIGNING_SECRET`. A Zapier Catch Hook URL must be created in the user's Zapier account before that destination can be live.
+The Go API currently reports n8n_configured=true. The workflow records whether signature headers are present; it does not independently verify the HMAC. Keep n8n bound to loopback and do not expose port 5678 publicly. Do not treat header presence as cryptographic authentication.
+
+Zapier remains configured separately with ZAPIER_CATCH_HOOK_URL and ZAPIER_SIGNING_SECRET. A Zapier Catch Hook URL must be created in the user's Zapier account before that destination can be live.
+
+## AWS bridge
+
+The AWS bridge uses a dedicated SQS queue so it does not compete with the existing CloudSentinels processor queue. CloudWatch alarms for the two deployed Lambda functions, EC2 event forwarding from eu-north-1, GuardDuty and Security Hub rules are prepared in CloudFormation. The local poller forwards queue messages to the unified webhook and deletes messages only after a successful workflow response.
+
+The bridge templates passed AWS CloudFormation ValidateTemplate, but the stacks are not deployed. The local AWS CLI has no authenticated profile, and the deployment script refuses the AWS root identity. Use a least-privileged AWS SSO/role profile, deploy with deploy/aws/monitoring/deploy-n8n-bridge.ps1, then run deploy/automation/poll-aws-events.ps1 with the returned queue URL.
 
 ## Verification
 
-With the local API running at `http://127.0.0.1:18080`, authenticate and POST to `/api/v1/n8n/test`. Zapier uses `/api/v1/zapier/test`. A successful API response confirms the receiver returned a successful HTTP response. Inspect n8n execution history to confirm which branch completed and inspect the branch's triage output.
+Synthetic test events for Kubernetes DeploymentUnhealthy, EC2 CloudWatch alarm, Lambda CloudWatch alarm and GuardDuty Finding all returned HTTP 200 from the unified webhook. The resulting runbooks selected the expected target adapters and reported NOT_EXECUTED.
 
-The workflow is read-only with respect to clusters. CloudSentinels policy and agent-side mutation flags remain authoritative.
+The Go API agent-event endpoint accepts authenticated events. The Go test suite passes. No real AWS alarm or security finding was generated, and no production mutation was performed.

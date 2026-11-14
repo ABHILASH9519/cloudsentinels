@@ -38,6 +38,8 @@ spec:
               value: 30s
             - name: CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS
               value: "false"
+            - name: CLOUDSENTINELS_AGENT_ALLOWED_NAMESPACES
+              value: cloudsentinels-system
             - name: CLOUDSENTINELS_AGENT_TOKEN
               valueFrom:
                 secretKeyRef:

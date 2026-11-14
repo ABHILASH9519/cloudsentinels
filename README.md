@@ -2,17 +2,17 @@
 
 **A Go-first cloud and Kubernetes observability platform with a React dashboard, explainable incident triage and approval-gated response workflows.**
 
-Go now owns the cluster inventory/monitoring API, explainable cluster analysis, Kubernetes agent and a standalone Lambda adapter. The React/TypeScript frontend is the presentation layer. The currently deployed AWS Operations Lambda still serves persistent incident/alert/profile routes, and supporting EventBridge/SQS/Zapier workers remain Node.js; porting those deployed handlers into Go is a remaining migration task.
+Go owns the cluster inventory/monitoring API, explainable cluster analysis, Kubernetes agent and a standalone Lambda adapter. The React/TypeScript frontend is the presentation layer. The currently deployed AWS Operations Lambda still serves persistent incident/alert/profile routes, and supporting EventBridge/SQS/Zapier workers remain Node.js; porting those deployed handlers into Go is a remaining migration task.
 
-> **Latest local verification (14 Nov 2026; AWS runtime last verified 13 Nov):** a Docker-backed Minikube control plane is running locally; its read-only Go agent is connected to the Go API and reports real node/pod telemetry. The exact 20-row Airtable cluster inventory is mounted in the local cluster. Local CoreDNS and metrics-server are Ready, and kubectl top nodes returns real CPU/memory measurements from the Minikube node. The AWS API Gateway/Lambda runtime is deployed and its health route returns HTTP 200. EKS and a standalone EC2 Go API host have not yet been provisioned; EKS is intentionally deferred to the review-day deployment window. Airtable child-table links and live remote-cluster credentials are not present in the current Airtable records.
+> **Latest local verification (15 Nov 2026; AWS runtime last verified 15 Nov):** local n8n is running with the unified multi-cluster workflow published. The Minikube profile cloudsentinels-local is running; its Go agent reports 1/1 Ready node and 9/9 healthy pods to the Go API on port 8082. The agent forwards authenticated cluster events into the unified n8n workflow. Deployment restart/rollback is approval-gated and restricted by an agent namespace allowlist. Docker Desktop's built-in Kubernetes is disabled and the separate minikube context is unreachable. The AWS Lambda functions are active in ap-south-1, while the CloudSentinel EC2 server in eu-north-1 is stopped. AWS EventBridge/SQS bridge stacks are deployed in ap-south-1 and eu-north-1, including Lambda and EC2 monitoring alarms; a synthetic event reached the dedicated SQS queue. The local SQS poller is pending AWS CLI SSO authentication. EKS is not provisioned.
 
 ## Features
 
 - **Cluster inventory:** 20 sanitized cluster records loaded from the checked-in Airtable snapshot; optional server-side Airtable API refresh.
 - **Monitoring:** normalized cluster health, node/pod counts, reported CPU/memory and agent telemetry freshness.
 - **Explainable AI triage:** deterministic rules inspect cluster health, CPU, state and missing telemetry; findings include evidence, confidence and recommended checks.
-- **Kubernetes agent:** Go desktop/in-cluster agent collects node, pod, warning-event and resource metrics through a fixed `kubectl` allowlist.
-- **Automation:** HMAC-signed Zapier webhook events and inbound commands; command queue supports read-only collection/status and separately gated deployment restart.
+- **Kubernetes agent:** Go desktop/in-cluster agent collects node, pod, warning-event and resource metrics; approved deployment restart/rollback is restricted by the agent action and namespace allowlists.
+- **Unified automation:** one local n8n workflow classifies Kubernetes, EC2, Lambda and supported security events into the same incident lifecycle and remediation runbook. HMAC-signed Go API events and Zapier notifications remain separate destinations.
 - **Three execution modes:** persistent online Go server, a Go API Gateway/Lambda adapter (built, not yet the active deployed Operations API), and offline/local Kubernetes agent.
 - **Security controls:** Cognito ID-token validation for hosted use, local-only development auth, per-cluster agent credentials, CORS allowlist and approval gates for mutations.
 
@@ -32,13 +32,19 @@ React + TypeScript dashboard
           +<----- Go Kubernetes agent (outbound polling + telemetry)
           |
           +------> API Gateway / AWS Lambda adapter
+          +------> Signed event dispatch to local n8n workflow
+
+AWS EventBridge / SQS --> local poller --> same n8n workflow
 ```
 
 | Runtime | Purpose | Current status |
 |---|---|---|
 | Online server | Go API, inventory, monitoring, analysis and command broker | Running locally; standalone EC2 host not provisioned |
 | Online serverless | AWS API Gateway HTTP API, Lambda, DynamoDB, EventBridge and SQS | Deployed in ap-south-1; health route verified |
-| Offline/local Kubernetes | Docker-backed Minikube plus read-only Go agent | Running; 1 Ready node and live telemetry accepted by the API |
+| Offline/local Kubernetes | Minikube profile cloudsentinels-local plus Go agent | Running; 1 Ready node, 9/9 healthy pods; approval-gated actions limited to cloudsentinels-system |
+| Local automation | Docker n8n + unified workflow | Running and tested with synthetic Kubernetes, EC2, Lambda, GuardDuty and DLQ events |
+| Docker Desktop Kubernetes | Built-in Docker Desktop cluster | Disabled; enable in Docker Desktop Settings → Kubernetes before attaching its agent |
+| AWS → local n8n bridge | EventBridge → dedicated SQS → local poller | AWS stacks deployed; synthetic queue delivery verified; local poller pending AWS CLI SSO login |
 
 ## Run the local operational stack (Windows)
 
@@ -72,14 +78,14 @@ Stop the services started by the script:
 powershell -ExecutionPolicy Bypass -File .\scripts\stop-local-server.ps1
 ```
 
-See [the real-environment operations runbook](docs/operations/real-environment-runbook.md) for local Kubernetes setup, AWS deployment boundaries and acceptance checks.
+See [the real-environment operations runbook](docs/operations/real-environment-runbook.md) for local Kubernetes setup and acceptance checks, [the unified automation runbook](deploy/automation/README.md) for the single n8n workflow and AWS bridge, and [the cluster agent runbook](deploy/agent/README.md) for local/in-cluster agent setup.
 
 ## Operational verification
 
 1. Run `kubectl --context cloudsentinels-local get nodes -o wide` and confirm the node is Ready.
 2. Run `kubectl --context cloudsentinels-local get pods -n cloudsentinels-system` and confirm the Airtable inventory service is Running.
 3. Read the in-cluster inventory at `http://airtable-inventory.cloudsentinels-system.svc.cluster.local/inventory/inventory.json`; it contains the exact 20-row Airtable snapshot.
-4. Open **Monitoring** and verify the `local-docker-k8s` agent heartbeat, real node/pod counts and collection timestamp.
+4. Open **Monitoring** and verify the `cloudsentinels-local` agent heartbeat, real node/pod counts and collection timestamp.
 5. Open **AI Insights** and review explainable findings. Airtable-reported metrics must remain labelled as inventory data, not live telemetry.
 
 ## Development and verification
@@ -116,6 +122,7 @@ The GitHub Actions workflows validate the Go API, agent, Go Lambda ARM64 build, 
 | `POST /api/v1/zapier/test` | Test configured Zapier Catch Hook |
 | `POST /api/v1/zapier/commands` | HMAC-verified inbound automation command |
 | `POST /api/v1/agent/telemetry` | Authenticated agent telemetry ingestion |
+| `POST /api/v1/agent/events` | Authenticated per-resource Kubernetes signals forwarded to n8n |
 
 Protected routes require a valid bearer token. See [the integration guide](docs/integrations/airtable-zapier-desktop-agent.md) and [authentication setup](docs/architecture/authentication-setup.md).
 

@@ -33,6 +33,7 @@ type agent struct {
 	sourceType          string
 	environment         string
 	allowMutations      bool
+	allowedNamespaces   map[string]bool
 	lambdaTelemetryURL  string
 	lambdaSigningSecret string
 	client              *http.Client
@@ -112,6 +113,7 @@ func main() {
 		apiURL: apiURL, token: token, clusterID: clusterID, context: ctxName,
 		sourceType: sourceType, environment: environment,
 		allowMutations:     strings.EqualFold(os.Getenv("CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS"), "true"),
+		allowedNamespaces:  parseAllowedNamespaces(os.Getenv("CLOUDSENTINELS_AGENT_ALLOWED_NAMESPACES")),
 		lambdaTelemetryURL: lambdaURL, lambdaSigningSecret: lambdaSecret,
 		client: &http.Client{Timeout: 15 * time.Second},
 	}
@@ -191,9 +193,7 @@ func (a *agent) collectAndSend() bool {
 		return false
 	}
 	log.Printf("telemetry sent: nodes=%d ready_nodes=%d pods=%d ready_pods=%d warning_events=%d cpu=%.1f%%", payload.NodeCount, payload.ReadyNodeCount, payload.PodCount, payload.HealthyPodCount, payload.WarningEvents, payload.CPUUsagePercent)
-	if a.lambdaTelemetryURL != "" {
-		a.forwardClusterSignals(nodes.Items, recentWarnings, deployments.Items, cpu)
-	}
+	a.forwardClusterSignals(nodes.Items, recentWarnings, deployments.Items, cpu)
 	return true
 }
 
@@ -293,10 +293,10 @@ func (a *agent) forwardClusterSignals(nodes, events, deployments []kubeItem, cpu
 			switch {
 			case condition.Type == "Ready" && condition.Status != "True":
 				id := stableEventID(a.clusterID, "node", node.Metadata.Name, condition.LastTransitionTime, condition.Status)
-				a.postLambdaEvent(lambdaClusterEvent{EventID: id, EventType: "NodeNotReady", Severity: "critical", Title: "Kubernetes node is not Ready", Message: "Node condition Ready=" + condition.Status, ResourceKind: "Node", ResourceName: node.Metadata.Name})
+				a.postClusterEvent(lambdaClusterEvent{EventID: id, EventType: "NodeNotReady", Severity: "critical", Title: "Kubernetes node is not Ready", Message: "Node condition Ready=" + condition.Status, ResourceKind: "Node", ResourceName: node.Metadata.Name})
 			case condition.Type == "MemoryPressure" && condition.Status == "True":
 				id := stableEventID(a.clusterID, "memory", node.Metadata.Name, condition.LastTransitionTime)
-				a.postLambdaEvent(lambdaClusterEvent{EventID: id, EventType: "MemoryPressure", Severity: "high", Title: "Kubernetes node memory pressure", Message: "Node reports MemoryPressure=True", ResourceKind: "Node", ResourceName: node.Metadata.Name})
+				a.postClusterEvent(lambdaClusterEvent{EventID: id, EventType: "MemoryPressure", Severity: "high", Title: "Kubernetes node memory pressure", Message: "Node reports MemoryPressure=True", ResourceKind: "Node", ResourceName: node.Metadata.Name})
 			}
 		}
 	}
@@ -313,7 +313,7 @@ func (a *agent) forwardClusterSignals(nodes, events, deployments []kubeItem, cpu
 			eventTime = event.EventTime
 		}
 		id := stableEventID(a.clusterID, event.Metadata.UID, event.InvolvedObject.Kind, event.InvolvedObject.Namespace, event.InvolvedObject.Name, event.Reason, eventTime, event.Message)
-		a.postLambdaEvent(lambdaClusterEvent{
+		a.postClusterEvent(lambdaClusterEvent{
 			EventID: id, EventType: eventType, Severity: severity,
 			Title:   "Kubernetes " + eventType + ": " + event.InvolvedObject.Name,
 			Message: event.Message, Namespace: event.InvolvedObject.Namespace,
@@ -335,7 +335,7 @@ func (a *agent) forwardClusterSignals(nodes, events, deployments []kubeItem, cpu
 			}
 		}
 		id := stableEventID(a.clusterID, "deployment", deployment.Metadata.Namespace, deployment.Metadata.Name, transition, strconv.FormatInt(int64(deployment.Status.ReadyReplicas), 10), strconv.FormatInt(int64(desired), 10))
-		a.postLambdaEvent(lambdaClusterEvent{
+		a.postClusterEvent(lambdaClusterEvent{
 			EventID: id, EventType: "DeploymentUnhealthy", Severity: "high",
 			Title:     "Kubernetes deployment has unavailable replicas",
 			Message:   fmt.Sprintf("Ready replicas %d of %d", deployment.Status.ReadyReplicas, desired),
@@ -345,12 +345,27 @@ func (a *agent) forwardClusterSignals(nodes, events, deployments []kubeItem, cpu
 	if cpuPercent >= 80 {
 		bucket := strconv.FormatInt(time.Now().Unix()/300, 10)
 		id := stableEventID(a.clusterID, "cpu-threshold", bucket)
-		a.postLambdaEvent(lambdaClusterEvent{
+		a.postClusterEvent(lambdaClusterEvent{
 			EventID: id, EventType: "CpuThresholdExceeded", Severity: "high",
 			Title:        "Kubernetes node CPU usage is high",
 			Message:      fmt.Sprintf("Average node CPU usage is %.1f%% (threshold 80%%)", cpuPercent),
 			ResourceKind: "Cluster", ResourceName: a.context,
 		})
+	}
+}
+
+func (a *agent) postClusterEvent(event lambdaClusterEvent) {
+	payload := httpapi.AgentEvent{
+		ClusterID: a.clusterID, ClusterName: a.context, EventID: event.EventID,
+		EventType: event.EventType, Severity: event.Severity, Title: event.Title,
+		Summary: event.Message, ResourceID: event.ResourceName, ResourceKind: event.ResourceKind,
+		ResourceName: event.ResourceName, Namespace: event.Namespace, OccurredAt: time.Now().UTC(),
+	}
+	if err := a.post("/api/v1/agent/events", payload, nil); err != nil {
+		log.Printf("cluster event upload failed: type=%s error=%v", event.EventType, err)
+	}
+	if a.lambdaTelemetryURL != "" {
+		a.postLambdaEvent(event)
 	}
 }
 
@@ -437,6 +452,9 @@ func (a *agent) execute(command automation.Command) (string, string) {
 		if !safeResource.MatchString(command.Namespace) || !safeResource.MatchString(command.Deployment) {
 			return "blocked", "Invalid Kubernetes namespace or deployment identifier."
 		}
+		if !a.allowedNamespaces[command.Namespace] {
+			return "blocked", "Mutation target namespace is not in CLOUDSENTINELS_AGENT_ALLOWED_NAMESPACES."
+		}
 		var out string
 		var err error
 		if command.Action == "rollback-deployment" {
@@ -522,6 +540,20 @@ func readNodeMetrics(ctx context.Context) (float64, float64) {
 		return 0, 0
 	}
 	return cpuTotal / float64(count), memoryTotal
+}
+
+func parseAllowedNamespaces(raw string) map[string]bool {
+	allowed := make(map[string]bool)
+	for _, namespace := range strings.Split(raw, ",") {
+		namespace = strings.TrimSpace(strings.ToLower(namespace))
+		if namespace != "" && safeResource.MatchString(namespace) {
+			allowed[namespace] = true
+		}
+	}
+	if len(allowed) == 0 {
+		allowed["cloudsentinels-system"] = true
+	}
+	return allowed
 }
 
 func env(key, fallback string) string {

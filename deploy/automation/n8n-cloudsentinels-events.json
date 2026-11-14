@@ -1,10 +1,10 @@
 {
-    "name":  "CloudSentinels - Event Triage and Routing",
+    "name":  "CloudSentinels - Event Triage Base Template",
     "nodes":  [
                   {
                       "parameters":  {
                                          "httpMethod":  "POST",
-                                         "path":  "cloudsentinels/events",
+                                         "path":  "cloudsentinels/events-base",
                                          "responseMode":  "onReceived",
                                          "options":  {
 
@@ -18,7 +18,7 @@
                                        240,
                                        300
                                    ],
-                      "webhookId":  "7e0e20d0-82d1-4ac4-b2e5-f5ed74f11c10"
+                      "webhookId":  "d8a1c8b5-43bd-4bb9-b6d9-3ac7a4b53b2f"
                   },
                   {
                       "parameters":  {
@@ -277,6 +277,6 @@
     "settings":  {
                      "executionOrder":  "v1"
                  },
-    "active":  true,
-    "id":  "cloudsentinelsLocalEvents"
+    "active":  false,
+    "id":  "cloudsentinelsEventsBase"
 }

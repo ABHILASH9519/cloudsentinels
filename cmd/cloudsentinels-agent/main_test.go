@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/hex"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/ABHILASH9519/cloudsentinels/internal/automation"
 )
 
 func TestAllowedAgentAPIURL(t *testing.T) {
@@ -83,5 +86,36 @@ func TestFilterRecentWarningsExcludesHistoricalAndNormalEvents(t *testing.T) {
 	filtered := filterRecentWarnings([]kubeItem{recent, old, normal, invalid}, now, 5*time.Minute)
 	if len(filtered) != 1 || filtered[0].Reason != "BackOff" {
 		t.Fatalf("expected only the recent warning event, got %#v", filtered)
+	}
+}
+
+func TestParseAllowedNamespacesDefaultsAndNormalizes(t *testing.T) {
+	defaults := parseAllowedNamespaces("")
+	if !defaults["cloudsentinels-system"] || len(defaults) != 1 {
+		t.Fatalf("unexpected default namespace allowlist: %#v", defaults)
+	}
+	custom := parseAllowedNamespaces("cloudsentinels-system, Payments,invalid namespace")
+	if !custom["cloudsentinels-system"] || !custom["payments"] || len(custom) != 2 {
+		t.Fatalf("unexpected normalized namespace allowlist: %#v", custom)
+	}
+}
+
+func TestExecuteBlocksMutationOutsideAllowedNamespace(t *testing.T) {
+	a := &agent{
+		clusterID:         "cluster-a",
+		allowMutations:    true,
+		allowedNamespaces: map[string]bool{"cloudsentinels-system": true},
+	}
+	command := automation.Command{
+		ClusterID:      "cluster-a",
+		Action:         "restart-deployment",
+		Namespace:      "default",
+		Deployment:     "test-api",
+		ApprovalStatus: "approved",
+		ApprovedBy:     "authorized-operator",
+	}
+	status, result := a.execute(command)
+	if status != "blocked" || !strings.Contains(result, "namespace is not in") {
+		t.Fatalf("mutation outside allowlist must be blocked, got %q: %s", status, result)
 	}
 }
