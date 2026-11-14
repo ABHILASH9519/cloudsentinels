@@ -14,10 +14,14 @@ if ($IncludeDockerDesktop) {
   $contexts += @{Context="docker-desktop";ClusterId="docker-desktop-kubernetes";Environment="local-docker-desktop"}
 }
 
+# start-agent.ps1 intentionally sets KUBECONFIG for its isolated agent process.
+# Preserve the operator's source kubeconfig so the next cluster context can be exported too.
+$sourceKubeconfig = $env:KUBECONFIG
 $available = @(& kubectl config get-contexts -o name)
 if ($LASTEXITCODE -ne 0) { throw "Could not list kubeconfig contexts." }
 
 foreach ($target in $contexts) {
+  $env:KUBECONFIG = $sourceKubeconfig
   if ($available -notcontains $target.Context) {
     if ($target.Context -eq "docker-desktop") {
       Write-Warning "Docker Desktop Kubernetes context is not present. In Docker Desktop > Kubernetes, select Create cluster and wait for State=enabled, then rerun with -IncludeDockerDesktop."
@@ -33,5 +37,8 @@ foreach ($target in $contexts) {
   }
 
   & $startAgent -ClusterId $target.ClusterId -Context $target.Context -ApiUrl $ApiUrl -Environment $target.Environment -AllowedNamespaces $AllowedNamespaces -EnableApprovedRemediation
-  if ($LASTEXITCODE -ne 0) { throw "Agent startup failed for context $($target.Context)." }
+  $agentExitCode = $LASTEXITCODE
+  $env:KUBECONFIG = $sourceKubeconfig
+  if ($agentExitCode -ne 0) { throw "Agent startup failed for context $($target.Context)." }
 }
+$env:KUBECONFIG = $sourceKubeconfig
