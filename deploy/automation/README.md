@@ -1,4 +1,4 @@
-﻿# Unified CloudSentinels automation (local n8n)
+# Unified CloudSentinels automation (local n8n)
 
 CloudSentinels defines one local n8n workflow for a shared incident lifecycle across AWS EC2, AWS Lambda, Docker Desktop Kubernetes and standalone Minikube Kubernetes.
 
@@ -22,15 +22,18 @@ All four adapters are connected in the same main execution path before **Unified
 
 ## Runtime status (2026-11-15)
 
-The workflow definition and its four adapter scripts pass local static/fixture validation. A live n8n publish or execution could not be verified during the latest check:
+The unified workflow is currently published and active in the local n8n container:
 
-- Docker CLI could not connect to the Docker Desktop Linux engine named pipe.
-- No Docker containers were listed by the Docker daemon.
-- Local n8n health check at `http://127.0.0.1:5678/healthz` failed to connect; port 5678 had no listener.
-- Kubernetes API requests to both `docker-desktop` and `cloudsentinels-local` were refused. Their kubeconfig contexts exist, but neither cluster is currently verified reachable.
+- Docker Desktop engine: reachable (server version 29.3.1).
+- n8n container: running; `/healthz` returned HTTP 200.
+- Persisted n8n export: workflow ID `cloudsentinelsUnified`, `active=true`, 15 nodes, including all four connector Code nodes.
+- Go API: `/healthz` returned `status=ok` on port 8082.
+- Docker Desktop Kubernetes: context `docker-desktop`, node `desktop-control-plane` Ready.
+- Minikube: context `cloudsentinels-local`, node Ready after `minikube update-context` refreshed its stale API endpoint.
+- Both isolated Go agents are running and posting telemetry/events to the Go API every 30 seconds.
+- Four live synthetic POSTs to the active n8n webhook (EC2, Lambda, Docker Desktop and Minikube) each reached the shared remediation policy and returned a target-specific runbook with `executionStatus=NOT_EXECUTED`.
 
-Do not treat a saved workflow JSON, kubeconfig context, or prior test record as proof that the current local services are running. The publish script below requires a running Docker daemon and an n8n container.
-
+**Remaining cluster health warnings:** Minikube's `storage-provisioner` pod is in Error, and Docker Desktop's `kube-scheduler` pod is not Ready after API-server request timeouts (the controller-manager has also restarted). Nodes are Ready, but these control-plane/add-on warnings need diagnosis before calling either cluster fully healthy. AWS SQS-to-local-n8n polling still requires AWS CLI SSO authentication.
 ## Shared incident lifecycle
 
 Every source follows the same stages:
