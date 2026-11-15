@@ -1,4 +1,4 @@
-﻿# Firebase Authentication — Frontend setup
+# Firebase Authentication — Frontend setup
 
 The React/Vite frontend uses the Firebase Web modular SDK. The Firebase Web App configuration is public client configuration; it is not a service-account credential. Never place a Firebase Admin service-account private key in `VITE_*` variables or frontend source.
 
@@ -10,6 +10,15 @@ The React/Vite frontend uses the Firebase Web modular SDK. The Firebase Web App 
 4. Under **Authentication → Settings → Authorized domains**, add the exact frontend hostnames used for development and deployment (for example `localhost` and your production domain). Do not add wildcard domains.
 
 ## 2. Configure the local frontend
+
+For a guided local setup, first download the Firebase Admin service-account JSON from the Firebase project settings and store it outside this repository. Then run this helper from the repository root:
+
+```powershell
+.\scripts\configure-firebase-local.ps1
+```
+
+It prompts for the four public Web App values and the external service-account file path, checks that both credentials belong to the same Firebase project, and writes only the required variables to the ignored root and frontend `.env.local` files. It never copies the Admin private key into the repository or browser environment. Restart the API and Vite after it completes.
+
 
 Copy the values from the Firebase Web App config into `src/frontend/.env.local`:
 
