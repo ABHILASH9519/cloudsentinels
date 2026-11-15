@@ -1,4 +1,4 @@
-# CloudSentinels review readiness â€” 16 November 2026
+# CloudSentinels review readiness ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 16 November 2026
 
 **Repository:** `ABHILASH9519/cloudsentinels`  
 **Branch:** `feat/airtable-cluster-monitoring-zapier`  
@@ -8,7 +8,7 @@
 
 The local development environment is operational, the hosted AWS foundation is deployed, and the frontend/API routing changes are committed. The project is **not yet production-ready** because Firebase configuration and the hosted runtime migration still require external setup and a non-root AWS deployment identity.
 
-## Local environment â€” verified
+## Local environment ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â verified
 
 | Component | Observed state |
 |---|---|
@@ -23,7 +23,7 @@ The local development environment is operational, the hosted AWS foundation is d
 
 The API liveness check is not the same as readiness. Firebase sign-in and protected Go API routes must not be presented as working until `/readyz` returns 200 and a real Firebase ID token passes `GET /api/v1/auth/me`.
 
-## Hosted AWS â€” verified
+## Hosted AWS ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â verified
 
 | Component | Observed state |
 |---|---|
@@ -38,7 +38,7 @@ The API liveness check is not the same as readiness. Firebase sign-in and protec
 
 The currently deployed API Gateway still has the Cognito JWT authorizer and is missing `GET /automation/events` and `POST /telemetry/events`. The current repository runtime template uses the Firebase JWT authorizer and includes those routes. The live `/automation/events` endpoint currently returns 404. A successful `/health` response therefore does not establish that the full hosted application is current.
 
-The hosted frontend preview for commit `ba2f8b6` built successfully and is Ready. Its AWS API URL and region are configured for this branch. Firebase Web App configuration is still missing, so hosted sign-in is not yet verified. `aws-on.ps1` now requires `FirebaseProjectID`, deploys the current Firebase JWT template, and refuses root credentials. `aws-off.ps1` also refuses root credentials.
+The hosted frontend preview for commit `d0c72b1` built successfully and is Ready: `https://devops-ipcww6l8v-abhilashs-projects-d66ddd5e.vercel.app` (Vercel preview protection may require the project owner to sign in). Its AWS API URL and region are configured for this branch. Firebase Web App configuration is still missing, so hosted sign-in is not yet verified. `aws-on.ps1` now requires `FirebaseProjectID`, deploys the current Firebase JWT template, and refuses root credentials. `aws-off.ps1` also refuses root credentials.
 
 ## Automated validation
 
@@ -68,6 +68,7 @@ The hosted frontend preview for commit `ba2f8b6` built successfully and is Ready
 
 ## Latest commits
 
-- `ba2f8b6` â€” correct frontend routing between the hosted AWS API and local Go API; repair hosted deployment workflow YAML; update Firebase/JWT wording.
-- `8768997` â€” add secure local Firebase configuration helper.
-- `67334c8` â€” harden unified multi-cluster automation delivery.
+- `d0c72b1` - align AWS start/stop scripts with Firebase JWT runtime, reject root credentials, and add a read-only review preflight.
+- `ba2f8b6` - correct frontend routing between hosted AWS API and local Go API; repair hosted deployment workflow YAML.
+- `8768997` - add secure local Firebase configuration helper.
+- `67334c8` - harden unified multi-cluster automation delivery.
