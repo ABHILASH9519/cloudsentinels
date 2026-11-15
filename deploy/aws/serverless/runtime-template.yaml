@@ -12,10 +12,9 @@ Parameters:
     AllowedPattern: "^http://localhost(:[0-9]+)?$"
   ApplicationTableName:
     Type: String
-  CognitoIssuer:
+  FirebaseProjectID:
     Type: String
-  UserPoolClientId:
-    Type: String
+    Description: Firebase project ID used as the JWT issuer and audience
   ClusterAgentSecretArn:
     Type: String
     Default: ""
@@ -203,6 +202,14 @@ Resources:
             Condition:
               ArnEquals:
                 aws:SourceArn: !GetAtt ZapierIntegrationEventRule.Arn
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ZapierRelayQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ZapierCloudWatchAlarmEventRule.Arn
 
   ZapierRelayDeliveryDlqPolicy:
     Type: AWS::SQS::QueuePolicy
@@ -221,6 +228,14 @@ Resources:
             Condition:
               ArnEquals:
                 aws:SourceArn: !GetAtt ZapierIntegrationEventRule.Arn
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt ZapierRelayDeliveryDeadLetterQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ZapierCloudWatchAlarmEventRule.Arn
 
   ZapierIntegrationEventRule:
     Type: AWS::Events::Rule
@@ -245,6 +260,30 @@ Resources:
           - ApiLatencyHigh
       Targets:
         - Id: ZapierRelayQueueTarget
+          Arn: !GetAtt ZapierRelayQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt ZapierRelayDeliveryDeadLetterQueue.Arn
+
+  ZapierCloudWatchAlarmEventRule:
+    Type: AWS::Events::Rule
+    Condition: HasZapierWebhookSecret
+    Properties:
+      Name: cloudsentinels-cloudwatch-alarms-to-zapier
+      EventBusName: default
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - CloudWatch Alarm State Change
+        detail:
+          alarmName:
+            - prefix: cloudsentinels-
+          state:
+            value:
+              - ALARM
+              - OK
+      Targets:
+        - Id: ZapierCloudWatchAlarmQueueTarget
           Arn: !GetAtt ZapierRelayQueue.Arn
           DeadLetterConfig:
             Arn: !GetAtt ZapierRelayDeliveryDeadLetterQueue.Arn
@@ -473,7 +512,7 @@ Resources:
             Path: /me
             Method: GET
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
         Profile:
           Type: HttpApi
           Properties:
@@ -481,7 +520,7 @@ Resources:
             Path: /profile
             Method: ANY
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
         Incidents:
           Type: HttpApi
           Properties:
@@ -489,7 +528,7 @@ Resources:
             Path: /incidents
             Method: ANY
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
         Incident:
           Type: HttpApi
           Properties:
@@ -497,7 +536,7 @@ Resources:
             Path: /incidents/{id}
             Method: ANY
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
         IncidentAnalyze:
           Type: HttpApi
           Properties:
@@ -505,7 +544,7 @@ Resources:
             Path: /incidents/{id}/analyze
             Method: POST
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
         Alerts:
           Type: HttpApi
           Properties:
@@ -513,7 +552,7 @@ Resources:
             Path: /alerts
             Method: ANY
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
         Alert:
           Type: HttpApi
           Properties:
@@ -521,7 +560,7 @@ Resources:
             Path: /alerts/{id}
             Method: ANY
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
         Metrics:
           Type: HttpApi
           Properties:
@@ -529,7 +568,7 @@ Resources:
             Path: /metrics
             Method: ANY
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
 
         AutomationEvents:
           Type: HttpApi
@@ -538,7 +577,7 @@ Resources:
             Path: /automation/events
             Method: GET
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
         ClusterTelemetry:
           Type: HttpApi
           Properties:
@@ -554,7 +593,7 @@ Resources:
             Path: /incidents/{id}/comments
             Method: ANY
             Auth:
-              Authorizer: CognitoJwtAuthorizer
+              Authorizer: FirebaseJwtAuthorizer
 
   AutomationProcessor:
     Type: AWS::Serverless::Function
@@ -593,12 +632,12 @@ Resources:
         MaxAge: 600
       Auth:
         Authorizers:
-          CognitoJwtAuthorizer:
+          FirebaseJwtAuthorizer:
             IdentitySource: "$request.header.Authorization"
             JwtConfiguration:
-              issuer: !Ref CognitoIssuer
+              issuer: !Sub "https://securetoken.google.com/${FirebaseProjectID}"
               audience:
-                - !Ref UserPoolClientId
+                - !Ref FirebaseProjectID
 
 
   OperationsFunctionErrorsAlarm:

@@ -1,8 +1,8 @@
 # GitHub Actions deployment for the AWS preview runtime
 
-The workflow at [../.github/workflows/aws-deploy-preview.yml](../.github/workflows/aws-deploy-preview.yml) provides a **manual, preview-only** deployment path for the existing cloudsentinels-runtime stack.
+The workflow at [../.github/workflows/aws-deploy-preview.yml](../.github/workflows/aws-deploy-preview.yml) provides a **manual, preview-only** deployment path for the existing cloudsentinels-runtime stack. The current runtime uses Firebase Authentication JWTs; the Cognito resources retained in the persistent core stack are legacy identity resources and are not the authorizer for this branch.
 
-It does not deploy on every push, modify the persistent Cognito/DynamoDB foundation, create a production stack, or enable the optional Zapier relay. A maintainer must deliberately run it from GitHub Actions. The job runs the Lambda test suites and SAM validation/build before requesting AWS credentials.
+It does not deploy on every push, modify the persistent Cognito/DynamoDB foundation, create a production stack, or enable the optional Zapier relay. A maintainer must deliberately run it from GitHub Actions. The job runs the Lambda test suites and SAM validation/build before requesting AWS credentials. It updates the runtime JWT authorizer from the previous Cognito issuer to `https://securetoken.google.com/<FIREBASE_PROJECT_ID>` and adds the current automation/telemetry routes.
 
 ## Required GitHub environment configuration
 
@@ -12,7 +12,8 @@ Create a GitHub Actions environment named preview in the repository settings. Pr
 |---|---|
 | AWS_REGION | ap-south-1 |
 | AWS_ACCOUNT_ID | The AWS account ID that owns the existing preview stacks |
-| AWS_APP_ORIGIN | The exact HTTPS origin already allowed by the preview Cognito app client |
+| AWS_APP_ORIGIN | The exact HTTPS Vercel preview origin allowed by the runtime API CORS configuration |
+| FIREBASE_PROJECT_ID | Firebase project ID used as the API Gateway JWT issuer and audience; must match the Vercel `VITE_FIREBASE_PROJECT_ID` |
 | CLOUDFORMATION_EXECUTION_ROLE_ARN | The scoped CloudFormation service role used by the existing runtime stack |
 | ZAPIER_WEBHOOK_SECRET_ARN | Optional Secrets Manager ARN containing the outbound Zapier Catch Hook URL and signing secret |
 | ZAPIER_COMMAND_SECRET_ARN | Optional Secrets Manager ARN for the inbound Zapier command signature secret |
@@ -65,8 +66,8 @@ The CloudFormation execution role is a separate role assumed by CloudFormation. 
 
 1. Confirm the GitHub preview environment variables and OIDC secret are set and branch restrictions include the branch selected for the manual run.
 2. Confirm the artifact bucket exists, is private, and has encryption enabled.
-3. Open Actions → Deploy CloudSentinels AWS preview → Run workflow.
-4. Select the branch containing the workflow and the reviewed runtime template. For the current architecture PR, select feat/four-layer-self-healing-architecture; do not select the base branch unless it contains the same reviewed workflow and template.
+3. Open Actions Ã¢â€ â€™ Deploy CloudSentinels AWS preview Ã¢â€ â€™ Run workflow.
+4. Select the branch containing the workflow and the reviewed runtime template. For the current reviewed architecture, select `feat/airtable-cluster-monitoring-zapier`; do not select the base branch unless it contains the same reviewed workflow and template.
 5. Review the workflow result and its API /health smoke test.
 
 The job refuses to continue if the caller account differs from AWS_ACCOUNT_ID, the persistent core stack is not in a stable complete state, required outputs are missing, or the artifact bucket is unavailable.
@@ -86,3 +87,22 @@ The job refuses to continue if the caller account differs from AWS_ACCOUNT_ID, t
 ## Current access limitation
 
 A deployment must use the dedicated GitHub OIDC role and scoped CloudFormation execution role. Do not use root credentials for CI/CD or interactive deployment. If those roles/environment values are not configured, the workflow will stop before modifying AWS resources.
+
+## Firebase frontend configuration for the current preview branch
+
+The Vercel project `devops` is connected to this repository. For the `feat/airtable-cluster-monitoring-zapier` Preview branch, configure these public Firebase Web App variables in Vercel:
+
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_APP_ID`
+
+`VITE_FIREBASE_PROJECT_ID` must equal the GitHub preview environment variable `FIREBASE_PROJECT_ID`. The `VITE_AWS_API_URL` and `VITE_AWS_REGION` variables are already configured for this branch. The Firebase values must come from the registered Firebase Web App; do not invent placeholders. Do not put a Firebase Admin service-account private key in Vercel or any `VITE_*` variable.
+
+For the local Go API, keep the Firebase Admin service-account JSON outside the repository and set `GOOGLE_APPLICATION_CREDENTIALS` using `scripts/configure-firebase-local.ps1`. The hosted API Gateway validates Firebase ID tokens using its JWT authorizer and does not need the Admin private key in the browser.
+
+## Current hosted migration blockers
+
+The currently deployed `cloudsentinels-runtime` stack still has the old Cognito JWT authorizer and does not yet contain the `/automation/events` or `/telemetry/events` routes from the current template. Its Operations Lambda last-modified timestamp was observed as 2026-11-09. The current source template is Firebase-based and includes these routes; the manual preview workflow must be run successfully to update the hosted runtime.
+
+The AWS account currently has no `token.actions.githubusercontent.com` IAM OIDC provider. The only configured OIDC providers are Vercel providers. The existing `CloudSentinelsDeploymentRole` trusts CloudFormation, not GitHub Actions, and must not be used as the GitHub caller role. Configure the dedicated GitHub OIDC provider, a repository/environment-restricted deploy role, and the separate scoped CloudFormation execution role before running the workflow. Do not use root credentials.

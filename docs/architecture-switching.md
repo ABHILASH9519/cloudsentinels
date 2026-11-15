@@ -1,38 +1,26 @@
-# CloudSentinels architecture switching
+# CloudSentinels development and deployment workflow
 
-CloudSentinels keeps the two backend implementations isolated so that one can be used without deleting the other.
+CloudSentinels uses one Go-first backend architecture on the active feature branch. The React/TypeScript application is the browser UI; Go is the core HTTP API, Kubernetes agent and Lambda adapter. AWS-specific event relay/automation workers remain supporting services.
 
-## Select the code architecture
-
-- **ICP / Internet Identity:** switch to `main`.
-- **AWS-native / Cognito:** switch to `feat/aws-native-architecture`.
-
-From the repository root:
+## Work on the active branch
 
 ```powershell
 git status
-git switch main
+git branch --show-current
 ```
 
-To return to AWS:
+The current feature branch is `feat/airtable-cluster-monitoring-zapier`. Keep local changes committed or stashed before switching branches. A Git branch switch changes source files only; it does not deploy, stop, or delete cloud resources.
 
-```powershell
-git status
-git switch feat/aws-native-architecture
-```
+## Local operations
 
-Commit or stash local changes before switching branches. The branch switch changes the source tree; it does not deploy, stop, or delete cloud resources.
+- Start the Cognito-authenticated Go API and React frontend with `scripts/start-local-server.ps1`.
+- Start the Docker-backed local Kubernetes cluster and Go agent with `scripts/kubernetes/start-local-cluster.ps1`.
+- Stop local API/frontend/agent processes with `scripts/stop-local-server.ps1`. The Minikube cluster remains running.
 
-## Operate the AWS runtime
+## AWS operations
 
-On the AWS branch, use:
-
-- `deploy/aws/serverless/scripts/aws-on.ps1` — deploy/update the persistent foundation if needed, deploy/update the runtime, and resume Lambda.
-- `deploy/aws/serverless/scripts/aws-off.ps1` — set Lambda reserved concurrency to zero, pausing application execution without deleting the API URL, Cognito users, or DynamoDB data.
-- `deploy/aws/serverless/scripts/aws-status.ps1` — inspect stack and Lambda pause status.
-
-The AWS core stack (Cognito + DynamoDB) is intentionally separate from the runtime stack (API Gateway + Lambda). Do not delete the core stack as a routine shutdown action. AWS pause is not the same as deleting infrastructure: API Gateway requests may still be billed while paused, so close the frontend and stop polling.
+The AWS core stack (Cognito + DynamoDB) is separate from the runtime stack (API Gateway + Lambda). Use the scripts in `deploy/aws/serverless/scripts/` to inspect or pause runtime resources. Do not delete the core stack as a routine shutdown action. Pausing Lambda is not the same as deleting infrastructure; API Gateway requests may still be billed while paused.
 
 ## Important distinction
 
-Changing Git branches selects which implementation you build/run locally. It does not automatically switch an already deployed Vercel site or provision/deprovision cloud services. The AWS branch uses Cognito and its AWS API configuration; the ICP branch uses its existing Internet Identity/canister setup. Keep their environment variables separate in deployment environments.
+A Git branch switch does not automatically update a Vercel site or provision/deprovision cloud services. Verify the deployment branch, environment variables, AWS stack outputs and current workflow run before treating a source change as deployed.

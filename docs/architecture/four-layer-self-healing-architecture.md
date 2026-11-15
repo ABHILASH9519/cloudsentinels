@@ -92,7 +92,7 @@ Import only sanitized metadata (names, environment, status, resource counts, lab
 - 15 node records.
 - 15 pod records, including Pending and CrashLoopBackOff examples.
 - 15 deployment records, including Pending and Failed examples.
-- Data is suitable for a demo/test inventory and remediation simulation after validation, not for provisioning production infrastructure.
+- Airtable inventory is operational metadata only; validate live cluster state and reviewed Kubernetes manifests independently before provisioning or remediation.
 
 ### Safe EKS onboarding sequence
 

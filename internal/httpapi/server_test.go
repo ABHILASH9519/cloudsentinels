@@ -23,6 +23,36 @@ func TestHealthAndPlatformAreAvailableWithoutCredentials(t *testing.T) {
 	}
 }
 
+func TestOnlineServerReadinessFailsClosedWithoutRequiredIntegrations(t *testing.T) {
+	server := NewServer(config.Config{ExecutionMode: "online-server"}, slog.Default(), nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 while auth, n8n and agent credentials are missing, got %d", response.Code)
+	}
+	var payload struct {
+		Status  string   `json:"status"`
+		Missing []string `json:"missing"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Status != "not_ready" || len(payload.Missing) != 3 {
+		t.Fatalf("unexpected readiness payload: %#v", payload)
+	}
+}
+
+func TestOnlineServerReadinessPassesWhenRequiredIntegrationsAreConfigured(t *testing.T) {
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusAccepted) }))
+	defer hook.Close()
+	cfg := config.Config{ExecutionMode: "online-server", AgentToken: strings.Repeat("a", 48), N8NWebhookURL: hook.URL, N8NSigningSecret: strings.Repeat("b", 48)}
+	server := NewServer(cfg, slog.Default(), testAuthenticator{})
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+}
 func TestIncidentRoutesFailClosedWithoutAuthenticator(t *testing.T) {
 	server := NewServer(config.Config{ExecutionMode: "online-server"}, slog.Default(), nil)
 	response := httptest.NewRecorder()

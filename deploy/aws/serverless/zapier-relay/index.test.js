@@ -7,7 +7,7 @@ import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 process.env.ZAPIER_WEBHOOK_SECRET_ARN = "arn:aws:secretsmanager:ap-south-1:123456789012:secret:test";
 process.env.TABLE_NAME = "cloudsentinels-relay-test-table";
 const signingSecret = "test-signing-secret-with-at-least-32-characters";
-const { handler } = await import("./index.js");
+const { handler, isCloudWatchAlarmEvent, toPayload } = await import("./index.js");
 
 const originalSecretSend = SecretsManagerClient.prototype.send;
 const originalDbSend = DynamoDBDocumentClient.prototype.send;
@@ -90,7 +90,8 @@ test("forwards allow-listed event fields and signs the exact request body", asyn
   assert.equal(url, "https://hooks.zapier.com/hooks/catch/123/abc");
   const payload = JSON.parse(options.body);
   assert.equal(payload.eventId, "event-1");
-  assert.equal(payload.eventType, "IncidentCreated");
+  assert.equal(payload.eventType, "incident.created");
+  assert.equal(payload.sourceEventType, "IncidentCreated");
   assert.equal(payload.ownerId, "user-123");
   assert.equal(payload.eventTime, "2026-11-10T10:00:00.000Z");
   assert.deepEqual(requestedKey, {
@@ -231,4 +232,117 @@ test("retries instead of notifying Zapier before the processor persists the even
     batchItemFailures: [{ itemIdentifier: "processor-race" }],
   });
   assert.equal(requests.length, 0);
+});
+
+
+function alarmEvent(alarmName, state, previousState = "OK") {
+  return {
+    id: "evt-cloudwatch-test",
+    source: "aws.cloudwatch",
+    "detail-type": "CloudWatch Alarm State Change",
+    time: "2026-11-14T06:00:00.000Z",
+    detail: {
+      alarmName,
+      state: { value: state },
+      previousState: { value: previousState },
+    },
+  };
+}
+
+test("Lambda error alarms become sanitized serverless failure events", () => {
+  const event = alarmEvent("cloudsentinels-operations-function-errors", "ALARM");
+  assert.equal(isCloudWatchAlarmEvent(event), true);
+  const payload = toPayload(event);
+  assert.equal(payload.eventType, "serverless.invocation_failed");
+  assert.equal(payload.sourceType, "aws-cloudwatch");
+  assert.equal(payload.severity, "critical");
+  assert.equal(payload.status, "ALARM");
+  assert.equal(payload.resourceId, "cloudsentinels-operations-function-errors");
+  assert.equal(payload.recoveryVerified, false);
+  assert.equal("ownerId" in payload, false);
+});
+
+test("Lambda alarm recovery becomes a serverless recovery event", () => {
+  const payload = toPayload(alarmEvent("cloudsentinels-automation-processor-errors", "OK", "ALARM"));
+  assert.equal(payload.eventType, "serverless.invocation_recovered");
+  assert.equal(payload.severity, "info");
+  assert.equal(payload.status, "OK");
+});
+
+test("queue and delivery alarms become service health events", () => {
+  const payload = toPayload(alarmEvent("cloudsentinels-automation-dlq-visible-messages", "ALARM"));
+  assert.equal(payload.eventType, "server.health.failed");
+  assert.equal(payload.severity, "critical");
+});
+
+test("non-CloudSentinels alarm events are rejected", () => {
+  assert.equal(isCloudWatchAlarmEvent(alarmEvent("other-service-errors", "ALARM")), false);
+  assert.equal(isCloudWatchAlarmEvent(alarmEvent("cloudsentinels-service-errors", "INSUFFICIENT_DATA")), false);
+});
+
+test("existing domain events retain their persisted policy context", () => {
+  const event = {
+    id: "evt-domain-test",
+    source: "cloudsentinels.cluster-agent",
+    "detail-type": "NodeNotReady",
+    time: "2026-11-14T06:00:00.000Z",
+    detail: { severity: "critical", clusterName: "cluster-a" },
+  };
+  const payload = toPayload(event, {
+    ownerId: "owner-opaque",
+    eventTime: "2026-11-14T06:00:00.000Z",
+    clusterName: "cluster-a",
+    risk: "high",
+    recommendedAction: "replace-or-recover-node",
+    requiresApproval: true,
+  });
+  assert.equal(payload.eventType, "cluster.health.degraded");
+  assert.equal(payload.sourceEventType, "NodeNotReady");
+  assert.equal(payload.clusterRef, "cluster-a");
+  assert.equal(payload.risk, "high");
+  assert.equal(payload.requiresApproval, true);
+});
+
+
+test("normalizes cluster and server domain events for shared Zapier Paths", () => {
+  const cases = [
+    ["PodCrashLoopBackOff", "cluster.health.degraded"],
+    ["CpuThresholdExceeded", "cluster.health.degraded"],
+    ["MemoryPressure", "cluster.health.degraded"],
+    ["DeploymentUnhealthy", "cluster.health.degraded"],
+    ["ApiLatencyHigh", "server.health.degraded"],
+    ["IncidentUpdated", "incident.updated"],
+    ["AlertCreated", "alert.created"],
+    ["AlertUpdated", "alert.updated"],
+  ];
+  for (const [sourceEventType, expectedEventType] of cases) {
+    const payload = toPayload({
+      id: `evt-${sourceEventType}`,
+      source: "cloudsentinels.api",
+      "detail-type": sourceEventType,
+      time: "2026-11-14T06:00:00.000Z",
+      detail: {},
+    });
+    assert.equal(payload.eventType, expectedEventType, sourceEventType);
+    assert.equal(payload.sourceEventType, sourceEventType);
+  }
+});
+
+
+test("forwards CloudWatch alarm transitions without a DynamoDB incident record", async () => {
+  const result = await handler({
+    Records: [{
+      messageId: "cloudwatch-alarm",
+      body: JSON.stringify(alarmEvent("cloudsentinels-operations-function-errors", "ALARM")),
+    }],
+  });
+
+  assert.deepEqual(result, { batchItemFailures: [] });
+  assert.equal(requests.length, 1);
+  const payload = JSON.parse(requests[0].options.body);
+  assert.equal(payload.eventType, "serverless.invocation_failed");
+  assert.equal(payload.sourceEventType, "CloudWatch Alarm State Change");
+  assert.equal(payload.sourceType, "aws-cloudwatch");
+  assert.equal(payload.severity, "critical");
+  assert.equal(requestedKey, undefined);
 });

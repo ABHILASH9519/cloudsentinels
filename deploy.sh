@@ -1,31 +1,17 @@
-#!/bin/bash
-set -e 
-# Usage: deploy.sh
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Define cleanup function for exit
-cleanup() {
-    # Kill the icp-cli network process if it's running
-    icp network stop
-    exit $1
-}
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
 
-# Handle script interruption
-trap 'cleanup 1' INT TERM
+command -v docker >/dev/null || { echo "Docker is required." >&2; exit 1; }
+if [[ ! -f .env.local ]]; then
+  echo "Create .env.local from .env.example and configure Cognito, Airtable and agent credentials before deployment." >&2
+  exit 1
+fi
 
-
-icp network start -d
-icp canister create --environment local frontend
-icp canister create --environment local backend
-export BACKEND_CANISTER_ID=$(icp canister settings show --environment local --id-only backend)
-export BACKEND_HOST=http://localhost:8081
-export STORAGE_GATEWAY_URL=http://localhost:6188
-export II_URL=http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:8000
-
-icp deploy --environment local frontend backend
-
-
-echo "Press Ctrl+C to stop the deployment and exit."
-# This loop keeps the script running until interrupted by Ctrl+C.
-while true; do
-    sleep 2
-done
+docker build -t cloudsentinels:local -f Dockerfile .
+docker run --rm --name cloudsentinels-api \
+  --env-file .env.local \
+  -p 8082:8082 \
+  cloudsentinels:local

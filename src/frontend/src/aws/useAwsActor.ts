@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 import type {
   Alert,
   AutomationEvent,
@@ -9,8 +9,8 @@ import type {
   UserProfile,
   UserRole,
   backendInterface,
-} from "../backend.d";
-import { useAwsAuth } from "./AwsAuth";
+} from "../api-types";
+import { useFirebaseAuth } from "../auth/FirebaseAuth";
 import { awsRequest } from "./api";
 
 const toBig = (value: string | number | bigint) => BigInt(value);
@@ -64,7 +64,7 @@ function comment(row: any): Comment {
 }
 
 export function useAwsActor() {
-  const auth = useAwsAuth();
+  const auth = useFirebaseAuth();
   const actor = useMemo<backendInterface | null>(() => {
     if (!auth.isSignedIn) return null;
     const request = <T>(path: string, method = "GET", body?: unknown) =>

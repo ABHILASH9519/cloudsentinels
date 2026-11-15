@@ -1,49 +1,27 @@
-# AWS EKS showcase mapping
+# Airtable inventory and EKS deployment
 
-This is a planning guide for a short CloudSentinels showcase in ap-south-1 (Mumbai). It does not create AWS resources.
+## Authoritative cluster inventory
 
-## Source inventory
+CloudSentinels uses the sanitized Airtable snapshot at `deploy/eks/airtable-inventory.snapshot.json`, refreshed from the connected Cloud-Sentinel Airtable base. The Go API reads the same 20 cluster records by Airtable record ID. The local Kubernetes inventory service mounts this exact snapshot; EKS will mount the same artifact during the real cluster deployment.
 
-The sanitized Airtable export is at [sample-data/airtable-kubernetes-inventory.json](../../sample-data/airtable-kubernetes-inventory.json). It contains the full logical sample inventory from the Cloud-Sentinel base:
+The separate legacy `sample-data/airtable-kubernetes-inventory.json` fixture has been retired. Do not use synthetic topology records or API endpoint fields as a source of truth for infrastructure provisioning.
 
-- 16 cluster records (including the CloudSentinels planned placeholder)
-- 15 node records
-- 15 pod records
-- 15 anomaly records
-- 15 incident records
-- 15 notification records
-- 15 deployment records
+## Data boundaries
 
-Credential-bearing Airtable fields are intentionally omitted: Secure Onboarding Token and Kubeconfig attachments. The records are synthetic/sample operational data; API endpoint strings and linked objects are not proof of reachable infrastructure.
+The current Airtable base contains 20 cluster rows and related child records. Child-table links and Last Seen timestamps are not sufficient to infer live Kubernetes state. The Go agent is the source of real node, pod, warning-event and resource telemetry. Inventory-reported CPU/memory remains labelled as Airtable metadata until replaced by a live agent heartbeat.
 
-## Mapping to AWS resource concepts
+The inventory exporter uses a field allowlist and excludes credentials, kubeconfig attachments, onboarding tokens and endpoint secrets. EKS manifests and infrastructure sizing must be reviewed independently; Airtable row counts are not provisioning instructions.
 
-| Airtable sample | AWS / Kubernetes showcase concept |
-|---|---|
-| Kubernetes Clusters | Logical cluster inventory; choose one as the showcase EKS cluster |
-| Nodes | EC2 worker-node inventory and Kubernetes Node objects |
-| Pods | Kubernetes Pod / Deployment workload examples |
-| Incidents and Anomalies | CloudSentinels incident and alert examples |
-| Deployments | Kubernetes Deployment / rollout examples |
-| Notifications | Incident notification audit examples |
-| Node disk usage | Input for illustrative EBS sizing only; not an actual EBS volume |
+## EKS deployment
 
-The awsShowcaseBlueprint section in the JSON defines one illustrative EKS cluster, two illustrative EC2 workers, and two illustrative gp3 EBS volumes. These are sample records only. Do not launch one EKS cluster for every Airtable cluster row or one EC2 instance for every sample node.
+Use the protected, manual GitHub Actions workflow `.github/workflows/eks-review-day.yml` to plan, review and execute the real EKS stack in `ap-south-1`. The plan and execute operations are separate; require the approved owner, budget, VPC/subnets, EKS version, node type/count, endpoint allowlist, IAM roles and teardown/retention plan before execution.
 
-## Budget guardrail
+After the cluster is available:
 
-The previously approved ceiling was under USD 50/month. An EKS cluster's standard-support control plane alone is approximately USD 0.10 per cluster-hour, about USD 73 for 730 hours, before EC2, EBS, public IPv4, networking, and other charges. Therefore this blueprint is not approval to provision EKS under the original monthly budget. Use K3s on a single EC2 instance for a recurring low-cost test environment, or obtain a revised budget and explicitly approve a short-lived EKS test before provisioning.
+1. Apply the Go agent read-only RBAC from `deploy/agent/kubernetes/agent-readonly-rbac.yaml`.
+2. Create a unique agent token for each Airtable cluster record ID and store it in Secrets Manager / Kubernetes Secret.
+3. Deploy the Go agent image from `deploy/agent/Dockerfile` with the HTTPS Go API URL and the Airtable record ID as `CLOUDSENTINELS_AGENT_CLUSTER_ID`.
+4. Verify real telemetry and ensure it merges into the matching Airtable inventory row.
+5. Verify the local Docker-backed Kubernetes cluster and EKS cluster appear separately in CloudSentinels with accurate telemetry freshness.
 
-## Live application integration status
-
-The current CloudSentinels backend README describes incident, alert, and metric records, but does not describe native cluster, node, pod, deployment, EBS, or EKS resource tables. The export is committed as a sanitized fixture; it is not yet imported into a deployed canister and does not establish live telemetry.
-
-To make the complete relational inventory visible in the live app, implement backend entities and authenticated import methods for clusters, nodes, pods, anomalies, notifications, deployments, plus an import-source marker and idempotency key. Then extend the frontend to render these entities and wire a telemetry adapter. Until that work is complete, only the existing incident/metric/alert demo import path is supported.
-
-## Security
-
-- Never export Airtable Secure Onboarding Token or Kubeconfig attachments.
-- Never store kubeconfig, AWS access keys, or private credentials in Git.
-- Use an IAM role / instance profile with least privilege.
-- Keep Kubernetes API, Prometheus, and Grafana private; use SSM or a protected access path.
-- Label every fixture record as sample data and keep it separate from live telemetry.
+Never turn Airtable pod/deployment rows into live Kubernetes resources without separately reviewed manifests, immutable images, resource requests, probes, service accounts, RBAC and network policy.

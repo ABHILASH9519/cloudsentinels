@@ -1,0 +1,290 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Dedicated AWS-to-local-n8n event bridge. Uses a separate SQS queue so it does
+  not compete with the existing CloudSentinels automation processor consumer.
+
+Parameters:
+  DomainEventBusArn:
+    Type: String
+    AllowedPattern: '^arn:[^:]+:events:[^:]+:[0-9]{12}:event-bus/.+$'
+    Description: Existing CloudSentinels domain event bus ARN in ap-south-1.
+  OperationsFunctionName:
+    Type: String
+    Default: cloudsentinels-runtime-OperationsFunction-BPRtB7QthrQ3
+  AutomationProcessorFunctionName:
+    Type: String
+    Default: cloudsentinels-runtime-AutomationProcessor-UDoJ0RbU1Fd8
+  LambdaDurationThresholdMilliseconds:
+    Type: Number
+    Default: 12000
+    MinValue: 1000
+    MaxValue: 900000
+
+Resources:
+  N8NEventDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-n8n-delivery-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  N8NEventQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cloudsentinels-n8n-events
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 120
+      SqsManagedSseEnabled: true
+
+  CloudSentinelsDomainEventsToN8N:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cloudsentinels-domain-events-to-n8n
+      Description: Copies CloudSentinels and forwarded EC2 events to the dedicated local n8n bridge queue.
+      EventBusName: !Ref DomainEventBusArn
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.ec2
+          - aws.cloudwatch
+          - cloudsentinels.api
+          - cloudsentinels.cluster-agent
+      Targets:
+        - Id: N8NEventQueue
+          Arn: !GetAtt N8NEventQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt N8NEventDLQ.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 3600
+            MaximumRetryAttempts: 12
+
+  CloudSentinelsCloudWatchAlarmsToN8N:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cloudsentinels-cloudwatch-alarms-to-n8n
+      Description: Copies CloudSentinels CloudWatch alarm state changes to local n8n.
+      EventBusName: default
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - CloudWatch Alarm State Change
+        detail:
+          alarmName:
+            - prefix: cloudsentinels-
+      Targets:
+        - Id: N8NEventQueue
+          Arn: !GetAtt N8NEventQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt N8NEventDLQ.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 3600
+            MaximumRetryAttempts: 12
+
+  SecurityFindingsToN8N:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cloudsentinels-security-findings-to-n8n
+      Description: Copies GuardDuty and Security Hub findings to the shared incident workflow.
+      EventBusName: default
+      State: ENABLED
+      EventPattern:
+        source:
+          - aws.guardduty
+          - aws.securityhub
+        detail-type:
+          - GuardDuty Finding
+          - Security Hub Findings - Imported
+      Targets:
+        - Id: N8NEventQueue
+          Arn: !GetAtt N8NEventQueue.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt N8NEventDLQ.Arn
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 3600
+            MaximumRetryAttempts: 12
+
+  N8NEventQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref N8NEventQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowOnlyConfiguredEventBridgeRules
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt N8NEventQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !GetAtt CloudSentinelsDomainEventsToN8N.Arn
+                  - !GetAtt CloudSentinelsCloudWatchAlarmsToN8N.Arn
+                  - !GetAtt SecurityFindingsToN8N.Arn
+
+  N8NEventDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref N8NEventDLQ
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowOnlyConfiguredEventBridgeRules
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt N8NEventDLQ.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !GetAtt CloudSentinelsDomainEventsToN8N.Arn
+                  - !GetAtt CloudSentinelsCloudWatchAlarmsToN8N.Arn
+                  - !GetAtt SecurityFindingsToN8N.Arn
+
+  OperationsErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-operations-errors
+      AlarmDescription: CloudSentinels Operations API Lambda reported invocation errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OperationsFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+  OperationsThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-operations-throttles
+      AlarmDescription: CloudSentinels Operations API Lambda invocations were throttled.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OperationsFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+  OperationsDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-operations-duration
+      AlarmDescription: Operations API Lambda duration is approaching its 15 second timeout.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref OperationsFunctionName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: !Ref LambdaDurationThresholdMilliseconds
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+  ProcessorErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-processor-errors
+      AlarmDescription: CloudSentinels Automation Processor Lambda reported invocation errors.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AutomationProcessorFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+  ProcessorThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-processor-throttles
+      AlarmDescription: CloudSentinels Automation Processor Lambda invocations were throttled.
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AutomationProcessorFunctionName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+  ProcessorDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-lambda-processor-duration
+      AlarmDescription: Automation Processor Lambda duration is approaching its 15 second timeout.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AutomationProcessorFunctionName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: !Ref LambdaDurationThresholdMilliseconds
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+  N8NEventDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudsentinels-n8n-delivery-dlq
+      AlarmDescription: AWS could not deliver events to the dedicated local n8n queue.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt N8NEventDLQ.QueueName
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      ActionsEnabled: false
+
+Outputs:
+  N8NEventQueueUrl:
+    Description: Pass this queue URL to deploy/automation/poll-aws-events.ps1.
+    Value: !Ref N8NEventQueue
+  N8NEventQueueArn:
+    Value: !GetAtt N8NEventQueue.Arn
+  N8NEventDLQUrl:
+    Value: !Ref N8NEventDLQ

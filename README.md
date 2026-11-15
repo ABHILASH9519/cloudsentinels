@@ -1,135 +1,151 @@
 # CloudSentinels
 
-> **Active migration:** The Go-first four-layer platform is being introduced on `feat/golang-four-layer-core`. The existing React/TypeScript + Motoko application and AWS Node.js serverless track remain in the repository during the migration; they are not yet replaced or production-parity validated.
+**A Go-first cloud and Kubernetes observability platform with a React dashboard, explainable incident triage and approval-gated response workflows.**
 
-## Go-first four-layer platform
+Go owns the cluster inventory/monitoring API, explainable cluster analysis, Kubernetes agent and a standalone Lambda adapter. The React/TypeScript frontend is the presentation layer. The currently deployed AWS Operations Lambda still serves persistent incident/alert/profile routes, and supporting EventBridge/SQS/Zapier workers remain Node.js; porting those deployed handlers into Go is a remaining migration task.
 
-The new shared Go service bootstrap is in `cmd/cloudsentinels` and `internal/`. Its architecture and migration boundaries are documented in [the Go four-layer implementation plan](docs/architecture/golang-four-layer-implementation.md).
+> **Latest local and AWS verification (15 Nov 2026):** Docker Desktop Kubernetes and the Minikube profile `cloudsentinels-local` each have one Ready node; both isolated Go agents are sending telemetry to the Go API in read-only mode. The pinned n8n 2.16.1 container is healthy and the persisted 15-node unified workflow is active. Local Go race tests, vet, frontend checks/build, serverless processor/worker tests, CloudFormation lint, and the Linux ARM64 Go Lambda build pass. In AWS, the `cloudsentinels-n8n-bridge` stack is `CREATE_COMPLETE` in `ap-south-1`; `cloudsentinels-aws-server-monitor` is `CREATE_COMPLETE` in `eu-north-1`; both existing Node.js Lambda functions are Active and the automation SQS event-source mapping is enabled. Six messages are waiting in the dedicated AWS-to-n8n queue. **Not yet production-ready:** Firebase Web/Admin credentials are missing, so API `/readyz` correctly returns 503. The EC2 server is stopped. EKS is not provisioned. The Go Lambda adapter is built but not deployed. The local AWS CLI is authenticated as root; the poller correctly refuses root, and the existing SQS consumer policy is unattached, so AWS events are not yet being consumed by local n8n.
 
-| Layer | Responsibility |
-|---|---|
-| 1 — UI / execution targets | Existing web UI with Online server, Online serverless, and Offline local Kubernetes modes |
-| 2 — Authentication / credentials | AWS Cognito and IAM/STS identity; local session and kubeconfig identity |
-| 3 — CloudSentinels core | Shared incident detection, AI analysis contracts, deterministic policy and remediation orchestration |
-| 4 — Automation | Zapier notifications, approvals, procedures, signed triggers and workflow feedback |
+## Features
 
-### Go service bootstrap
+- **Cluster inventory:** 20 sanitized cluster records loaded from the checked-in Airtable snapshot; optional server-side Airtable API refresh.
+- **Monitoring:** normalized cluster health, node/pod counts, reported CPU/memory and agent telemetry freshness.
+- **Explainable AI triage:** deterministic rules inspect cluster health, CPU, state and missing telemetry; findings include evidence, confidence and recommended checks.
+- **Kubernetes agent:** Go desktop/in-cluster agent collects node, pod, warning-event and resource metrics; approved deployment restart/rollback is restricted by the agent action and namespace allowlists.
+- **Unified automation:** one local n8n workflow classifies Kubernetes, EC2, Lambda and supported security events into the same incident lifecycle and remediation runbook. HMAC-signed Go API events and Zapier notifications remain separate destinations.
+| Offline/local Kubernetes | Minikube profile cloudsentinels-local plus Go agent | Running; 1 Ready node, 9/9 healthy pods; read-only by default, mutations disabled |
+- **Security controls:** Firebase ID-token validation, per-cluster agent credentials, CORS allowlist and signed approval gates for mutations. The local startup script fails closed until matching Firebase Web App and Admin credentials are configured.
 
-- Go HTTP service with health, readiness and platform-capability endpoints.
-- Three explicit execution-mode settings: `online-server`, `online-serverless`, and `offline-kubernetes`.
-- Protected incident routes fail closed until a real Cognito or local-session authenticator is wired in.
-- Incident API currently uses process-memory demo storage; durable persistence is a required next step.
-- Multi-stage, non-root container definition at `deploy/golang/Dockerfile`.
-- Go CI runs formatting, `go vet`, race-enabled tests and a build.
+## Architecture
 
-Run locally:
+```text
+React + TypeScript dashboard
+          |
+          | authenticated HTTPS / local development API
+          v
+       Go HTTP API  <------> Airtable inventory adapter
+          |
+          +------> Monitoring summary + explainable analysis
+          |
+          +------> HMAC-signed Zapier notifications / commands
+          |
+          +<----- Go Kubernetes agent (outbound polling + telemetry)
+          |
+          +------> API Gateway / AWS Lambda adapter
+          +------> Signed event dispatch to local n8n workflow
 
-```sh
-go test ./...
-go run ./cmd/cloudsentinels
+AWS EventBridge / SQS --> local poller --> same n8n workflow
 ```
 
-The Go bootstrap is not yet a complete production migration. AWS SDK v2, client-go, durable repositories, real identity adapters, AI provider integration, Zapier callbacks and live remediation adapters are staged follow-up work. The legacy application and AWS Node.js templates remain until parity, data migration and rollback are proven.
+| Runtime | Purpose | Current status |
+|---|---|---|
+| Online server | Go API, inventory, monitoring, analysis and command broker | Running locally; EC2 server-monitor stack deployed in eu-north-1; instance stopped |
+| Online serverless | Existing Node.js Operations API and Automation Processor; separate Go Lambda adapter | Both Node.js Lambdas Active in ap-south-1; SQS event-source mapping enabled; Go Lambda ARM64 build passes but adapter is not deployed |
+| Offline/local Kubernetes | Minikube profile cloudsentinels-local plus Go agent | Running; 1 Ready node, 9/9 healthy pods; read-only by default, mutations disabled |
+| Local automation | Docker Compose n8n 2.16.1 + unified workflow | Running; persistent volume backed up; 15-node workflow active; local agent events verified end-to-end |
+| Docker Desktop Kubernetes | Built-in Docker Desktop cluster | Active; one Ready control-plane node; read-only Go agent attached |
+| AWS-to-local-n8n bridge | EventBridge-to-dedicated-SQS-to-local-poller | Bridge stack deployed; 6 messages pending; poller blocked until a least-privilege non-root identity is attached to the consumer policy |
 
----
+## Run the local operational stack (Windows)
 
-CloudSentinels is an incident-management and observability project for teams operating cloud workloads and Kubernetes clusters. The goal is to bring incident context, monitoring signals and operational workflows into one place, then make routine response work safer and easier to understand.
+Requirements: Go, Node.js 20+, pnpm 9+, and the repository dependencies installed.
 
-The repository currently contains two implementation tracks:
+From the repository root in PowerShell:
 
-- **Existing application:** React/TypeScript frontend with a Motoko backend on the Internet Computer. The capabilities and limitations below describe this working application.
-- **AWS-native architecture (in development):** a separate React/AWS integration path, API/Lambda runtime, EventBridge and SQS event processing, plus an optional Zapier relay. These changes are being developed on feature branches and must not be mistaken for a deployed production migration.
+```powershell
+pnpm install
+powershell -ExecutionPolicy Bypass -File .\deploy\automation\start-local-n8n.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-server.ps1
+```
 
-## AWS four-layer architecture track
+Before starting, configure the Firebase Web App values in `src/frontend/.env.local` and Firebase Admin credentials plus `FIREBASE_PROJECT_ID` in the ignored root `.env.local` (see `docs/architecture/firebase-frontend-setup.md`). Start the pinned local n8n runtime first with `deploy/automation/start-local-n8n.ps1`, then run the startup script. It validates Firebase configuration, builds the Go API and Vite dashboard, starts Minikube, and attaches both Minikube and Docker Desktop agents. The Go API verifies Firebase ID tokens and runs on port `8082`; startup fails closed when authentication is missing.
 
-The current AWS architecture package, including the editable four-layer diagram, component readiness matrix, event contract, trust boundaries, deployment order, and EKS deferral boundary, is documented in [the four-layer architecture](docs/architecture/four-layer-self-healing-architecture.md) and [platform architecture readiness](docs/architecture/platform-architecture-readiness.md). The AWS serverless templates and manual preview deployment workflow are in `deploy/aws/serverless/` and `.github/workflows/aws-deploy-preview.yml`. Review-day EKS preparation is in `deploy/eks/`: a CloudFormation cluster/node-group template, direct read-only Airtable inventory exporter, freshness validator, a sanitized 20-cluster snapshot, controlled review scenarios, and separate plan/execute/destroy workflow.
+The full startup script provisions Minikube and attaches both local clusters. If the Go API is already running and you only need to attach/restart both agents:
 
-**Status:** The AWS feature branch now contains an authenticated Cognito API, per-user automation event history, user-triggered Amazon Bedrock incident analysis with log redaction, and a signed HMAC cluster telemetry endpoint. A read-only Python Kubernetes event collector, durable SQLite retry spool, unit tests, container build, and least-privilege deployment template are included. Cluster telemetry remains disabled until the optional `ClusterAgentSecretArn` is configured. The live AWS runtime has not yet been updated to this branch: the deployed automation processor is failing at startup due to an older package artifact, and its dead-letter queue currently has 3 messages. The source fix is included, but it still requires the protected preview deployment. Live deployment requires the dedicated non-root GitHub OIDC role and protected environment; that role/provider is not currently configured. Bedrock analysis is user-triggered and may incur inference charges. Zapier delivery and real Kubernetes remediation remain disabled until their secrets and a separately tested adapter are configured; a non-mutating dry-run adapter is included for safe approval-pipeline tests. EKS provisioning and workload deployment remain intentionally deferred until the minor review and separate approval.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\agent\local\attach-local-clusters.ps1 -IncludeDockerDesktop
+```
 
-The AWS automation processor classifies and records events. A signed Zapier command path now validates approval policy and dispatches approved commands to a separately configured remediation adapter. The adapter itself, cluster-specific resource mapping and scoped Kubernetes permissions must still be deployed and tested; live cluster remediation remains disabled by default.
+The standalone `scripts/kubernetes/start-local-cluster.ps1` command provisions Minikube only. Both agents run read-only by default. To enable the approval-gated Kubernetes mutation path, start the full stack with `-EnableApprovedRemediation`; each mutation still requires signed operator approval and remains namespace/action allowlisted. AWS EC2/Lambda mutations and security containment remain disabled.
 
+- **Cluster Command:** http://localhost:5173/#/clusters
+- **Monitoring:** http://localhost:5173/#/monitoring
+- **AI Insights:** http://localhost:5173/#/ai-insights
+- **API health:** http://127.0.0.1:8082/healthz
 
-## Zapier-triggered AWS remediation workflow
+Stop the services started by the script:
 
-The AWS feature branch adds a signed command path from Zapier back into AWS. Zapier can receive incident events, apply filters and a human approval step, then send a signed command to the AWS API. AWS verifies the signature, checks the event's pending-approval state and recommended action, and queues the approved command for a separately deployed remediation adapter.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop-local-server.ps1
+```
 
-See [Zapier self-healing setup](docs/zapier-self-healing-setup.md) for the end-to-end Zap configuration and adapter contract. Live cluster actions remain disabled by default; a real adapter, non-production EKS validation, and explicit execution opt-in are required before the worker is provisioned.
+See [the real-environment operations runbook](docs/operations/real-environment-runbook.md) for local Kubernetes setup and acceptance checks, [the unified automation runbook](deploy/automation/README.md) for the single n8n workflow and AWS bridge, and [the cluster agent runbook](deploy/agent/README.md) for local/in-cluster agent setup.
 
-## Current capabilities in source
+## Operational verification
 
-- Internet Identity sign-in and caller-scoped user profiles
-- Incident creation, listing, status updates, details, comments, and deletion restricted to administrators
-- Alert and metric records with dashboard summaries and periodic frontend refresh
-- AI insight fields for summaries, root causes, and suggested fixes, populated through authorized backend calls
-- Role/permission checks in backend methods
+1. Run `kubectl --context cloudsentinels-local get nodes -o wide` and confirm the node is Ready.
+2. Run `kubectl --context cloudsentinels-local get pods -n cloudsentinels-system` and confirm the Airtable inventory service is Running.
+3. Read the in-cluster inventory at `http://airtable-inventory.cloudsentinels-system.svc.cluster.local/inventory/inventory.json`; it contains the exact 20-row Airtable snapshot.
+4. Open **Monitoring** and verify the `cloudsentinels-local` agent heartbeat, real node/pod counts and collection timestamp.
+5. Open **AI Insights** and review explainable findings. Airtable-reported metrics must remain labelled as inventory data, not live telemetry.
 
-## Kubernetes monitoring starter
+## Development and verification
 
-A Prometheus Operator ruleset is available at [deploy/kubernetes/prometheus-rules.yaml](deploy/kubernetes/prometheus-rules.yaml). It covers pod crash loops, unavailable deployment replicas, and high container CPU/memory relative to resource requests. Installation prerequisites and commands are documented in [deploy/kubernetes/README.md](deploy/kubernetes/README.md).
+Go backend:
 
-These rules create alerts in Prometheus; they do not automatically ingest alerts into the CloudSentinels UI. An authenticated Alertmanager/webhook adapter is still required for that connection.
+```powershell
+go test -race ./...
+go vet ./...
+go build ./cmd/cloudsentinels
+go build ./cmd/cloudsentinels-agent
+```
 
-## Important scope and integration notes
+Frontend:
 
-The repository currently stores application records in the backend canister's in-memory Map values. Those values are not a substitute for a separately managed SQL database, and persistence across canister upgrades must be verified before treating this as production durable. A production Kubernetes/Prometheus ingestion adapter, live cluster discovery, and a real AI inference service must be configured and tested separately. The UI's metric/alert records should not be represented as live cluster telemetry until an ingestion source is connected.
+```powershell
+pnpm --dir src/frontend typecheck
+pnpm --dir src/frontend check
+pnpm --dir src/frontend build
+```
 
-Authentication currently uses Internet Identity rather than email/password. Roles and permissions are governed by the backend authorization module; test role assignment and first-admin bootstrap explicitly before production use.
+The GitHub Actions workflows validate the Go API, agent, Go Lambda ARM64 build, Docker images and React frontend. After successful Go and UI checks on a push (or manual workflow dispatch), the `zapier-notify` job sends a CI event to Zapier when the repository secret `ZAPIER_WEBHOOK_ID` is configured.
 
-## Development
+## Key API routes
 
-The repository is an Internet Computer project with a pnpm workspace, React/Vite frontend, and Motoko backend. Use the scripts and toolchain configured in Dockerfile, build.sh, and icp.yaml. Before deploying, run frontend type checking, linting, and a full canister build in a clean environment, then test the complete authentication and CRUD flows against a local replica.
+| Route | Purpose |
+|---|---|
+| `GET /healthz` / `GET /readyz` | Health and readiness |
+| `GET /api/v1/platform` | Runtime and integration status |
+| `GET /api/v1/inventory/clusters` | Sanitized cluster inventory |
+| `POST /api/v1/inventory/refresh` | Refresh Airtable inventory when PAT is configured |
+| `GET /api/v1/monitoring/summary` | Monitoring summary and agent telemetry |
+| `GET /api/v1/ai/insights` / `POST /api/v1/ai/analyze` | Explainable cluster findings |
+| `POST /api/v1/zapier/test` | Test configured Zapier Catch Hook |
+| `POST /api/v1/zapier/commands` | HMAC-verified inbound automation command |
+| `POST /api/v1/agent/telemetry` | Authenticated agent telemetry ingestion |
+| `POST /api/v1/agent/events` | Authenticated per-resource Kubernetes signals forwarded to n8n |
 
-## Automated backend verification
+Protected routes require a valid bearer token. See [the integration guide](docs/integrations/airtable-zapier-desktop-agent.md) and [authentication setup](docs/architecture/authentication-setup.md).
 
-The backend CI job starts a disposable local Internet Computer replica and uses two independent identities. It verifies first-admin bootstrap from the canister runtime token, normal-user registration, profile and incident CRUD, invalid incident value rejection, comment-author binding to the caller principal, metric and alert operations, dashboard aggregation, denial of regular-user incident deletion, and state/role preservation across a canister upgrade. It also imports the actual fictional fixture and reads back all 4 incidents, 6 metrics, and 3 alerts. The CI job destroys the local replica and test identities afterward.
+## External configuration for live integrations
 
-## Deployment checklist
+- **Airtable:** configure `AIRTABLE_API_TOKEN` on the Go server. Without it, the API serves the sanitized snapshot and disables refresh.
+- **Firebase Authentication:** configure the four public `VITE_FIREBASE_*` Web App values in `src/frontend/.env.local`, plus `FIREBASE_PROJECT_ID` and Firebase Admin credentials for the Go API. The browser sends Firebase ID tokens; the Go API verifies them with Firebase Admin SDK. The Go Lambda template uses the same Firebase project and a server-side Secrets Manager service-account secret.
+- **Zapier application events:** configure an HTTPS `ZAPIER_CATCH_HOOK_URL` and a strong `ZAPIER_SIGNING_SECRET` on the Go API. The UI reports the integration as unavailable until configured.
+- **Zapier GitHub Actions notifications:** add the Catch Hook ID (the path after `/hooks/catch/`, not the full URL) as the repository Actions secret `ZAPIER_WEBHOOK_ID`. The workflow posts a sanitized build result only after both Go and frontend jobs pass. The secret is optional; notifications are skipped when it is absent.
+- **Kubernetes:** start a reachable Kubernetes context and configure a unique `CLOUDSENTINELS_AGENT_TOKEN` (or per-cluster token map) for the Go agent and API.
+- **AWS Lambda:** the API Gateway/Node.js Operations runtime is deployed in ap-south-1. The separate Go Lambda adapter cross-builds successfully but is not yet deployed as the active Operations API. The HMAC-signed cluster telemetry route still requires a registered cluster secret before it can accept events.
 
-- [x] Reproducible frontend install/build and backend canister build in CI
-- [x] Local-replica authentication and role-permission smoke tests (admin bootstrap, regular-user registration, denied admin action)
-- [x] Verify profiles, incidents, metrics, alerts, and authorization state survive a canister upgrade
-- [x] Import and read back the complete sample fixture (4 incidents, 6 metrics, 3 alerts)
-- [ ] Connect and validate Prometheus/Kubernetes telemetry ingestion
-- [ ] Configure alert delivery and AI inference provider securely
-- [ ] Validate API authentication, rate limits, input bounds, and audit history
-- [ ] Deploy to a non-production environment and run end-to-end smoke tests
+Never put server-side credentials in `VITE_*` variables or commit `.env.local` files.
 
-CloudSentinels should not be described as production-ready until these checks pass in the target environment.
+## Important limitations and production gates
 
+- The AI triage is an explainable rules engine, **not a trained ML model or LLM**.
+- Airtable cluster CPU/memory values are inventory-reported values, not a streaming metrics feed.
+- Current Airtable Nodes records are not linked to cluster rows and their Last Seen timestamps are historical; live telemetry requires an agent heartbeat.
+- The online command queue and telemetry cache are in-memory. Production/multi-replica operation requires durable storage such as SQS/DynamoDB and persistent audit history.
+- Zapier delivery remains disabled until the real Catch Hook and signing secret are configured. AWS Lambda/API Gateway is deployed; EKS-to-Lambda telemetry still requires a cluster signing secret and owner mapping.
+- Mutating remediation is disabled by default and requires explicit approval, server and agent opt-in, and scoped Kubernetes RBAC.
+- The legacy Motoko/Internet Computer backend, generated actor bindings, Internet Identity flow and SDK dependencies have been removed from the active project. The frontend remains React/TypeScript; the cluster API and Kubernetes agent are Go. The deployed AWS Operations Lambda and event-relay/automation workers remain Node.js pending their separate Go migration.
 
-## Demo walkthrough and sample dataset
-
-A safe, fictional demo dataset is provided at [`sample-data/demo-observability.json`](sample-data/demo-observability.json). It models Kubernetes incidents, Prometheus-style metrics, and alerts; it is reference data, not live telemetry and is not automatically inserted into a deployed canister.
-
-### Sign-in and first-run role setup
-
-1. Create a strong random token locally and save it to `src/backend/secrets/admin-token`. The `src/backend/secrets/` directory is ignored by Git. Configure the backend canister's runtime setting to read that file:
-   ```yaml
-   settings:
-     environment_variables:
-       CLOUDSENTINELS_ADMIN_TOKEN:
-         path: ./secrets/admin-token
-   ```
-   This setting belongs in `src/backend/canister.yaml`. The path is relative to that file. Deploy the backend with `icp deploy`; the canister reads the configured value at runtime. Never commit or share the token.
-2. Open the app and choose **Sign in with Internet Identity**.
-3. For the first administrator only, provide the bootstrap token in the URL hash fragment as `#cloudSentinelsAdminToken=YOUR_TOKEN` before authentication. The frontend extracts it and removes that parameter from the address bar. Do not use a normal query string.
-4. Subsequent users should sign in without the bootstrap token; they are assigned the regular user role. Keep the admin token out of screenshots, chat messages, shell history, and source control.
-
-If the token is not configured in the backend environment, role initialization fails. If an administrator has already been assigned, presenting the token does not promote another principal.
-
-### Walkthrough
-
-1. Sign in, then open **Incidents** and create an incident with a source such as `kubernetes` and a pod event in the raw log.
-2. Open **Monitoring** and add a metric such as `container_cpu_usage_percent = 82` (%) with source `demo-cluster`.
-3. Add an alert such as **High CPU on payments-api** with severity `high` and source `prometheus-demo`.
-4. Return to **Dashboard** to see incident counts, severity/status charts, active alerts, and latest metric records.
-5. Acknowledge or resolve the alert from Monitoring and verify that the active-alert count updates.
-
-The demo records created through the UI are stored by the current backend implementation. The Monitoring page now includes **Load sample data**, which imports the fictional incidents, metrics, and alerts through the authenticated backend methods. Imported records use a `demo/` source prefix and the operation can be safely retried without duplicating matching records. This is test data, not live telemetry. Backend maps and role state still require upgrade-persistence verification before production use. Kubernetes rule files generate Prometheus alerts but do not by themselves send them into this UI.
-
-
-## Go API authentication configuration
-
-The Go service now supports Cognito OIDC ID-token verification and a high-entropy local operator token for development/offline testing. See [authentication setup](docs/architecture/authentication-setup.md) and [.env.example](.env.example). Protected incident routes remain disabled when no authenticator is configured; never commit local credentials.
-
-The review scope, local startup/API smoke-test commands, CI checks, and production acceptance gates are captured in the [Go core final-review runbook](docs/review/go-core-final-review.md).
+CloudSentinels should only be described as production-ready after live integration, persistence, security and end-to-end deployment checks pass in the target environment.

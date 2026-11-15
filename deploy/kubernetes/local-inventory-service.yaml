@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudsentinels-system
+  labels:
+    app.kubernetes.io/part-of: cloudsentinels
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airtable-inventory
+  namespace: cloudsentinels-system
+  labels:
+    app.kubernetes.io/name: airtable-inventory
+    app.kubernetes.io/part-of: cloudsentinels
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: airtable-inventory
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: airtable-inventory
+    spec:
+      containers:
+        - name: inventory-http
+          image: nginx:1.27-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          volumeMounts:
+            - name: inventory
+              mountPath: /usr/share/nginx/html/inventory
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /inventory/inventory.json
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+      volumes:
+        - name: inventory
+          configMap:
+            name: cloudsentinels-airtable-inventory
+            items:
+              - key: inventory.json
+                path: inventory.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airtable-inventory
+  namespace: cloudsentinels-system
+  labels:
+    app.kubernetes.io/name: airtable-inventory
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: airtable-inventory
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

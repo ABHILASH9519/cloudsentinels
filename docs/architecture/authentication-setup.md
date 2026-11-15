@@ -1,38 +1,37 @@
-# CloudSentinels authentication setup
+# CloudSentinels Firebase Authentication
 
-The Go API supports two identity paths behind one authentication interface.
+Firebase Authentication is the interactive user identity provider. The web client signs users in with Firebase; it sends the resulting Firebase ID token to the Go API over HTTPS. The API verifies token signature, issuer, audience, expiry and revocation with Firebase Admin Go SDK before serving protected routes.
 
-## AWS Cognito (online server / serverless)
+## Firebase Console setup
 
-Set both values:
+1. Select or create the CloudSentinels Firebase project.
+2. Open **Authentication ? Sign-in method** and enable the providers required by the product (recommended initial providers: Email/Password and Google).
+3. Register the CloudSentinels web application under **Project settings ? General ? Your apps**.
+4. Add local and production hostnames under **Authentication ? Settings ? Authorized domains**.
+5. Copy the web app's public configuration into the frontend build environment: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID`.
 
-- `COGNITO_ISSUER_URL=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>`
-- `COGNITO_APP_CLIENT_ID=<app-client-id>`
+The web API key and app identifiers are public client configuration. Never put a service-account JSON, private key, Airtable PAT, agent token or signing secret in a `VITE_*` variable.
 
-The service discovers the issuer's OIDC signing keys and verifies the JWT signature, issuer, expiry and app-client audience using the OIDC verifier. The API accepts Cognito **ID tokens** (the `token_use` claim is checked when present), not arbitrary unsigned headers or raw AWS credentials. Map Cognito groups to application roles using the `cognito:groups` claim.
+## Go API configuration
 
-The browser must never receive AWS secret access keys. Use IAM roles / workload identity for server-side AWS API access; Cognito authenticates the user, it does not replace the server's AWS execution role.
+Set `FIREBASE_PROJECT_ID` (or `GOOGLE_CLOUD_PROJECT`) to the Firebase project ID. The Admin SDK supports:
 
-## Local development / offline Kubernetes
+- **Local development:** `GOOGLE_APPLICATION_CREDENTIALS` pointing to a service-account JSON file stored outside the repository; or `FIREBASE_SERVICE_ACCOUNT_JSON` supplied through a private environment/secret store.
+- **AWS production:** prefer workload identity federation or a narrowly scoped service-account credential injected from AWS Secrets Manager at runtime. Do not commit credentials or bake them into images.
+- **Google Cloud runtime:** use Application Default Credentials with the runtime service identity.
 
-Generate a high-entropy token locally and inject it through the environment:
+Only one of `GOOGLE_APPLICATION_CREDENTIALS` and `FIREBASE_SERVICE_ACCOUNT_JSON` may be configured. The service-account project must match `FIREBASE_PROJECT_ID`.
 
-```sh
-openssl rand -hex 32
-```
+## API contract
 
-Set `CLOUDSENTINELS_LOCAL_AUTH_TOKEN` to the generated value. The local credential path is enabled by default in development, but production rejects it unless `CLOUDSENTINELS_ALLOW_LOCAL_AUTH_IN_PROD=true` is explicitly set. Never commit the generated token or place it in frontend source, a URL, or a Zapier workflow.
+After Firebase sign-in, the client obtains `await user.getIdToken()` and calls the Go API with `Authorization: Bearer <ID_TOKEN>`. `GET /api/v1/auth/me` returns the verified UID, email and role claims. The Go API uses `VerifyIDTokenAndCheckRevoked`, so revoked sessions and disabled users are rejected. Missing, malformed, expired, revoked or wrong-project tokens return HTTP 401. If no verifier is configured, protected routes fail closed with HTTP 503.
 
-The local token currently represents one local operator principal. It is a bootstrap credential, not a substitute for per-user identity, Kubernetes RBAC, or audit attribution.
+Firebase authentication identifies the user; it does not grant Kubernetes or AWS permissions. Cluster agents continue using per-cluster credentials and Kubernetes RBAC. AWS resources continue using IAM roles. Never trust a role supplied by the browser: roles must be assigned as Firebase custom claims by a trusted administrative process.
 
-## Fail-closed behavior
+## Local-only fallback
 
-- If no authenticator is configured, protected incident routes return HTTP 503.
-- If credentials are missing, malformed, expired, signed by an unknown key, or have the wrong issuer/audience, the API returns HTTP 401.
-- Partial Cognito configuration fails startup.
-- Production local-token configuration fails startup unless explicitly opted in.
-- Public health/readiness/platform metadata endpoints remain available for probes.
+`CLOUDSENTINELS_LOCAL_AUTH_TOKEN` remains available for isolated development and is rejected in production unless explicitly enabled. It is not a Firebase account. Keep it disabled in production.
 
-## Review limitations
+## Frontend integration contract
 
-The current incident repository remains process-memory demo storage. Cognito groups are surfaced as roles but are not yet used for fine-grained authorization policies. There is no refresh-token flow, browser login UI wiring, durable audit log, or Kubernetes service-account integration in this Go bootstrap. These are explicit production gates.
+Use the Firebase Web modular SDK (`initializeApp`, `getAuth`, `onAuthStateChanged`, `signInWithEmailAndPassword`, `createUserWithEmailAndPassword`, `GoogleAuthProvider`, `signInWithPopup`, `sendPasswordResetEmail`, `signOut`). Keep the Firebase app singleton. On each API request, obtain the current user's ID token and attach it as a Bearer token; do not persist ID tokens in custom localStorage/sessionStorage. Handle `onAuthStateChanged` for loading, signed-out and signed-in states. The React implementation lives in `src/frontend/src/auth/FirebaseAuth.tsx`; its existing provider supports Google popup sign-in, email/password sign-in and account creation. API clients obtain a fresh Firebase ID token from the current user for each request.
