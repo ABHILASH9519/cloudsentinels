@@ -1,4 +1,4 @@
-# CloudSentinels — switchable AWS + ICP architectures
+# CloudSentinels ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â switchable AWS + ICP architectures
 
 This branch contains **Option 1: AWS-native**. The existing ICP implementation remains on `main`; the separate Clerk + ICP experiment remains on its own branch. Nothing here deletes or rewrites those architectures. See [architecture switching](../../../docs/architecture-switching.md) for switching the source branch between ICP and AWS.
 
@@ -8,7 +8,7 @@ AWS is split into two CloudFormation stacks so that you can use the app when nee
 
 | Layer | Stack | Lifecycle | Resources |
 |---|---|---|---|
-| Persistent foundation | `cloudsentinels-core` | Deploy once; keep | Cognito User Pool/client/domain and DynamoDB table |
+| Persistent foundation | `cloudsentinels-core` | Deploy once; keep | DynamoDB table plus retained legacy Cognito resources |
 | Runtime | `cloudsentinels-runtime` | Deploy once; pause/resume | API Gateway HTTP API and Lambda |
 
 **Important:** Lambda is serverless; it has no continuously running VM. When paused, this setup sets reserved concurrency to `0`, blocking Lambda execution. Resuming removes that concurrency override. This keeps the API URL stable, so you do not need to rebuild the frontend or change Vercel environment variables every time you switch the runtime on and off.
@@ -17,12 +17,12 @@ The pause does not delete data, user accounts, API Gateway, Lambda code, or Clou
 
 ## Architecture
 
-- **Authentication:** Cognito User Pool, email sign-in, verified email, OAuth authorization-code flow with PKCE (public browser client; no client secret).
-- **API:** API Gateway HTTP API JWT authorizer validates Cognito issuer and client audience.
-- **Application backend:** Node.js Lambda reads the verified Cognito `sub` claim from API Gateway context; it does not trust a user ID supplied by the browser.
+- **Authentication:** Firebase Authentication (Google and Email/Password). The frontend obtains Firebase ID tokens; Firebase project ID is configured in the runtime JWT authorizer.
+- **API:** API Gateway HTTP API JWT authorizer validates the Firebase issuer `https://securetoken.google.com/<project-id>` and Firebase project ID audience.
+- **Application backend:** Node.js Lambda reads the verified Firebase `sub` claim from API Gateway context; it does not trust a user ID supplied by the browser.
 - **Data:** DynamoDB single table with per-user partition keys `PK=USER#<sub>`; table uses on-demand billing and server-side encryption.
 - **Automation:** EventBridge routes API and cluster-agent events to SQS. The automation processor classifies supported Kubernetes signals. Zapier can receive event notifications, apply filters and human approval, then return a timestamped HMAC-signed command to the AWS API. AWS validates the pending event and queues the approved command. A separate worker invokes a configured remediation adapter only when the adapter ARN and explicit execution opt-in are both set.
-- **Safety:** The core Cognito User Pool and DynamoDB table have CloudFormation `Retain` policies. The runtime can be paused without deleting either.
+- **Safety:** The DynamoDB table and legacy Cognito foundation have CloudFormation `Retain` policies. The current Firebase-auth runtime does not use the retained Cognito user pool. The runtime can be paused without deleting persistent data.
 
 ## Requirements
 
@@ -34,32 +34,32 @@ From the repository root, open PowerShell:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
-.\deploy\aws\serverless\scripts\aws-on.ps1 -Region ap-south-1 -AppOrigin "https://YOUR-VERCEL-DOMAIN" -CognitoDomainPrefix "a-globally-unique-lowercase-prefix"
+.\deploy\aws\serverless\scripts\aws-on.ps1 -Region ap-south-1 -AppOrigin "https://YOUR-VERCEL-DOMAIN" -CognitoDomainPrefix "legacy-cognito-prefix" -FirebaseProjectID "your-firebase-project-id"
 ```
 
-Use the exact deployed Vercel origin, with no path or trailing slash, and choose a globally unique Cognito prefix. For the current preview branch, the verified stable Vercel alias is `https://devops-git-feat-n8n-event-au-e5ea6d-abhilashs-projects-d66ddd5e.vercel.app`; use that as `-AppOrigin` when configuring Cognito for this preview. If the project alias changes, use the current alias shown in Vercel. Production must use its own exact production origin and matching Cognito callback/logout URLs. The script:
+Use the exact deployed Vercel origin, with no path or trailing slash. `CognitoDomainPrefix` is retained only because the persistent core template still preserves legacy Cognito resources; those resources are not used by the current Firebase-auth runtime. Set `FirebaseProjectID` to the exact Firebase project ID used by the Web App. The script refuses root AWS credentials and requires a non-root deployment identity with permission to pass the scoped CloudFormation execution role. The script:
 1. Verifies AWS credentials.
-2. Creates/updates the persistent Cognito + DynamoDB foundation.
+2. Creates/updates the persistent DynamoDB foundation and retains the legacy Cognito resources.
 3. Creates/updates the API Gateway + Lambda runtime.
 4. Resumes Lambda execution.
 5. Prints the frontend configuration values.
 
-After the first successful start, copy the printed outputs into Vercel Project → Settings → Environment Variables for the `feat/n8n-event-automation` Preview branch (and locally in `src/frontend/.env.local` if required). Use the matching outputs from the same AWS region and core/runtime stacks. Set all five values below; do not enter the example placeholders from `.env.example`. Then create a fresh Preview deployment because Vite embeds `VITE_*` values at build time:
+After the first successful start, configure the printed outputs in Vercel Project â†’ Settings â†’ Environment Variables for the active Preview branch (currently `feat/airtable-cluster-monitoring-zapier`) and locally in `src/frontend/.env.local` if required. Use the exact AWS API URL and region from the deployed runtime stack. Obtain the four Firebase values from the registered Firebase Web App; the project ID must match `FirebaseProjectID` passed to the runtime deployment. Set all six values below, then create a fresh Preview deployment because Vite embeds `VITE_*` values at build time:
 
 - `VITE_AWS_REGION`
-- `VITE_COGNITO_USER_POOL_ID`
-- `VITE_COGNITO_CLIENT_ID`
-- `VITE_COGNITO_DOMAIN`
 - `VITE_AWS_API_URL`
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_APP_ID`
 
-These are public browser configuration values, not secrets. Never put AWS access keys or other credentials in `VITE_*` variables. `VITE_COGNITO_DOMAIN` is the HTTPS `CognitoHostedUi` output; `VITE_AWS_API_URL` is the `ApiBaseUrl` output; `VITE_COGNITO_USER_POOL_ID` and `VITE_COGNITO_CLIENT_ID` are `UserPoolId` and `UserPoolClientId`; `VITE_AWS_REGION` is the region used for the stacks. The Cognito app client must allow the exact Vercel origin with a trailing `/` as both callback and logout URL. The frontend redirects back to `${window.location.origin}/`, so preview aliases must be explicitly allowlisted in the core stack.
-
+These are public browser configuration values, not secrets. Never put AWS access keys, Firebase Admin private keys, or other credentials in `VITE_*` variables. `VITE_AWS_API_URL` is the `ApiBaseUrl` output including the stage path. In Firebase Authentication, enable the intended providers and add the exact Vercel preview/production hostnames to Authorized domains.
 ## Daily start / stop
 
 Start or resume:
 
 ```powershell
-.\deploy\aws\serverless\scripts\aws-on.ps1 -Region ap-south-1 -AppOrigin "https://YOUR-VERCEL-DOMAIN" -CognitoDomainPrefix "YOUR-COGNITO-PREFIX"
+.\deploy\aws\serverless\scripts\aws-on.ps1 -Region ap-south-1 -AppOrigin "https://YOUR-VERCEL-DOMAIN" -CognitoDomainPrefix "legacy-cognito-prefix" -FirebaseProjectID "your-firebase-project-id"
 ```
 
 Pause after use:
@@ -74,7 +74,7 @@ Check status:
 .\deploy\aws\serverless\scripts\aws-status.ps1 -Region ap-south-1
 ```
 
-The start command is safe to repeat. It updates the stacks when the templates change and deploys the automation processor along with the API runtime. The stop command sets Lambda reserved concurrency to zero; it does not delete the runtime stack or change the API URL.
+The start command is safe to repeat. It updates the stacks when the templates change and deploys the automation processor along with the API runtime. The stop command sets Lambda reserved concurrency to zero; it does not delete the runtime stack or change the API URL. The start and stop scripts reject root credentials.
 
 ## Costs and data safety
 
@@ -90,7 +90,7 @@ The core stack is intentionally retained. Do not delete it as a normal stop acti
 
 ## Optional workflow automation
 
-See [n8n / Zapier automation](../../automation/README.md) for the EventBridge → SQS event path, and [Zapier self-healing setup](../../../docs/zapier-self-healing-setup.md) for the Catch Hook → human approval → signed AWS command workflow and adapter contract. The command endpoint can queue approvals without enabling cluster changes; live remediation remains off until a real adapter is deployed and explicitly enabled.
+See [n8n / Zapier automation](../../automation/README.md) for the EventBridge ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ SQS event path, and [Zapier self-healing setup](../../../docs/zapier-self-healing-setup.md) for the Catch Hook ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ human approval ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ signed AWS command workflow and adapter contract. The command endpoint can queue approvals without enabling cluster changes; live remediation remains off until a real adapter is deployed and explicitly enabled.
 
 ## AWS server and Lambda monitoring
 
@@ -98,19 +98,19 @@ See [AWS monitoring integration](../monitoring/README.md) for read-only monitori
 
 ## Current API
 
-- `GET /health` — unauthenticated health probe.
-- `GET /me` — authenticated Cognito identity summary.
+- `GET /health` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â unauthenticated health probe.
+- `GET /me` â€” authenticated Firebase identity summary.
 - `GET|POST /incidents`
 - `GET|PATCH|DELETE /incidents/{id}`
-- `POST /incidents/{id}/analyze` — user-triggered, redacted incident analysis through Amazon Bedrock.
+- `POST /incidents/{id}/analyze` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â user-triggered, redacted incident analysis through Amazon Bedrock.
 - `GET|POST /incidents/{id}/comments`
 - `GET|POST /alerts`
 - `PATCH /alerts/{id}`
 - `GET|POST /metrics`
-- `GET /automation/events` — authenticated, owner-scoped automation processing history.
-- `POST /telemetry/events` — HMAC-authenticated cluster-agent ingestion; requires `ClusterAgentSecretArn`.
+- `GET /automation/events` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â authenticated, owner-scoped automation processing history.
+- `POST /telemetry/events` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â HMAC-authenticated cluster-agent ingestion; requires `ClusterAgentSecretArn`.
 
-AI analysis uses the India-geographic Bedrock profile `in.anthropic.claude-sonnet-5` and runs only when a signed-in user requests it. Incident title, source, severity, and a redacted/truncated raw-log excerpt are sent to Bedrock; each request may incur model-inference charges. All application endpoints except health require a valid Cognito JWT. This is the AWS backend foundation; remaining application features/integrations must be validated before production use.
+AI analysis uses the India-geographic Bedrock profile `in.anthropic.claude-sonnet-5` and runs only when a signed-in user requests it. Incident title, source, severity, and a redacted/truncated raw-log excerpt are sent to Bedrock; each request may incur model-inference charges. All application endpoints except health require a valid Firebase ID token validated by the API Gateway JWT authorizer. This is the AWS backend foundation; remaining application features/integrations must be validated before production use.
 
 
 ## GitHub Actions preview deployment
