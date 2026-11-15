@@ -33,7 +33,7 @@ The unified workflow is currently published and active in the local n8n containe
 - Both isolated Go agents are running and posting telemetry/events to the Go API every 30 seconds.
 - Four live synthetic POSTs to the active n8n webhook (EC2, Lambda, Docker Desktop and Minikube) each reached the shared remediation policy and returned a target-specific runbook with `executionStatus=NOT_EXECUTED`.
 
-**Remaining cluster health warnings:** Minikube's `storage-provisioner` pod is in Error, and Docker Desktop's `kube-scheduler` pod is not Ready after API-server request timeouts (the controller-manager has also restarted). Nodes are Ready, but these control-plane/add-on warnings need diagnosis before calling either cluster fully healthy. AWS SQS-to-local-n8n polling still requires AWS CLI SSO authentication.
+Both clusters now report their nodes Ready and all listed pods `1/1 Running`. The Minikube storage-provisioner and Docker Desktop scheduler/controller-manager had transient restarts during startup but recovered on recheck. AWS SQS-to-local-n8n polling still requires AWS CLI SSO authentication.
 ## Shared incident lifecycle
 
 Every source follows the same stages:
