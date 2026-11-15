@@ -1,143 +1,95 @@
-# Unified CloudSentinels automation (local n8n)
+﻿# Unified CloudSentinels automation (local n8n)
 
-CloudSentinels uses one local n8n workflow for the shared incident lifecycle across AWS EC2, AWS Lambda, Kubernetes clusters and supported security findings.
+CloudSentinels defines one local n8n workflow for a shared incident lifecycle across AWS EC2, AWS Lambda, Docker Desktop Kubernetes and standalone Minikube Kubernetes.
 
-## Active workflow
+## Workflow definition
 
 - Name: **CloudSentinels - Unified Multi-Cluster Self-Healing**
 - n8n workflow ID: **cloudsentinelsUnified**
-- Local webhook: http://127.0.0.1:5678/webhook/cloudsentinels/unified-events
-- Webhook response mode: **lastNode** — an upstream poller receives success only after the workflow has completed.
-- Source definition: [n8n-cloudsentinels-unified.json](./n8n-cloudsentinels-unified.json)
-- Rebuild, import, publish and restart local n8n: .\deploy\\automation\\publish-unified-workflow.ps1
+- Definition: [n8n-cloudsentinels-unified.json](./n8n-cloudsentinels-unified.json)
+- Builder: [build-unified-workflow.js](./build-unified-workflow.js)
+- Static validation: `node .\deploy\automation\test-unified-workflow.mjs`
+- Local webhook path: `/webhook/cloudsentinels/unified-events`
 
-The previous event-triage workflow has been unpublished. The unified workflow is the active local n8n entry point. Its visible main path includes **AWS EventBridge / SQS Connector**, **AWS Lambda / Serverless Connector**, **Docker Desktop Kubernetes Connector**, and **Local Minikube Kubernetes Connector** between event normalization and the shared remediation policy. These are explicit in-workflow adapters; AWS transport remains EventBridge → dedicated SQS → local poller → webhook, while both local Kubernetes agents report through the Go API → webhook.
+The saved definition contains 15 nodes, including four explicit Code-node adapters:
+
+1. **AWS EventBridge / SQS Connector**
+2. **AWS Lambda / Serverless Connector**
+3. **Docker Desktop Kubernetes Connector**
+4. **Local Minikube Kubernetes Connector**
+
+All four adapters are connected in the same main execution path before **Unified Remediation Policy** and **Build Shared Remediation Runbook**. They classify/enrich the normalized event envelope; they are not independent source pollers or native AWS/Kubernetes API credential nodes. Source delivery is handled by the transports below.
+
+## Runtime status (2026-11-15)
+
+The workflow definition and its four adapter scripts pass local static/fixture validation. A live n8n publish or execution could not be verified during the latest check:
+
+- Docker CLI could not connect to the Docker Desktop Linux engine named pipe.
+- No Docker containers were listed by the Docker daemon.
+- Local n8n health check at `http://127.0.0.1:5678/healthz` failed to connect; port 5678 had no listener.
+- Kubernetes API requests to both `docker-desktop` and `cloudsentinels-local` were refused. Their kubeconfig contexts exist, but neither cluster is currently verified reachable.
+
+Do not treat a saved workflow JSON, kubeconfig context, or prior test record as proof that the current local services are running. The publish script below requires a running Docker daemon and an n8n container.
 
 ## Shared incident lifecycle
 
 Every source follows the same stages:
 
 1. Ingest and validate the event.
-2. Normalize the event envelope (CloudSentinels JSON or AWS EventBridge).
-3. Carry the source event ID as the idempotency/correlation key (the Go API applies a dispatch cooldown and the AWS SQS poller caches processed IDs locally).
-4. Classify severity and target environment.
-5. Collect or request read-only diagnostics.
-6. Evaluate the target-specific action allowlist.
-7. Require signed human approval for every mutation.
+2. Normalize the CloudSentinels or AWS EventBridge envelope.
+3. Preserve the event ID for correlation/idempotency.
+4. Classify source, target, severity and incident route.
+5. Prepare read-only diagnostics and target-specific recommendations.
+6. Apply the target-specific action allowlist.
+7. Require signed human approval for mutations.
 8. Execute only through an authorized target adapter.
-9. Verify service health / rollout.
-10. Escalate or roll back if verification fails.
-11. Record the outcome and audit metadata.
+9. Verify health/rollout and record the outcome.
 
-The n8n workflow is the **orchestrator and planner**. It does not execute arbitrary shell, kubectl, AWS CLI, or infrastructure mutations. It sets remediationExecuted=false and outputs a shared runbook with the selected adapter, recommended actions, approval requirement and verification path.
+The n8n workflow is an orchestrator and runbook planner. It does not run arbitrary shell, kubectl, AWS CLI, or infrastructure mutations. All current connector adapters set mutation permission to false; remediation execution remains false until the separate approved agent/adapter path is invoked.
 
-## Target adapters and current boundaries
+## Event transports and targets
 
-| Target | Event intake | Current actions |
+| Target | Event transport into the one workflow | Current mutation boundary |
 |---|---|---|
-| Kubernetes | Authenticated Go agent → Go API POST /api/v1/agent/events → n8n | Read-only diagnostics; deployment restart/rollback only through the existing signed-approval agent command path and namespace allowlist |
-| AWS EC2 server | EventBridge in eu-north-1 → central domain bus → dedicated SQS bridge → local poller → n8n | State/status/CPU diagnostics; no start, stop, reboot or SSM remediation is enabled |
-| AWS Lambda | CloudWatch alarms in ap-south-1 → dedicated SQS bridge → local poller → n8n | Errors, throttles, duration and log/concurrency diagnostics; alias rollback/configuration changes are not enabled |
-| AWS event pipeline | CloudWatch alarm for the n8n delivery DLQ → dedicated SQS bridge → local poller → n8n | EventBridge rule, SQS queue-age and delivery-DLQ diagnostics; queue purges and retry-policy changes are not automated |
-| GuardDuty / Security Hub | AWS default EventBridge bus → dedicated SQS bridge → local poller → n8n | Evidence preservation and human security review; no automatic isolation or credential changes |
+| Docker Desktop Kubernetes | Docker Desktop agent -> authenticated Go API -> unified n8n webhook | Read-only telemetry; approved actions must pass through the signed agent command path |
+| Minikube Kubernetes | Minikube agent -> authenticated Go API -> unified n8n webhook | Read-only telemetry; approved actions must pass through the signed agent command path |
+| AWS EC2 server | EventBridge -> central bus -> dedicated SQS queue -> local poller -> unified n8n webhook | Monitoring/runbook only; EC2 start/stop/reboot is not enabled |
+| AWS Lambda | CloudWatch alarms/EventBridge -> dedicated SQS queue -> local poller -> unified n8n webhook | Monitoring/runbook only; alias rollback/configuration changes are not enabled |
+| GuardDuty / Security Hub | EventBridge -> dedicated SQS queue -> local poller -> unified n8n webhook | Human security review; no automatic isolation or credential changes |
 
-Security events and unrecognized targets are escalated rather than automatically mutated. "All possible threats" cannot be guaranteed by a workflow alone: coverage depends on which AWS security services, CloudWatch alarms, Kubernetes signals and application telemetry are enabled.
+AWS event transport is separate from the existing production processor queue. Do not add a second consumer to that production queue.
 
-## Local Kubernetes agent
+## Build and publish
 
-The running local Minikube cluster is:
-
-- Kubernetes context: **cloudsentinels-local**
-- CloudSentinels cluster ID: **cloudsentinels-local**
-- API: http://127.0.0.1:8082
-- Telemetry interval: 30 seconds
-- Mutations: enabled only for signed/approved agent commands
-- Namespace allowlist: **cloudsentinels-system**
-
-The agent runs as a local process with a context-scoped copy of the user's kubeconfig. The copy and logs are stored under %LOCALAPPDATA%\CloudSentinels\agents, not in Git. The agent code also enforces a namespace allowlist; by default, restart/rollback is restricted to cloudsentinels-system. Read-only collection covers cluster nodes, pods, warning events, deployments and available CPU/memory metrics.
-
-Start or restart the local agent:
+Build the workflow JSON:
 
 ~~~powershell
-.\deploy\agent\local\start-agent.ps1 -ClusterId cloudsentinels-local -Context cloudsentinels-local -ApiUrl http://127.0.0.1:8082 -AllowedNamespaces cloudsentinels-system -EnableApprovedRemediation
+node .\deploy\automation\build-unified-workflow.js
+node .\deploy\automation\test-unified-workflow.mjs
 ~~~
 
-Stop it:
+After Docker Desktop and the local n8n container are running, import and publish the workflow:
 
 ~~~powershell
-.\deploy\agent\local\stop-agent.ps1 -ClusterId cloudsentinels-local
+.\deploy\automation\publish-unified-workflow.ps1
 ~~~
 
-Docker Desktop built-in Kubernetes is enabled and its `docker-desktop` context is Ready. Both local clusters have explicit, visible adapters in the active unified n8n workflow:
+The publish script imports the generated JSON, publishes workflow ID `cloudsentinelsUnified`, restarts the n8n container, and checks its health endpoint. It must complete successfully before the workflow can be called live/published.
 
-- **Docker Desktop Kubernetes Connector** — matches cluster ID `docker-desktop-kubernetes` / context `docker-desktop`.
-- **Local Minikube Kubernetes Connector** — matches cluster ID `cloudsentinels-local` / context `cloudsentinels-local`.
+## AWS SQS poller
 
-Both connector nodes enrich their matching event with provider, context, cluster identity and read-only diagnostic capabilities, then pass it into the same Unified Remediation Policy and Build Shared Remediation Runbook. They do not create separate remediation workflows.
-
-~~~powershell
-.\deploy\agent\local\attach-local-clusters.ps1 -IncludeDockerDesktop
-~~~
-
-This starts one isolated Go agent per cluster; both forward to the same API and n8n webhook. A separate stale kubeconfig context named `minikube` exists but is not the active standalone cluster; use `cloudsentinels-local`.
-
-## AWS → local n8n bridge
-
-AWS cannot call a loopback-only n8n webhook on this workstation. The bridge therefore uses a **dedicated SQS queue**, separate from the existing CloudSentinels processor queue, and a local poller:
-
-~~~text
-EC2 eu-north-1 ── EventBridge cross-region forwarder ─┐
-Lambda CloudWatch alarms ap-south-1 ─────────────────┤
-GuardDuty / Security Hub ap-south-1 ─────────────────┤
-CloudSentinels domain event bus ─────────────────────┘
-                         |
-                         v
-              Dedicated N8NEventQueue
-                         |
-             Local AWS CLI SQS poller
-                         |
-                         v
-              One local n8n webhook
-                         |
-               Shared incident lifecycle
-~~~
-
-Infrastructure as code:
-
-- [n8n-bridge-template.yaml](../aws/monitoring/n8n-bridge-template.yaml) — SQS queue/DLQ, EventBridge rules, Lambda error/throttle/duration alarms, GuardDuty/Security Hub forwarding.
-- [server-template.yaml](../aws/monitoring/server-template.yaml) — EC2 state-change and CloudWatch alarm forwarding from eu-north-1.
-- [deploy-n8n-bridge.ps1](../aws/monitoring/deploy-n8n-bridge.ps1) — deploys both stacks using an existing least-privileged AWS CLI identity.
-- [poll-aws-events.ps1](./poll-aws-events.ps1) — long-polls the dedicated queue, posts events to local n8n, and deletes SQS messages only after a successful workflow response. A local event-ID cache prevents repeated deliveries from being processed twice.
-
-Start the local poller (after authenticating an IAM profile with SQS ReceiveMessage/DeleteMessage access to this queue):
+After authenticating a least-privileged AWS profile with ReceiveMessage/DeleteMessage access to the dedicated queue, run:
 
 ~~~powershell
 .\deploy\automation\poll-aws-events.ps1 -QueueUrl https://sqs.ap-south-1.amazonaws.com/115484989078/cloudsentinels-n8n-events -Region ap-south-1 -AwsProfile <least-privileged-profile>
 ~~~
 
-The AWS stacks are now deployed successfully: `cloudsentinels-n8n-bridge` in ap-south-1 and `cloudsentinels-aws-server-monitor` in eu-north-1. The central stack provisions the dedicated n8n SQS queue/DLQ, EventBridge rules for the CloudSentinels domain bus, CloudWatch alarm events and security findings, plus six Lambda error/throttle/duration alarms. The server stack forwards EC2 state-change and server alarm events to the central bus and monitors the existing EC2 instance without starting/stopping it. The local AWS CLI still has no authenticated profile, so the SQS poller is not yet running. A least-privilege IAM policy is ready to attach to the local SSO role: `arn:aws:iam::115484989078:policy/CloudSentinelsN8NLocalPoller`. After `aws sso login --profile <least-privileged-profile>`, start it with the queue URL below. Do not attach it to the existing processor queue.
+The poller deletes an SQS message only after the local n8n webhook responds successfully. The current workstation did not have an authenticated AWS CLI profile at the last documented check, so continuous SQS-to-local-n8n delivery must be verified after login.
 
-## Validation performed
+## Security rules
 
-- n8n workflow JSON generated and imported.
-- Unified workflow published and activated in local n8n.
-- Local n8n health endpoint returned HTTP 200.
-- Synthetic Kubernetes DeploymentUnhealthy event returned a Kubernetes approval-required runbook.
-- Synthetic EC2 alarm returned an AWS EC2 manual-review runbook.
-- Synthetic Lambda alarm returned an AWS Lambda manual-review runbook.
-- Synthetic GuardDuty finding returned a security-review-required runbook.
-- All four test responses explicitly reported executionStatus=NOT_EXECUTED.
-- Go API agent-event endpoint accepts authenticated events; Go test suite passes.
-- Both AWS CloudFormation stacks reached CREATE_COMPLETE in their respective regions.
-- A synthetic CloudSentinels event was accepted by the central EventBridge bus and delivered to the dedicated SQS queue; the test message was removed.
-- The local AWS CLI profile is not authenticated, so end-to-end SQS-to-local-n8n polling remains pending.
-- No real AWS alarm, threat finding, EC2 mutation or Lambda mutation was generated or executed by these tests.
-
-## Security and operating rules
-
-- Never put AWS credentials, agent tokens, kubeconfig contents or Firebase secrets in the workflow JSON.
-- Keep n8n bound to loopback; the AWS bridge polls SQS locally.
-- Mutating Kubernetes actions require signed human approval and the agent namespace allowlist.
+- Never put AWS credentials, agent tokens, kubeconfig contents or Firebase secrets in workflow JSON.
+- Keep n8n bound to loopback; AWS reaches it through the local SQS poller.
+- Kubernetes mutations require signed human approval and the agent namespace allowlist.
 - EC2/Lambda mutations and security containment remain disabled until dedicated least-privilege adapters and explicit approvals are implemented.
-- Use a separate SQS queue for n8n; do not add a second consumer to the production processor queue.
 - Monitor the SQS delivery DLQ, queue age and local poller logs.
