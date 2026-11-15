@@ -1,117 +1,35 @@
-﻿import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, User } from "lucide-react";
-import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LogOut, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useFirebaseAuth } from "../auth/FirebaseAuth";
-import { useGetUserProfile, useSaveUserProfile } from "../hooks/useQueries";
 
 export function SettingsPage() {
-  const { data: profile, isLoading } = useGetUserProfile();
-  const saveProfile = useSaveUserProfile();
-  const { user } = useFirebaseAuth();
-  const [name, setName] = useState("");
+  const { user, signOut, isConfigured, isLoaded } = useFirebaseAuth();
 
-  const handleSave = async () => {
+  const handleSignOut = async () => {
     try {
-      await saveProfile.mutateAsync({ name: name || profile?.name || "" });
-      toast.success("Profile saved");
-    } catch {
-      toast.error("Failed to save profile");
+      await signOut();
+      toast.success("Signed out");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sign-out failed");
     }
   };
 
   return (
-    <div className="mission-page p-6 space-y-6 max-w-xl">
-      <div>
-        <h1 className="font-display text-2xl font-700 text-foreground">
-          Settings
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Manage your account preferences
-        </p>
-      </div>
-
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <User className="w-4 h-4 text-primary" />
-            User Profile
-          </CardTitle>
-          <CardDescription>Update your display name</CardDescription>
-        </CardHeader>
+    <div className="mission-page p-6 space-y-6 max-w-2xl">
+      <div><h1 className="font-display text-2xl font-bold text-foreground">Settings</h1><p className="text-sm text-muted-foreground">Account and authentication status</p></div>
+      <Card className="mission-panel">
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><UserRound className="h-4 w-4 text-primary" /> Firebase account</CardTitle><CardDescription>Identity used to authenticate requests to the CloudSentinels Go API.</CardDescription></CardHeader>
         <CardContent className="space-y-4">
-          {isLoading ? (
-            <Skeleton
-              className="h-10"
-              data-ocid="settings.profile.loading_state"
-            />
-          ) : (
-            <div className="space-y-1.5">
-              <Label>Display Name</Label>
-              <Input
-                data-ocid="settings.name.input"
-                placeholder={profile?.name || "Your name"}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-          )}
-          {user && (
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">
-                Signed-in account
-              </Label>
-              <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded-md break-all border border-border">
-                {user.email ?? user.id}
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Authenticated through Google Firebase
-              </p>
-            </div>
-          )}
-          <Button
-            data-ocid="settings.profile.save_button"
-            onClick={handleSave}
-            disabled={saveProfile.isPending}
-            className="bg-primary/90 hover:bg-primary text-primary-foreground"
-          >
-            {saveProfile.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            ) : null}
-            Save Profile
-          </Button>
-          {saveProfile.isSuccess && (
-            <p
-              className="text-xs text-green-400"
-              data-ocid="settings.profile.success_state"
-            >
-              Profile saved successfully
-            </p>
-          )}
+          <div className="flex items-center justify-between gap-3"><span className="text-xs text-muted-foreground">Authentication SDK</span><Badge variant={isConfigured ? "default" : "destructive"}>{isConfigured ? "Configured" : "Missing configuration"}</Badge></div>
+          <div className="flex items-center justify-between gap-3"><span className="text-xs text-muted-foreground">Session state</span><Badge variant={user ? "default" : "secondary"}>{!isLoaded ? "Loading" : user ? "Signed in" : "Signed out"}</Badge></div>
+          {user && <><div className="space-y-1"><div className="text-xs text-muted-foreground">Email</div><div className="rounded-md border border-border bg-muted/30 p-3 text-sm text-foreground break-all">{user.email ?? "No email claim"}</div></div><div className="space-y-1"><div className="text-xs text-muted-foreground">Firebase UID</div><div className="rounded-md border border-border bg-muted/30 p-3 font-mono text-xs text-foreground break-all">{user.id}</div></div><Button variant="destructive" onClick={() => void handleSignOut()}><LogOut className="mr-2 h-4 w-4" /> Sign out</Button></>}
+          {!user && <p className="text-sm text-muted-foreground">Sign in to access the operational workspace.</p>}
         </CardContent>
       </Card>
-
-      <p className="text-xs text-muted-foreground">
-        &copy; {new Date().getFullYear()}. Built with love using{" "}
-        <a
-          href="https://github.com/ABHILASH9519/cloudsentinels"
-          className="text-primary hover:underline"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          CloudSentinels
-        </a>
-      </p>
+      <p className="text-xs text-muted-foreground">CloudSentinels · Firebase Authentication · AWS-hosted execution remains separately controlled.</p>
     </div>
   );
 }

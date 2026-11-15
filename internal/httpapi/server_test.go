@@ -139,3 +139,73 @@ func TestIncidentCreationRejectsDuplicateID(t *testing.T) {
 		}
 	}
 }
+
+func TestApprovedRemediationQueuesOnlyRegisteredClusterAndAllowedNamespace(t *testing.T) {
+	cfg := config.Config{
+		ExecutionMode:                "online-server",
+		AllowLocalMutations:          true,
+		RemediationAllowedNamespaces: []string{"cloudsentinels-benchmark"},
+	}
+	server := NewServer(cfg, slog.Default(), testAuthenticator{})
+	server.localTelemetry["cloudsentinels-local"] = LocalTelemetry{ClusterID: "cloudsentinels-local"}
+	body := `{"action":"restart-deployment","clusterId":"cloudsentinels-local","namespace":"cloudsentinels-benchmark","deployment":"benchmark-api","confirm":true}`
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/remediation/commands", strings.NewReader(body)))
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", response.Code, response.Body.String())
+	}
+	var command map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &command); err != nil {
+		t.Fatal(err)
+	}
+	if command["approvalStatus"] != "approved" || command["approvedBy"] != "test-user" || command["status"] != "queued" {
+		t.Fatalf("unexpected approval record: %#v", command)
+	}
+	if len(server.automationQueue.List()) != 1 {
+		t.Fatalf("expected one queued command, got %d", len(server.automationQueue.List()))
+	}
+}
+
+func TestRemediationRequiresExplicitConfirmation(t *testing.T) {
+	cfg := config.Config{
+		ExecutionMode:                "online-server",
+		AllowLocalMutations:          true,
+		RemediationAllowedNamespaces: []string{"cloudsentinels-benchmark"},
+	}
+	server := NewServer(cfg, slog.Default(), testAuthenticator{})
+	server.localTelemetry["cloudsentinels-local"] = LocalTelemetry{ClusterID: "cloudsentinels-local"}
+	body := `{"action":"restart-deployment","clusterId":"cloudsentinels-local","namespace":"cloudsentinels-benchmark","deployment":"benchmark-api","confirm":false}`
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/remediation/commands", strings.NewReader(body)))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", response.Code)
+	}
+	if len(server.automationQueue.List()) != 0 {
+		t.Fatal("unconfirmed remediation must not enter the command queue")
+	}
+}
+
+func TestRemediationRejectsUnregisteredClusterAndUnapprovedNamespace(t *testing.T) {
+	cfg := config.Config{
+		ExecutionMode:                "online-server",
+		AllowLocalMutations:          true,
+		RemediationAllowedNamespaces: []string{"cloudsentinels-benchmark"},
+	}
+	server := NewServer(cfg, slog.Default(), testAuthenticator{})
+	body := `{"action":"restart-deployment","clusterId":"unknown-cluster","namespace":"cloudsentinels-benchmark","deployment":"benchmark-api","confirm":true}`
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/remediation/commands", strings.NewReader(body)))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for unregistered cluster, got %d", response.Code)
+	}
+	server.localTelemetry["cloudsentinels-local"] = LocalTelemetry{ClusterID: "cloudsentinels-local"}
+	body = `{"action":"restart-deployment","clusterId":"cloudsentinels-local","namespace":"default","deployment":"benchmark-api","confirm":true}`
+	response = httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/remediation/commands", strings.NewReader(body)))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for unapproved namespace, got %d", response.Code)
+	}
+	if len(server.automationQueue.List()) != 0 {
+		t.Fatal("rejected remediation must not enter the command queue")
+	}
+}

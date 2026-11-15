@@ -39,3 +39,6 @@ src/frontend/dist/
 
 .env.local
 src/frontend/.env.local
+
+# Local review stack processes, logs and generated binaries
+.local-review-*

@@ -165,6 +165,31 @@ export function useRefreshAirtableInventory() {
   });
 }
 
+export type RemediationRequest = {
+  action: "restart-deployment" | "rollback-deployment";
+  clusterId: string;
+  namespace: string;
+  deployment: string;
+  confirm: true;
+};
+
+export function useQueueRemediation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RemediationRequest) =>
+      cloudSentinelsRequest<AutomationCommand>("/api/v1/remediation/commands", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["cloudsentinels", "automation", "commands"] }),
+        queryClient.invalidateQueries({ queryKey: ["cloudsentinels", "monitoring"] }),
+      ]);
+    },
+  });
+}
+
 export function useTestZapierWebhook() {
   return useMutation({
     mutationFn: () => cloudSentinelsRequest<{ status: string }>("/api/v1/zapier/test", { method: "POST" }),

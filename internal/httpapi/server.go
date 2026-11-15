@@ -112,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/n8n/test", s.testN8N)
 	mux.HandleFunc("GET /api/v1/automation/commands", s.listAutomationCommands)
 	mux.HandleFunc("POST /api/v1/remediation/preview", s.previewRemediation)
+	mux.HandleFunc("POST /api/v1/remediation/commands", s.queueRemediation)
 	mux.HandleFunc("GET /api/v1/agent/commands", s.agentCommands)
 	mux.HandleFunc("POST /api/v1/agent/commands/{id}/result", s.agentCommandResult)
 	mux.HandleFunc("POST /api/v1/agent/telemetry", s.agentTelemetry)
@@ -562,6 +563,88 @@ func (s *Server) listAutomationCommands(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": s.automationQueue.List()})
+}
+
+func (s *Server) queueRemediation(w http.ResponseWriter, r *http.Request) {
+	if s.config.ExecutionMode != "online-server" {
+		writeError(w, http.StatusServiceUnavailable, "remediation_unavailable", "Approved local remediation is available only through the persistent online-server control plane")
+		return
+	}
+	if !s.config.AllowLocalMutations {
+		writeError(w, http.StatusForbidden, "mutations_disabled", "Local remediation is disabled by server policy")
+		return
+	}
+	if s.authenticator == nil {
+		writeError(w, http.StatusServiceUnavailable, "authentication_unconfigured", "Firebase Authentication is required to approve remediation")
+		return
+	}
+	principal, err := s.authenticator.Authenticate(r)
+	if err != nil || strings.TrimSpace(principal.Subject) == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "A valid operator identity is required to approve remediation")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var input struct {
+		Action     string `json:"action"`
+		ClusterID  string `json:"clusterId"`
+		Namespace  string `json:"namespace"`
+		Deployment string `json:"deployment"`
+		Confirm    bool   `json:"confirm"`
+	}
+	if err := decoder.Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_remediation", "Remediation request JSON is invalid")
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid_remediation", "Remediation body must contain exactly one JSON object")
+		return
+	}
+	if !input.Confirm {
+		writeError(w, http.StatusUnprocessableEntity, "approval_required", "The operator must explicitly confirm this remediation action")
+		return
+	}
+	if input.Action != "restart-deployment" && input.Action != "rollback-deployment" {
+		writeError(w, http.StatusUnprocessableEntity, "action_not_allowed", "Only restart-deployment and rollback-deployment are currently supported")
+		return
+	}
+	namespaceAllowed := false
+	for _, namespace := range s.config.RemediationAllowedNamespaces {
+		if strings.EqualFold(strings.TrimSpace(namespace), strings.TrimSpace(input.Namespace)) {
+			namespaceAllowed = true
+			break
+		}
+	}
+	if !namespaceAllowed {
+		writeError(w, http.StatusUnprocessableEntity, "namespace_not_allowed", "The remediation namespace is not in CLOUDSENTINELS_REMEDIATION_ALLOWED_NAMESPACES")
+		return
+	}
+	s.telemetryMu.RLock()
+	_, registeredCluster := s.localTelemetry[input.ClusterID]
+	s.telemetryMu.RUnlock()
+	if !registeredCluster {
+		writeError(w, http.StatusUnprocessableEntity, "cluster_not_registered", "The target cluster has not sent a recent authenticated agent heartbeat")
+		return
+	}
+
+	command, err := s.automationQueue.Enqueue(automation.Command{
+		Action: input.Action, ClusterID: input.ClusterID,
+		Namespace: input.Namespace, Deployment: input.Deployment,
+		ApprovalStatus: "approved", ApprovedBy: principal.Subject, RequestedBy: principal.Subject,
+	})
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "command_rejected", err.Error())
+		return
+	}
+	s.emitAutomationEvent("command:"+command.ID, automation.Event{
+		EventType: "automation.command_queued", EventID: command.ID, ClusterID: command.ClusterID,
+		SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: "info",
+		Title: command.Action, Summary: "An operator-approved remediation command was queued for the registered local agent.",
+	}, 0)
+	writeJSON(w, http.StatusAccepted, command)
 }
 
 func (s *Server) agentCommands(w http.ResponseWriter, r *http.Request) {

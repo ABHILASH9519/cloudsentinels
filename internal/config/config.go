@@ -11,27 +11,28 @@ import (
 )
 
 type Config struct {
-	HTTPAddr                   string
-	ExecutionMode              string
-	Environment                string
-	BuildVersion               string
-	FirebaseProjectID          string
-	FirebaseCredentials        string
-	FirebaseServiceAccountJSON string
-	LocalAuthToken             string
-	AllowLocalAuthInProd       bool
-	AllowedOrigins             []string
-	AirtableToken              string
-	AirtableBaseID             string
-	AirtableSnapshotPath       string
-	AirtableSyncInterval       time.Duration
-	ZapierCatchHookURL         string
-	ZapierSigningSecret        string
-	N8NWebhookURL              string
-	N8NSigningSecret           string
-	AgentToken                 string
-	AgentTokens                map[string]string
-	AllowLocalMutations        bool
+	HTTPAddr                     string
+	ExecutionMode                string
+	Environment                  string
+	BuildVersion                 string
+	FirebaseProjectID            string
+	FirebaseCredentials          string
+	FirebaseServiceAccountJSON   string
+	LocalAuthToken               string
+	AllowLocalAuthInProd         bool
+	AllowedOrigins               []string
+	RemediationAllowedNamespaces []string
+	AirtableToken                string
+	AirtableBaseID               string
+	AirtableSnapshotPath         string
+	AirtableSyncInterval         time.Duration
+	ZapierCatchHookURL           string
+	ZapierSigningSecret          string
+	N8NWebhookURL                string
+	N8NSigningSecret             string
+	AgentToken                   string
+	AgentTokens                  map[string]string
+	AllowLocalMutations          bool
 }
 
 func Load() (Config, error) {
@@ -40,27 +41,28 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
-		HTTPAddr:                   env("CLOUDSENTINELS_HTTP_ADDR", ":8080"),
-		ExecutionMode:              strings.ToLower(env("CLOUDSENTINELS_EXECUTION_MODE", "online-server")),
-		Environment:                strings.ToLower(env("CLOUDSENTINELS_ENV", "development")),
-		BuildVersion:               env("CLOUDSENTINELS_VERSION", "dev"),
-		FirebaseProjectID:          env("FIREBASE_PROJECT_ID", env("GOOGLE_CLOUD_PROJECT", "")),
-		FirebaseCredentials:        env("GOOGLE_APPLICATION_CREDENTIALS", ""),
-		FirebaseServiceAccountJSON: env("FIREBASE_SERVICE_ACCOUNT_JSON", ""),
-		LocalAuthToken:             env("CLOUDSENTINELS_LOCAL_AUTH_TOKEN", ""),
-		AllowLocalAuthInProd:       boolEnv("CLOUDSENTINELS_ALLOW_LOCAL_AUTH_IN_PROD"),
-		AllowedOrigins:             splitList(env("CLOUDSENTINELS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")),
-		AirtableToken:              env("AIRTABLE_API_TOKEN", ""),
-		AirtableBaseID:             env("AIRTABLE_BASE_ID", "app3xn3iXAsm7MgA7"),
-		AirtableSnapshotPath:       env("AIRTABLE_SNAPSHOT_PATH", "deploy/eks/airtable-inventory.snapshot.json"),
-		AirtableSyncInterval:       durationEnv("AIRTABLE_SYNC_INTERVAL", 5*time.Minute),
-		ZapierCatchHookURL:         env("ZAPIER_CATCH_HOOK_URL", ""),
-		ZapierSigningSecret:        env("ZAPIER_SIGNING_SECRET", ""),
-		N8NWebhookURL:              env("N8N_WEBHOOK_URL", ""),
-		N8NSigningSecret:           env("N8N_SIGNING_SECRET", ""),
-		AgentToken:                 env("CLOUDSENTINELS_AGENT_TOKEN", ""),
-		AgentTokens:                agentTokens,
-		AllowLocalMutations:        boolEnv("CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS"),
+		HTTPAddr:                     env("CLOUDSENTINELS_HTTP_ADDR", ":8080"),
+		ExecutionMode:                strings.ToLower(env("CLOUDSENTINELS_EXECUTION_MODE", "online-server")),
+		Environment:                  strings.ToLower(env("CLOUDSENTINELS_ENV", "development")),
+		BuildVersion:                 env("CLOUDSENTINELS_VERSION", "dev"),
+		FirebaseProjectID:            env("FIREBASE_PROJECT_ID", env("GOOGLE_CLOUD_PROJECT", "")),
+		FirebaseCredentials:          env("GOOGLE_APPLICATION_CREDENTIALS", ""),
+		FirebaseServiceAccountJSON:   env("FIREBASE_SERVICE_ACCOUNT_JSON", ""),
+		LocalAuthToken:               env("CLOUDSENTINELS_LOCAL_AUTH_TOKEN", ""),
+		AllowLocalAuthInProd:         boolEnv("CLOUDSENTINELS_ALLOW_LOCAL_AUTH_IN_PROD"),
+		AllowedOrigins:               splitList(env("CLOUDSENTINELS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")),
+		RemediationAllowedNamespaces: splitList(env("CLOUDSENTINELS_REMEDIATION_ALLOWED_NAMESPACES", "")),
+		AirtableToken:                env("AIRTABLE_API_TOKEN", ""),
+		AirtableBaseID:               env("AIRTABLE_BASE_ID", "app3xn3iXAsm7MgA7"),
+		AirtableSnapshotPath:         env("AIRTABLE_SNAPSHOT_PATH", "deploy/eks/airtable-inventory.snapshot.json"),
+		AirtableSyncInterval:         durationEnv("AIRTABLE_SYNC_INTERVAL", 5*time.Minute),
+		ZapierCatchHookURL:           env("ZAPIER_CATCH_HOOK_URL", ""),
+		ZapierSigningSecret:          env("ZAPIER_SIGNING_SECRET", ""),
+		N8NWebhookURL:                env("N8N_WEBHOOK_URL", ""),
+		N8NSigningSecret:             env("N8N_SIGNING_SECRET", ""),
+		AgentToken:                   env("CLOUDSENTINELS_AGENT_TOKEN", ""),
+		AgentTokens:                  agentTokens,
+		AllowLocalMutations:          boolEnv("CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS"),
 	}
 	switch cfg.ExecutionMode {
 	case "online-server", "online-serverless", "offline-kubernetes":
