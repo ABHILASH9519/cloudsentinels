@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: CloudSentinels Go serverless HTTP adapter (shared inventory and explainable analysis)
+Description: CloudSentinels Go serverless HTTP adapter using Firebase Authentication
 
 Globals:
   Function:
@@ -13,12 +13,12 @@ Globals:
     Tracing: Active
 
 Parameters:
-  CognitoIssuerURL:
+  FirebaseProjectID:
     Type: String
-    Description: HTTPS Cognito User Pool issuer URL
-  CognitoAppClientID:
+    Description: Firebase project ID used by Firebase Admin token verification
+  FirebaseAdminSecretArn:
     Type: String
-    Description: Cognito app client ID used as ID-token audience
+    Description: Secrets Manager ARN containing the Firebase Admin service-account JSON document
   AllowedOrigins:
     Type: String
     Default: https://app.example.com
@@ -64,10 +64,10 @@ Resources:
           CLOUDSENTINELS_ENV: production
           CLOUDSENTINELS_VERSION: lambda
           CLOUDSENTINELS_ALLOWED_ORIGINS: !Ref AllowedOrigins
+          FIREBASE_PROJECT_ID: !Ref FirebaseProjectID
+          FIREBASE_SERVICE_ACCOUNT_JSON: !Sub "{{resolve:secretsmanager:${FirebaseAdminSecretArn}:SecretString}}"
           AIRTABLE_BASE_ID: app3xn3iXAsm7MgA7
           AIRTABLE_SNAPSHOT_PATH: /var/task/airtable-inventory.snapshot.json
-          COGNITO_ISSUER_URL: !Ref CognitoIssuerURL
-          COGNITO_APP_CLIENT_ID: !Ref CognitoAppClientID
           AIRTABLE_API_TOKEN: !If [HasAirtableSecret, !Sub "{{resolve:secretsmanager:${AirtableSecretArn}:SecretString:token}}", ""]
           ZAPIER_CATCH_HOOK_URL: !If [HasZapierSecret, !Sub "{{resolve:secretsmanager:${ZapierSecretArn}:SecretString:catchHookUrl}}", ""]
           ZAPIER_SIGNING_SECRET: !If [HasZapierSecret, !Sub "{{resolve:secretsmanager:${ZapierSecretArn}:SecretString:signingSecret}}", ""]

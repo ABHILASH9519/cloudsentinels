@@ -22,18 +22,19 @@ All four adapters are connected in the same main execution path before **Unified
 
 ## Runtime status (2026-11-15)
 
-The unified workflow is currently published and active in the local n8n container:
+The unified workflow is published and active in the local n8n container:
 
-- Docker Desktop engine: reachable (server version 29.3.1).
-- n8n container: running; `/healthz` returned HTTP 200.
-- Persisted n8n export: workflow ID `cloudsentinelsUnified`, `active=true`, 15 nodes, including all four connector Code nodes.
-- Go API: `/healthz` returned `status=ok` on port 8082.
-- Docker Desktop Kubernetes: context `docker-desktop`, node `desktop-control-plane` Ready.
-- Minikube: context `cloudsentinels-local`, node Ready after `minikube update-context` refreshed its stale API endpoint.
-- Both isolated Go agents are running and posting telemetry/events to the Go API every 30 seconds.
-- Four live synthetic POSTs to the active n8n webhook (EC2, Lambda, Docker Desktop and Minikube) each reached the shared remediation policy and returned a target-specific runbook with `executionStatus=NOT_EXECUTED`.
+- Docker Desktop engine: reachable; Minikube and Docker Desktop each have one Ready node.
+- n8n: pinned `n8nio/n8n:2.16.1`, Compose-managed, loopback-only; `/healthz` returned HTTP 200. Existing data was backed up before migration and the persistent `n8n_data` volume is retained.
+- Persisted workflow: ID `cloudsentinelsUnified`, `active=true`, 15 nodes, including all four explicit connector Code nodes.
+- Go API: `/healthz` returned `status=ok` on port 8082. `/readyz` correctly returns HTTP 503 because Firebase authentication is not configured.
+- Both isolated Go agents are running and sending telemetry every 30 seconds with `mutations=false` by default.
+- Local agent telemetry/event endpoints synchronously require n8n acceptance; failures return retryable HTTP 503 and the agents retry on their next heartbeat/scan. Other API-originated automation events use bounded background retries.
+- Authenticated events from both local agents reached the Go API and the n8n execution database; the latest executions completed with `status=success`. Real Minikube degraded/recovered telemetry was routed into the workflow.
+- EC2, Lambda, Docker Desktop and Minikube source-routing tests each selected the expected read-only adapter and returned `executionStatus=NOT_EXECUTED`.
 
-Both clusters now report their nodes Ready and all listed pods `1/1 Running`. The Minikube storage-provisioner and Docker Desktop scheduler/controller-manager had transient restarts during startup but recovered on recheck. AWS SQS-to-local-n8n polling still requires AWS CLI SSO authentication.
+**Outstanding dependencies:** Firebase Web App and Admin credentials are missing, so the authenticated dashboard/API is not ready. AWS read-only inventory confirms the n8n bridge stack in ap-south-1 and the EC2 server-monitor stack in eu-north-1 are deployed; both Node.js Lambda functions are Active and the automation processor SQS mapping is enabled. The EC2 instance is stopped. Six messages are waiting in the dedicated n8n SQS queue. The AWS CLI is authenticated as root, so the poller correctly refuses to run; the existing `CloudSentinelsN8NLocalPoller` policy is present but not attached to a least-privilege IAM principal. The Go Lambda adapter builds for Linux ARM64 but has not been deployed. Existing Node.js Operations Lambda resources are a separate runtime.
+
 ## Shared incident lifecycle
 
 Every source follows the same stages:
@@ -77,18 +78,17 @@ After Docker Desktop and the local n8n container are running, import and publish
 .\deploy\automation\publish-unified-workflow.ps1
 ~~~
 
-The publish script imports the generated JSON, publishes workflow ID `cloudsentinelsUnified`, restarts the n8n container, and checks its health endpoint. It must complete successfully before the workflow can be called live/published.
+The publish script imports the generated JSON and publishes workflow ID `cloudsentinelsUnified`. Manage the pinned n8n container with `start-local-n8n.ps1` / `stop-local-n8n.ps1`; its persistent volume is retained across restarts.
 
 ## AWS SQS poller
 
-After authenticating a least-privileged AWS profile with ReceiveMessage/DeleteMessage access to the dedicated queue, run:
+After authenticating the least-privileged AWS profile with `aws login`, start the background consumer. It discovers `N8NEventQueueUrl` from the CloudFormation stack; pass `-QueueUrl` if the role lacks `cloudformation:DescribeStacks`:
 
 ~~~powershell
-.\deploy\automation\poll-aws-events.ps1 -QueueUrl https://sqs.ap-south-1.amazonaws.com/115484989078/cloudsentinels-n8n-events -Region ap-south-1 -AwsProfile <least-privileged-profile>
+.\deploy\automation\start-aws-poller.ps1 -AwsProfile My-Website
 ~~~
 
-The poller deletes an SQS message only after the local n8n webhook responds successfully. The current workstation did not have an authenticated AWS CLI profile at the last documented check, so continuous SQS-to-local-n8n delivery must be verified after login.
-
+The launcher verifies the AWS account, rejects root credentials, checks n8n health and SQS queue access, then starts the poller in the background. Stop it with `deploy/automation/stop-aws-poller.ps1`. The poller deletes an SQS message only after the local n8n webhook returns success. Expired AWS sessions cause retries; messages remain in SQS until accepted.
 ## Security rules
 
 - Never put AWS credentials, agent tokens, kubeconfig contents or Firebase secrets in workflow JSON.
@@ -96,3 +96,7 @@ The poller deletes an SQS message only after the local n8n webhook responds succ
 - Kubernetes mutations require signed human approval and the agent namespace allowlist.
 - EC2/Lambda mutations and security containment remain disabled until dedicated least-privilege adapters and explicit approvals are implemented.
 - Monitor the SQS delivery DLQ, queue age and local poller logs.
+
+## Authentication prerequisite
+
+The frontend and Go API share Firebase Authentication. Add VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, and VITE_FIREBASE_APP_ID to src/frontend/.env.local. Add matching FIREBASE_PROJECT_ID and a server-side Admin credential via GOOGLE_APPLICATION_CREDENTIALS or FIREBASE_SERVICE_ACCOUNT_JSON to the ignored root .env.local. Never put Admin credentials in browser variables or source control. scripts/start-local-server.ps1 validates these values and refuses to start an apparently healthy but unauthenticated stack.

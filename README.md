@@ -4,7 +4,7 @@
 
 Go owns the cluster inventory/monitoring API, explainable cluster analysis, Kubernetes agent and a standalone Lambda adapter. The React/TypeScript frontend is the presentation layer. The currently deployed AWS Operations Lambda still serves persistent incident/alert/profile routes, and supporting EventBridge/SQS/Zapier workers remain Node.js; porting those deployed handlers into Go is a remaining migration task.
 
-> **Latest local verification (15 Nov 2026):** Docker Desktop Kubernetes (`docker-desktop`) and standalone Minikube (`cloudsentinels-local`) are both reachable with one Ready node each. Both isolated Go agents are running and reporting telemetry/events to the Go API on port 8082; the local n8n container is healthy on port 5678 and the 15-node unified workflow is published/active. Live synthetic webhook tests passed for AWS EC2, AWS Lambda, Docker Desktop Kubernetes and Minikube; every runbook reported `NOT_EXECUTED`. Both clusters now report all listed pods Ready; the initial Minikube storage-provisioner and Docker Desktop scheduler restarts recovered after startup. AWS EventBridge/SQS monitoring stacks were deployed previously; the local SQS poller still needs AWS CLI SSO authentication. The EC2 instance remains stopped, Lambda functions are active, and EKS is not provisioned.
+> **Latest local and AWS verification (15 Nov 2026):** Docker Desktop Kubernetes and the Minikube profile `cloudsentinels-local` each have one Ready node; both isolated Go agents are sending telemetry to the Go API in read-only mode. The pinned n8n 2.16.1 container is healthy and the persisted 15-node unified workflow is active. Local Go race tests, vet, frontend checks/build, serverless processor/worker tests, CloudFormation lint, and the Linux ARM64 Go Lambda build pass. In AWS, the `cloudsentinels-n8n-bridge` stack is `CREATE_COMPLETE` in `ap-south-1`; `cloudsentinels-aws-server-monitor` is `CREATE_COMPLETE` in `eu-north-1`; both existing Node.js Lambda functions are Active and the automation SQS event-source mapping is enabled. Six messages are waiting in the dedicated AWS-to-n8n queue. **Not yet production-ready:** Firebase Web/Admin credentials are missing, so API `/readyz` correctly returns 503. The EC2 server is stopped. EKS is not provisioned. The Go Lambda adapter is built but not deployed. The local AWS CLI is authenticated as root; the poller correctly refuses root, and the existing SQS consumer policy is unattached, so AWS events are not yet being consumed by local n8n.
 
 ## Features
 
@@ -13,8 +13,8 @@ Go owns the cluster inventory/monitoring API, explainable cluster analysis, Kube
 - **Explainable AI triage:** deterministic rules inspect cluster health, CPU, state and missing telemetry; findings include evidence, confidence and recommended checks.
 - **Kubernetes agent:** Go desktop/in-cluster agent collects node, pod, warning-event and resource metrics; approved deployment restart/rollback is restricted by the agent action and namespace allowlists.
 - **Unified automation:** one local n8n workflow classifies Kubernetes, EC2, Lambda and supported security events into the same incident lifecycle and remediation runbook. HMAC-signed Go API events and Zapier notifications remain separate destinations.
-- **Three execution modes:** persistent online Go server, a Go API Gateway/Lambda adapter (built, not yet the active deployed Operations API), and offline/local Kubernetes agent.
-- **Security controls:** Cognito ID-token validation for hosted use, local-only development auth, per-cluster agent credentials, CORS allowlist and approval gates for mutations.
+| Offline/local Kubernetes | Minikube profile cloudsentinels-local plus Go agent | Running; 1 Ready node, 9/9 healthy pods; read-only by default, mutations disabled |
+- **Security controls:** Firebase ID-token validation, per-cluster agent credentials, CORS allowlist and signed approval gates for mutations. The local startup script fails closed until matching Firebase Web App and Admin credentials are configured.
 
 ## Architecture
 
@@ -39,12 +39,12 @@ AWS EventBridge / SQS --> local poller --> same n8n workflow
 
 | Runtime | Purpose | Current status |
 |---|---|---|
-| Online server | Go API, inventory, monitoring, analysis and command broker | Running locally; standalone EC2 host not provisioned |
-| Online serverless | AWS API Gateway HTTP API, Lambda, DynamoDB, EventBridge and SQS | Deployed in ap-south-1; health route verified |
-| Offline/local Kubernetes | Minikube profile cloudsentinels-local plus Go agent | Running; 1 Ready node, 9/9 healthy pods; approval-gated actions limited to cloudsentinels-system |
-| Local automation | Docker n8n + unified workflow | Running and tested with synthetic Kubernetes, EC2, Lambda, GuardDuty and DLQ events |
-| Docker Desktop Kubernetes | Built-in Docker Desktop cluster | Disabled; enable in Docker Desktop Settings → Kubernetes before attaching its agent |
-| AWS → local n8n bridge | EventBridge → dedicated SQS → local poller | AWS stacks deployed; synthetic queue delivery verified; local poller pending AWS CLI SSO login |
+| Online server | Go API, inventory, monitoring, analysis and command broker | Running locally; EC2 server-monitor stack deployed in eu-north-1; instance stopped |
+| Online serverless | Existing Node.js Operations API and Automation Processor; separate Go Lambda adapter | Both Node.js Lambdas Active in ap-south-1; SQS event-source mapping enabled; Go Lambda ARM64 build passes but adapter is not deployed |
+| Offline/local Kubernetes | Minikube profile cloudsentinels-local plus Go agent | Running; 1 Ready node, 9/9 healthy pods; read-only by default, mutations disabled |
+| Local automation | Docker Compose n8n 2.16.1 + unified workflow | Running; persistent volume backed up; 15-node workflow active; local agent events verified end-to-end |
+| Docker Desktop Kubernetes | Built-in Docker Desktop cluster | Active; one Ready control-plane node; read-only Go agent attached |
+| AWS-to-local-n8n bridge | EventBridge-to-dedicated-SQS-to-local-poller | Bridge stack deployed; 6 messages pending; poller blocked until a least-privilege non-root identity is attached to the consumer policy |
 
 ## Run the local operational stack (Windows)
 
@@ -54,18 +54,19 @@ From the repository root in PowerShell:
 
 ```powershell
 pnpm install
+powershell -ExecutionPolicy Bypass -File .\deploy\automation\start-local-n8n.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-server.ps1
 ```
 
-The startup script configures the deployed Amazon Cognito user pool and AWS Lambda API, builds the Go API and Vite dashboard, and launches the local services. Sign-in and self-registration use real Cognito accounts; no local mock identity or sample-record importer is enabled. The Go API uses Cognito JWT validation and runs on port `8082`.
+Before starting, configure the Firebase Web App values in `src/frontend/.env.local` and Firebase Admin credentials plus `FIREBASE_PROJECT_ID` in the ignored root `.env.local` (see `docs/architecture/firebase-frontend-setup.md`). Start the pinned local n8n runtime first with `deploy/automation/start-local-n8n.ps1`, then run the startup script. It validates Firebase configuration, builds the Go API and Vite dashboard, starts Minikube, and attaches both Minikube and Docker Desktop agents. The Go API verifies Firebase ID tokens and runs on port `8082`; startup fails closed when authentication is missing.
 
-Start the real Docker-backed Kubernetes cluster, mount the Airtable inventory and connect the read-only agent:
+The full startup script provisions Minikube and attaches both local clusters. If the Go API is already running and you only need to attach/restart both agents:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\kubernetes\start-local-cluster.ps1
+powershell -ExecutionPolicy Bypass -File .\deploy\agent\local\attach-local-clusters.ps1 -IncludeDockerDesktop
 ```
 
-This mounts all 20 Airtable cluster records in a Kubernetes ConfigMap and sends actual local node/pod telemetry to the Go API. The source inventory and live telemetry remain separate.
+The standalone `scripts/kubernetes/start-local-cluster.ps1` command provisions Minikube only. Both agents run read-only by default. To enable the approval-gated Kubernetes mutation path, start the full stack with `-EnableApprovedRemediation`; each mutation still requires signed operator approval and remains namespace/action allowlisted. AWS EC2/Lambda mutations and security containment remain disabled.
 
 - **Cluster Command:** http://localhost:5173/#/clusters
 - **Monitoring:** http://localhost:5173/#/monitoring
@@ -129,7 +130,7 @@ Protected routes require a valid bearer token. See [the integration guide](docs/
 ## External configuration for live integrations
 
 - **Airtable:** configure `AIRTABLE_API_TOKEN` on the Go server. Without it, the API serves the sanitized snapshot and disables refresh.
-- **Cognito:** configure `COGNITO_ISSUER_URL` and `COGNITO_APP_CLIENT_ID` for hosted browser authentication. The local frontend uses the same Cognito user pool as the hosted runtime; the Go API validates Cognito ID tokens.
+- **Firebase Authentication:** configure the four public `VITE_FIREBASE_*` Web App values in `src/frontend/.env.local`, plus `FIREBASE_PROJECT_ID` and Firebase Admin credentials for the Go API. The browser sends Firebase ID tokens; the Go API verifies them with Firebase Admin SDK. The Go Lambda template uses the same Firebase project and a server-side Secrets Manager service-account secret.
 - **Zapier application events:** configure an HTTPS `ZAPIER_CATCH_HOOK_URL` and a strong `ZAPIER_SIGNING_SECRET` on the Go API. The UI reports the integration as unavailable until configured.
 - **Zapier GitHub Actions notifications:** add the Catch Hook ID (the path after `/hooks/catch/`, not the full URL) as the repository Actions secret `ZAPIER_WEBHOOK_ID`. The workflow posts a sanitized build result only after both Go and frontend jobs pass. The secret is optional; notifications are skipped when it is absent.
 - **Kubernetes:** start a reachable Kubernetes context and configure a unique `CLOUDSENTINELS_AGENT_TOKEN` (or per-cluster token map) for the Go agent and API.

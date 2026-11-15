@@ -7,7 +7,7 @@ This runbook describes the current Go-first control plane and checks that can be
 - Go HTTP API for cluster inventory, monitoring, explainable analysis, agent telemetry and signed Zapier command ingress.
 - Go Kubernetes agent with fixed kubectl allowlist, per-cluster bearer credentials and optional signed Lambda event forwarding.
 - Go AWS Lambda adapter compiled for Linux ARM64; the deployed AWS Operations API still contains Node.js workers and is not yet replaced by the Go adapter.
-- Cognito OIDC browser sign-in using Authorization Code + PKCE; the Go API validates Cognito ID tokens.
+- Firebase browser sign-in (Google popup and email/password); the Go API verifies Firebase ID tokens using the Firebase Admin SDK.
 - React/TypeScript dashboard; the frontend is a presentation layer, not a backend runtime.
 - Docker-backed local Kubernetes manifests and a read-only agent deployment.
 - GitHub Actions Go/UI validation and optional Zapier CI notification through gpuliyar/zapier-webhook-action@v1.0.0.

@@ -2,7 +2,8 @@
 param(
   [string]$ApiUrl = "http://127.0.0.1:8082",
   [string]$AllowedNamespaces = "cloudsentinels-system",
-  [switch]$IncludeDockerDesktop
+  [switch]$IncludeDockerDesktop,
+  [switch]$EnableApprovedRemediation
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,7 +37,15 @@ foreach ($target in $contexts) {
     continue
   }
 
-  & $startAgent -ClusterId $target.ClusterId -Context $target.Context -ApiUrl $ApiUrl -Environment $target.Environment -AllowedNamespaces $AllowedNamespaces -EnableApprovedRemediation
+  $agentParams = @{
+    ClusterId = $target.ClusterId
+    Context = $target.Context
+    ApiUrl = $ApiUrl
+    Environment = $target.Environment
+    AllowedNamespaces = $AllowedNamespaces
+  }
+  if ($EnableApprovedRemediation) { $agentParams.EnableApprovedRemediation = $true }
+  & $startAgent @agentParams
   $agentExitCode = $LASTEXITCODE
   $env:KUBECONFIG = $sourceKubeconfig
   if ($agentExitCode -ne 0) { throw "Agent startup failed for context $($target.Context)." }

@@ -3,6 +3,7 @@ package automation
 import (
 	"bytes"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -223,16 +224,21 @@ func (d *Dispatcher) Enabled() bool {
 
 func (d *Dispatcher) Send(event Event) error {
 	if !d.Enabled() {
-		return errors.New("Zapier outbound webhook is not configured")
+		return errors.New("outbound automation webhook is not configured")
 	}
-	if d.Client == nil {
-		d.Client = &http.Client{Timeout: 8 * time.Second}
+	client := d.Client
+	if client == nil {
+		client = &http.Client{Timeout: 8 * time.Second}
 	}
 	if event.SchemaVersion == "" {
 		event.SchemaVersion = "1"
 	}
 	if event.EventID == "" {
-		event.EventID = fmt.Sprintf("evt-%d", time.Now().UnixNano())
+		var eventID [16]byte
+		if _, err := rand.Read(eventID[:]); err != nil {
+			return fmt.Errorf("generate event id: %w", err)
+		}
+		event.EventID = "evt-" + hex.EncodeToString(eventID[:])
 	}
 	if event.OccurredAt.IsZero() {
 		event.OccurredAt = time.Now().UTC()
@@ -250,7 +256,7 @@ func (d *Dispatcher) Send(event Event) error {
 	req.Header.Set("X-CS-Timestamp", timestamp)
 	req.Header.Set("X-CS-Signature", Sign(d.Secret, timestamp, body))
 	req.Header.Set("X-CS-Event-ID", event.EventID)
-	resp, err := d.Client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

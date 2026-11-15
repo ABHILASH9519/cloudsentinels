@@ -1,6 +1,10 @@
 package automation
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -61,5 +65,47 @@ func TestQueueRequiresApprovalForRollbackAndDispatchesOnlyAfterApproval(t *testi
 	items := q.PendingForCluster("local-cluster", 10)
 	if len(items) != 1 || items[0].Action != "rollback-deployment" {
 		t.Fatalf("approved rollback not dispatched: %#v", items)
+	}
+}
+
+func TestDispatcherSendIsSafeForConcurrentCallsWithoutConfiguredClient(t *testing.T) {
+	var mu sync.Mutex
+	seen := make(map[string]bool)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.Header.Get("X-CS-Signature") == "" {
+			t.Errorf("unexpected webhook request: method=%s signed=%t", r.Method, r.Header.Get("X-CS-Signature") != "")
+		}
+		var event Event
+		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+			t.Errorf("decode event: %v", err)
+		} else {
+			mu.Lock()
+			if event.EventID == "" || seen[event.EventID] {
+				t.Errorf("event id is empty or duplicated: %q", event.EventID)
+			}
+			seen[event.EventID] = true
+			mu.Unlock()
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	dispatcher := &Dispatcher{URL: server.URL, Secret: "test-secret-that-is-long-enough-for-a-hmac"}
+	const requests = 32
+	var wg sync.WaitGroup
+	errors := make(chan error, requests)
+	for i := 0; i < requests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := dispatcher.Send(Event{EventType: "concurrency.test"}); err != nil {
+				errors <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errors)
+	for err := range errors {
+		t.Errorf("concurrent webhook delivery failed: %v", err)
 	}
 }

@@ -71,6 +71,7 @@ type Server struct {
 	localTelemetry      map[string]LocalTelemetry
 	automationMu        sync.Mutex
 	lastAutomationEvent map[string]time.Time
+	automationInFlight  map[string]struct{}
 }
 
 func NewServer(cfg config.Config, logger *slog.Logger, authenticator Authenticator) *Server {
@@ -89,7 +90,7 @@ func NewServerWithServices(cfg config.Config, logger *slog.Logger, authenticator
 		inventory: inventoryStore, automationQueue: queue, zapier: dispatcher,
 		n8n:       newN8NDispatcher(cfg),
 		incidents: make(map[string]domain.Incident), localTelemetry: make(map[string]LocalTelemetry),
-		lastAutomationEvent: make(map[string]time.Time),
+		lastAutomationEvent: make(map[string]time.Time), automationInFlight: make(map[string]struct{}),
 	}
 }
 
@@ -123,6 +124,24 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "cloudsentinels"})
 }
 func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
+	missing := make([]string, 0, 3)
+	if s.config.ExecutionMode != "offline-kubernetes" && s.authenticator == nil {
+		missing = append(missing, "firebase-authentication")
+	}
+	if s.config.ExecutionMode == "online-server" {
+		if s.n8n == nil || !s.n8n.Enabled() {
+			missing = append(missing, "local-n8n-webhook")
+		}
+		if s.config.AgentToken == "" && len(s.config.AgentTokens) == 0 {
+			missing = append(missing, "kubernetes-agent-authentication")
+		}
+	}
+	if len(missing) > 0 {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"status": "not_ready", "executionMode": s.config.ExecutionMode, "missing": missing,
+		})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready", "executionMode": s.config.ExecutionMode})
 }
 func (s *Server) platform(w http.ResponseWriter, _ *http.Request) {
@@ -354,30 +373,60 @@ func (s *Server) emitAutomationEvent(key string, event automation.Event, cooldow
 	if (s.zapier == nil || !s.zapier.Enabled()) && (s.n8n == nil || !s.n8n.Enabled()) {
 		return
 	}
+	go func() {
+		for _, delay := range []time.Duration{0, time.Second, 3 * time.Second} {
+			if delay > 0 {
+				time.Sleep(delay)
+			}
+			if err := s.dispatchAutomationEvent(key, event, cooldown); err == nil {
+				return
+			}
+		}
+	}()
+}
+
+func (s *Server) dispatchAutomationEvent(key string, event automation.Event, cooldown time.Duration) error {
+	n8nEnabled := s.n8n != nil && s.n8n.Enabled()
+	zapierEnabled := s.zapier != nil && s.zapier.Enabled()
+	if !n8nEnabled && !zapierEnabled {
+		return nil
+	}
 	now := time.Now().UTC()
 	s.automationMu.Lock()
 	if previous, ok := s.lastAutomationEvent[key]; ok && cooldown > 0 && now.Sub(previous) < cooldown {
 		s.automationMu.Unlock()
-		return
+		return nil
 	}
-	s.lastAutomationEvent[key] = now
+	if _, inFlight := s.automationInFlight[key]; inFlight {
+		s.automationMu.Unlock()
+		return errors.New("automation event delivery is already in progress; retry")
+	}
+	s.automationInFlight[key] = struct{}{}
 	s.automationMu.Unlock()
-	if s.zapier != nil && s.zapier.Enabled() {
+
+	var deliveryErr error
+	if n8nEnabled {
+		deliveryErr = s.n8n.Send(event)
+	}
+	if deliveryErr == nil && zapierEnabled {
 		go func() {
 			if err := s.zapier.Send(event); err != nil {
 				s.logger.Warn("Zapier event delivery failed", "event_type", event.EventType, "error", err)
 			}
 		}()
 	}
-	if s.n8n != nil && s.n8n.Enabled() {
-		go func() {
-			if err := s.n8n.Send(event); err != nil {
-				s.logger.Warn("n8n event delivery failed", "event_type", event.EventType, "error", err)
-			}
-		}()
+	s.automationMu.Lock()
+	delete(s.automationInFlight, key)
+	if deliveryErr == nil {
+		s.lastAutomationEvent[key] = now
 	}
+	s.automationMu.Unlock()
+	if deliveryErr != nil {
+		s.logger.Warn("automation event delivery failed", "event_type", event.EventType, "error", deliveryErr)
+		return deliveryErr
+	}
+	return nil
 }
-
 func (s *Server) zapierCommand(w http.ResponseWriter, r *http.Request) {
 	if s.config.ExecutionMode == "online-serverless" {
 		writeError(w, http.StatusServiceUnavailable, "serverless_command_queue_unavailable", "Route local CLI commands through the persistent online-server control plane")
@@ -546,7 +595,7 @@ func (s *Server) agentCommandResult(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) agentTelemetry(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	var telemetry LocalTelemetry
 	if err := json.NewDecoder(r.Body).Decode(&telemetry); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_telemetry", "Telemetry JSON is invalid")
@@ -571,20 +620,22 @@ func (s *Server) agentTelemetry(w http.ResponseWriter, r *http.Request) {
 		telemetry.Environment = "unknown"
 	}
 	telemetry.Collector = "cloudsentinels-kubernetes-agent"
-	s.telemetryMu.Lock()
-	previous, hadPrevious := s.localTelemetry[telemetry.ClusterID]
-	s.localTelemetry[telemetry.ClusterID] = telemetry
-	s.telemetryMu.Unlock()
 
+	s.telemetryMu.RLock()
+	previous, hadPrevious := s.localTelemetry[telemetry.ClusterID]
+	s.telemetryMu.RUnlock()
 	baseEvent := automation.Event{ClusterID: telemetry.ClusterID, ClusterName: telemetry.Context, SourceType: telemetry.SourceType, Environment: telemetry.Environment}
 	if !hadPrevious || time.Since(previous.CollectedAt) > 2*time.Minute {
 		online := baseEvent
 		online.EventType, online.Severity = "cluster.online", "info"
 		online.Title, online.Summary = "Kubernetes cluster connected", "The CloudSentinels agent has reported a fresh, authenticated cluster heartbeat."
+		if err := s.dispatchAutomationEvent("online:"+telemetry.ClusterID, online, 2*time.Minute); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "automation_delivery_failed", "The unified n8n workflow did not accept the cluster heartbeat; the agent should retry")
+			return
+		}
 		s.automationMu.Lock()
 		delete(s.lastAutomationEvent, "offline:"+telemetry.ClusterID)
 		s.automationMu.Unlock()
-		s.emitAutomationEvent("online:"+telemetry.ClusterID, online, 0)
 	}
 	degraded := telemetry.WarningEvents > 0 || telemetry.ReadyNodeCount < telemetry.NodeCount || telemetry.HealthyPodCount < telemetry.PodCount
 	wasDegraded := hadPrevious && (previous.WarningEvents > 0 || previous.ReadyNodeCount < previous.NodeCount || previous.HealthyPodCount < previous.PodCount)
@@ -595,16 +646,24 @@ func (s *Server) agentTelemetry(w http.ResponseWriter, r *http.Request) {
 			health.Severity = "critical"
 		}
 		health.Title, health.Summary = "Kubernetes cluster health degraded", "The latest agent heartbeat reports warning events or unavailable nodes/pods; inspect cluster telemetry."
-		s.emitAutomationEvent("health:"+telemetry.ClusterID, health, 5*time.Minute)
+		if err := s.dispatchAutomationEvent("health:"+telemetry.ClusterID, health, 5*time.Minute); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "automation_delivery_failed", "The unified n8n workflow did not accept the degraded-cluster event; the agent should retry")
+			return
+		}
 	} else if wasDegraded {
 		recovered := baseEvent
 		recovered.EventType, recovered.Severity = "cluster.health.recovered", "info"
 		recovered.Title, recovered.Summary = "Kubernetes cluster health recovered", "The latest agent heartbeat reports healthy nodes and pods with no warning events."
-		s.emitAutomationEvent("health-recovered:"+telemetry.ClusterID, recovered, 0)
+		if err := s.dispatchAutomationEvent("health-recovered:"+telemetry.ClusterID, recovered, 0); err != nil {
+			writeError(w, http.StatusServiceUnavailable, "automation_delivery_failed", "The unified n8n workflow did not accept the recovery event; the agent should retry")
+			return
+		}
 	}
+	s.telemetryMu.Lock()
+	s.localTelemetry[telemetry.ClusterID] = telemetry
+	s.telemetryMu.Unlock()
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted", "clusterId": telemetry.ClusterID, "collectedAt": telemetry.CollectedAt})
 }
-
 func (s *Server) agentEvent(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	var input AgentEvent
@@ -642,7 +701,10 @@ func (s *Server) agentEvent(w http.ResponseWriter, r *http.Request) {
 		Severity: input.Severity, Title: input.Title, Summary: input.Summary,
 		ResourceID: input.ResourceID, ResourceKind: input.ResourceKind, ResourceName: input.ResourceName, Namespace: input.Namespace,
 	}
-	s.emitAutomationEvent("agent-event:"+input.ClusterID+":"+input.EventID, event, 5*time.Minute)
+	if err := s.dispatchAutomationEvent("agent-event:"+input.ClusterID+":"+input.EventID, event, 5*time.Minute); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "automation_delivery_failed", "The unified n8n workflow did not accept the cluster event; the agent should retry")
+		return
+	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"status": "accepted", "eventId": input.EventID, "clusterId": input.ClusterID})
 }
 

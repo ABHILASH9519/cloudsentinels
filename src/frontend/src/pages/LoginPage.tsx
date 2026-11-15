@@ -66,12 +66,11 @@ export function LoginPage({ authError }: { authError?: string | null }) {
             Your account is secured by Google Firebase Authentication.
           </p>
           {!isConfigured && (
-            <div
-              role="status"
+            <output
               className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300"
             >
               Firebase is not connected yet. Add the four VITE_FIREBASE_* values from your Firebase Web App configuration to src/frontend/.env.local, then restart the frontend.
-            </div>
+            </output>
           )}
           {message && (
             <div
@@ -135,7 +134,7 @@ export function LoginPage({ authError }: { authError?: string | null }) {
               disabled={!isLoaded || !isConfigured || busy}
             >
               {busy
-                ? "Please wait…"
+                ? "Please wait..."
                 : mode === "signup"
                   ? "Create account"
                   : "Sign in with email"}
@@ -158,7 +157,7 @@ export function LoginPage({ authError }: { authError?: string | null }) {
           </p>
         </div>
         <p className="text-center text-xs text-muted-foreground mt-6">
-          CloudSentinels · Cloud operations and incident response
+          CloudSentinels - Cloud operations and incident response
         </p>
       </div>
     </div>

@@ -95,18 +95,17 @@ The n8n bridge is a separate additive stack so it does not attach a second consu
 From the repository root:
 
 ~~~powershell
-aws sso login --profile <least-privileged-profile>
-.\deploy\\aws\\monitoring\\deploy-n8n-bridge.ps1 -AwsProfile <least-privileged-profile>
+aws login --profile <least-privileged-profile>
+.\deploy\aws\monitoring\deploy-n8n-bridge.ps1 -AwsProfile <least-privileged-profile>
 ~~~
 
-Use the returned N8NEventQueueUrl to start the local poller:
+Start the persistent local consumer after AWS authentication:
 
 ~~~powershell
-.\deploy\\automation\\poll-aws-events.ps1 -QueueUrl <N8NEventQueueUrl> -Region ap-south-1 -AwsProfile <least-privileged-profile>
+.\deploy\automation\start-aws-poller.ps1 -AwsProfile <least-privileged-profile>
 ~~~
 
-The AWS stacks are deployed successfully. The local AWS CLI currently has no authenticated profile, so the local SQS poller is not yet running. A least-privilege consumer policy is ready to attach to the local SSO role: `arn:aws:iam::115484989078:policy/CloudSentinelsN8NLocalPoller`. Authenticate that profile with `aws sso login` and start the poller. The existing EC2 instance remains stopped; this integration never starts it.
-
+Read-only AWS verification on 2026-11-15 confirms the dedicated n8n bridge stack is deployed in `ap-south-1` and the EC2 server-monitor stack is deployed in `eu-north-1`. Both Node.js Lambda functions are Active and the Automation Processor SQS mapping is Enabled. The `CloudSentinel Server` EC2 instance is stopped. The n8n queue currently has 6 visible messages. The current AWS CLI profile authenticates as root, and the local poller intentionally refuses root credentials. The existing SQS-only policy `arn:aws:iam::115484989078:policy/CloudSentinelsN8NLocalPoller` exists but is unattached; attach it to a dedicated non-root IAM role/profile and use that profile with `start-aws-poller.ps1`. The integration never starts the EC2 instance.
 ## Verify
 
 ~~~powershell
