@@ -71,6 +71,7 @@ Docker Desktop's Metrics Server uses --kubelet-insecure-tls for this local devel
 - **Automation and notifications:** signed event delivery to the configured local n8n webhook has been tested. Zapier remains dependent on its own Catch Hook configuration.
 - **Self-healing:** the two local Kubernetes Deployments passed controller-level pod replacement tests. This demonstrates Kubernetes replica self-healing; it does not mean the CloudSentinels agent has automatically executed a remediation command.
 - **Remediation safety:** the Clusters UI now exposes an explicit confirmation before queueing a benchmark API restart. The API requires an authenticated operator, confirmation, a registered cluster heartbeat and the cloudsentinels-benchmark namespace allowlist. Agents accept only approved restart/rollback actions; arbitrary shell commands and other namespaces are rejected. The queue and approval policy are unit-tested; an authenticated UI-to-agent restart has not yet been end-to-end exercised.
+- **Incident management:** the Incidents list/detail/comment flows still use the older Cognito API contract and have not been migrated to the Firebase Go API. Do not claim incident CRUD is verified in the local Firebase review workspace.
 - **Persistence:** API incident/command state held only in process memory is lost when the API restarts. Do not describe it as durable storage.
 
 ## Authentication and hosted gaps to disclose
