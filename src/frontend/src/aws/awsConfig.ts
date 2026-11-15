@@ -1,23 +1,41 @@
-function normalizeBaseUrl(value: string | undefined) {
+﻿function normalizeBaseUrl(value: string | undefined) {
   const trimmed = value?.trim();
   return trimmed?.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }
 
-const apiUrl = normalizeBaseUrl(import.meta.env.VITE_CLOUDSENTINELS_API_URL as string | undefined);
-const rawConfig = { apiUrl, cloudSentinelsApiUrl: apiUrl };
-export const awsConfig = rawConfig;
+const apiUrl = normalizeBaseUrl(import.meta.env.VITE_AWS_API_URL as string | undefined);
+const cloudSentinelsApiUrl = normalizeBaseUrl(
+  import.meta.env.VITE_CLOUDSENTINELS_API_URL as string | undefined,
+);
 
-export function getAwsConfigError(): string | null {
-  if (!rawConfig.apiUrl) return "VITE_CLOUDSENTINELS_API_URL must point to the CloudSentinels Go API.";
+export const awsConfig = { apiUrl, cloudSentinelsApiUrl };
+
+function validateBaseUrl(value: string | undefined, variableName: string) {
+  if (!value) return `${variableName} must be configured.`;
   try {
-    const parsed = new URL(rawConfig.apiUrl);
-    if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-      return "VITE_CLOUDSENTINELS_API_URL must use HTTPS outside local development.";
+    const parsed = new URL(value);
+    if (
+      parsed.protocol !== "https:" &&
+      parsed.hostname !== "localhost" &&
+      parsed.hostname !== "127.0.0.1"
+    ) {
+      return `${variableName} must use HTTPS outside local development.`;
     }
   } catch {
-    return "VITE_CLOUDSENTINELS_API_URL must be a valid URL.";
+    return `${variableName} must be a valid absolute URL.`;
   }
   return null;
+}
+
+export function getAwsConfigError(): string | null {
+  return validateBaseUrl(apiUrl, "VITE_AWS_API_URL");
+}
+
+export function getCloudSentinelsConfigError(): string | null {
+  return validateBaseUrl(
+    cloudSentinelsApiUrl,
+    "VITE_CLOUDSENTINELS_API_URL",
+  );
 }
 
 export function assertAwsConfig() {

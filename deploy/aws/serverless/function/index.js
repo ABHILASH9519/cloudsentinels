@@ -66,7 +66,7 @@ function callerId(event) {
   const claims = event.requestContext?.authorizer?.jwt?.claims;
   const sub = claims?.sub;
   if (typeof sub !== "string" || !sub) {
-    const error = new Error("Authenticated Cognito subject is missing.");
+    const error = new Error("Authenticated user subject is missing.");
     error.statusCode = 401;
     throw error;
   }
@@ -333,7 +333,7 @@ async function handleClusterTelemetry(event) {
       source: `cluster-agent/${config.clusterName}`,
       message: [message, namespace && `namespace=${namespace}`, resourceKind && resourceName && `${resourceKind}/${resourceName}`]
         .filter(Boolean)
-        .join(" · "),
+        .join(" Â· "),
       status: "active",
       timestamp: now,
     });

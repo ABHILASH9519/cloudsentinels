@@ -22,7 +22,8 @@ jobs:
       AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
       AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
       CLOUDFORMATION_EXECUTION_ROLE_ARN: ${{ vars.CLOUDFORMATION_EXECUTION_ROLE_ARN }}
-      APP_ORIGIN: ${{ vars.AWS_APP_ORIGIN }}`r`n      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      APP_ORIGIN: ${{ vars.AWS_APP_ORIGIN }}
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
       RUNTIME_STACK_NAME: cloudsentinels-runtime
       CORE_STACK_NAME: cloudsentinels-core
       STAGE_NAME: v1
