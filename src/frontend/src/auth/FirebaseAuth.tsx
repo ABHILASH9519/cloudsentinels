@@ -5,9 +5,11 @@ import {
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   getAuth,
+  getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
 } from "firebase/auth";
 import {
   type PropsWithChildren,
@@ -70,6 +72,13 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
       setIsLoaded(true);
       return;
     }
+    // Complete redirect-based Google sign-in when the browser blocks popups.
+    // The auth-state listener below remains the single source of signed-in state.
+    void getRedirectResult(firebaseAuth).catch((reason: unknown) => {
+      setError(
+        reason instanceof Error ? reason.message : "Google redirect sign-in failed.",
+      );
+    });
     return onAuthStateChanged(
       firebaseAuth,
       (nextUser) => {
@@ -89,9 +98,29 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
       return;
     }
     setError(null);
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
     try {
-      await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
+      await signInWithPopup(firebaseAuth, provider);
     } catch (reason) {
+      const code =
+        typeof reason === "object" && reason !== null && "code" in reason
+          ? String((reason as { code: unknown }).code)
+          : "";
+      if (code === "auth/popup-blocked") {
+        try {
+          // Redirect authentication does not require a browser popup.
+          await signInWithRedirect(firebaseAuth, provider);
+          return;
+        } catch (redirectReason) {
+          setError(
+            redirectReason instanceof Error
+              ? redirectReason.message
+              : "Google redirect sign-in failed.",
+          );
+          return;
+        }
+      }
       setError(
         reason instanceof Error ? reason.message : "Google sign-in failed.",
       );
