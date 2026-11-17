@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -44,15 +43,20 @@ import {
   useGetIncident,
   useUpdateIncidentAIFields,
   useUpdateIncidentStatus,
-} from "../hooks/useQueries";
+} from "../hooks/useIncidents";
+
+function formatDate(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+}
 
 export function IncidentDetailPage() {
   const { id } = useParams({ from: "/incidents/$id" });
   const navigate = useNavigate();
-  const incidentId = BigInt(id);
 
-  const { data: incident, isLoading } = useGetIncident(incidentId);
-  const { data: comments } = useGetComments(incidentId);
+  const { data: incident, isLoading } = useGetIncident(id);
+  const { data: comments } = useGetComments(id);
   const updateStatus = useUpdateIncidentStatus();
   const updateAI = useUpdateIncidentAIFields();
   const analyzeIncident = useAnalyzeIncident();
@@ -89,61 +93,64 @@ export function IncidentDetailPage() {
 
   const handleStatusChange = async (status: string) => {
     try {
-      await updateStatus.mutateAsync({ id: incidentId, status });
+      await updateStatus.mutateAsync({ id, status });
       toast.success("Status updated");
-    } catch {
-      toast.error("Failed to update status");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update status",
+      );
     }
   };
 
   const handleAIAnalyze = async () => {
     try {
-      await analyzeIncident.mutateAsync(incidentId);
-      toast.success("Amazon Bedrock analysis completed");
+      await analyzeIncident.mutateAsync(id);
+      toast.success("Explainable triage completed");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "AI analysis failed");
+      toast.error(
+        error instanceof Error ? error.message : "Triage analysis failed",
+      );
     }
   };
 
   const handleAISave = async () => {
     try {
-      await updateAI.mutateAsync({ id: incidentId, ...aiForm });
-      toast.success("AI fields updated");
-    } catch {
-      toast.error("Failed to update AI fields");
+      await updateAI.mutateAsync({ id, ...aiForm });
+      toast.success("Triage fields updated");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update triage fields",
+      );
     }
   };
 
   const handleDelete = async () => {
     try {
-      await deleteIncident.mutateAsync(incidentId);
+      await deleteIncident.mutateAsync(id);
       toast.success("Incident deleted");
       navigate({ to: "/incidents" });
-    } catch {
-      toast.error("Failed to delete incident");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete incident",
+      );
     }
   };
 
   const handleAddComment = async () => {
     if (!commentText.trim()) return;
     try {
-      await addComment.mutateAsync({
-        incidentId,
-        author: "",
-        text: commentText,
-      });
+      await addComment.mutateAsync({ incidentId: id, text: commentText });
       toast.success("Comment added");
       setCommentText("");
-    } catch {
-      toast.error("Failed to add comment");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to add comment",
+      );
     }
   };
 
-  const formatDate = (ts: bigint) =>
-    new Date(Number(ts) / 1_000_000).toLocaleString();
-
   return (
-    <div className="p-6 space-y-5 max-w-4xl">
+    <div className="mission-page p-6 space-y-5 max-w-4xl">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
@@ -156,7 +163,7 @@ export function IncidentDetailPage() {
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
-            <h1 className="font-display text-xl font-700 text-foreground">
+            <h1 className="font-display text-xl font-bold text-foreground">
               {incident.title}
             </h1>
             <div className="flex items-center gap-2 mt-1">
@@ -174,7 +181,7 @@ export function IncidentDetailPage() {
         <div className="flex items-center gap-2 shrink-0">
           <Select
             defaultValue={incident.status}
-            onValueChange={handleStatusChange}
+            onValueChange={(value) => void handleStatusChange(value)}
           >
             <SelectTrigger
               className="w-36"
@@ -184,7 +191,8 @@ export function IncidentDetailPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="open">Open</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="acknowledged">Acknowledged</SelectItem>
+              <SelectItem value="investigating">Investigating</SelectItem>
               <SelectItem value="resolved">Resolved</SelectItem>
             </SelectContent>
           </Select>
@@ -215,7 +223,7 @@ export function IncidentDetailPage() {
                 </AlertDialogCancel>
                 <AlertDialogAction
                   data-ocid="incident_detail.delete.confirm_button"
-                  onClick={handleDelete}
+                  onClick={() => void handleDelete()}
                   className="bg-destructive hover:bg-destructive/90"
                 >
                   Delete
@@ -241,7 +249,7 @@ export function IncidentDetailPage() {
             data-ocid="incident_detail.ai.tab"
             className="gap-1.5"
           >
-            <Brain className="w-3.5 h-3.5" /> AI Analysis
+            <Brain className="w-3.5 h-3.5" /> Triage
           </TabsTrigger>
           <TabsTrigger
             value="rawlog"
@@ -264,37 +272,55 @@ export function IncidentDetailPage() {
           <Card className="bg-card border-border">
             <CardContent className="p-5 grid grid-cols-2 gap-4 text-sm">
               {[
-                ["ID", incident.id.toString()],
+                ["ID", incident.id],
                 ["Status", incident.status],
                 ["Severity", incident.severity],
                 ["Source", incident.source],
+                ["Target", incident.target || "—"],
                 ["Assignee", incident.assignee || "Unassigned"],
                 ["Created", formatDate(incident.createdAt)],
                 ["Updated", formatDate(incident.updatedAt)],
-              ].map(([k, v]) => (
-                <div key={k}>
+              ].map(([label, value]) => (
+                <div key={label}>
                   <div className="text-xs text-muted-foreground mb-0.5">
-                    {k}
+                    {label}
                   </div>
-                  <div className="font-mono text-foreground">{v}</div>
+                  <div className="font-mono text-foreground break-all">
+                    {value}
+                  </div>
                 </div>
               ))}
             </CardContent>
           </Card>
+          {incident.description && (
+            <Card className="bg-card border-border mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Description
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-foreground whitespace-pre-wrap">
+                {incident.description}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        {/* AI Analysis */}
+        {/* Triage */}
         <TabsContent value="ai" className="mt-4 space-y-4">
           <Card className="bg-card border-border">
             <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-sm font-medium text-foreground">AI incident analysis</p>
+                <p className="text-sm font-medium text-foreground">
+                  Explainable triage
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Generate evidence-based summary, likely cause, and safe next steps with Amazon Bedrock.
+                  Generate an evidence-based summary, likely cause and safe next
+                  steps using the deterministic rules engine.
                 </p>
               </div>
               <Button
-                onClick={handleAIAnalyze}
+                onClick={() => void handleAIAnalyze()}
                 disabled={analyzeIncident.isPending}
                 data-ocid="incident_detail.ai.generate_button"
                 className="shrink-0 bg-primary/90 hover:bg-primary text-primary-foreground"
@@ -309,13 +335,15 @@ export function IncidentDetailPage() {
             </CardContent>
           </Card>
           <p className="text-[11px] text-muted-foreground">
-            The incident title, source, severity, and a redacted log excerpt are sent to the configured India-region Bedrock inference profile. Each generation may incur AWS model charges. Suggestions do not execute remediation.
+            Triage is produced by an explainable, deterministic rules engine — it
+            is not a trained ML model or LLM. Suggestions are advisory and never
+            execute remediation.
           </p>
           {incident.aiSummary && (
             <Card className="bg-card border-border">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-primary">
-                  AI Summary
+                  Triage Summary
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-foreground">
@@ -327,7 +355,7 @@ export function IncidentDetailPage() {
             <Card className="bg-card border-border">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-amber-400">
-                  Root Cause
+                  Likely Cause
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-foreground">
@@ -339,7 +367,7 @@ export function IncidentDetailPage() {
             <Card className="bg-card border-border">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-green-400">
-                  Suggested Fix
+                  Safe Next Steps
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-foreground">
@@ -351,53 +379,60 @@ export function IncidentDetailPage() {
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Update AI Fields
+                Update triage fields
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <Label className="text-xs">AI Summary</Label>
+                <Label className="text-xs">Triage Summary</Label>
                 <Textarea
                   data-ocid="incident_detail.ai_summary.textarea"
                   rows={3}
-                  placeholder={incident.aiSummary || "Enter AI summary..."}
+                  placeholder={incident.aiSummary || "Enter summary..."}
                   value={aiForm.aiSummary}
-                  onChange={(e) =>
-                    setAiForm((p) => ({ ...p, aiSummary: e.target.value }))
+                  onChange={(event) =>
+                    setAiForm((prev) => ({
+                      ...prev,
+                      aiSummary: event.target.value,
+                    }))
                   }
                   className="text-sm"
                 />
               </div>
               <div>
-                <Label className="text-xs">Root Cause</Label>
+                <Label className="text-xs">Likely Cause</Label>
                 <Textarea
                   data-ocid="incident_detail.root_cause.textarea"
                   rows={2}
-                  placeholder={incident.rootCause || "Enter root cause..."}
+                  placeholder={incident.rootCause || "Enter likely cause..."}
                   value={aiForm.rootCause}
-                  onChange={(e) =>
-                    setAiForm((p) => ({ ...p, rootCause: e.target.value }))
+                  onChange={(event) =>
+                    setAiForm((prev) => ({
+                      ...prev,
+                      rootCause: event.target.value,
+                    }))
                   }
                   className="text-sm"
                 />
               </div>
               <div>
-                <Label className="text-xs">Suggested Fix</Label>
+                <Label className="text-xs">Safe Next Steps</Label>
                 <Textarea
                   data-ocid="incident_detail.suggested_fix.textarea"
                   rows={2}
-                  placeholder={
-                    incident.suggestedFix || "Enter suggested fix..."
-                  }
+                  placeholder={incident.suggestedFix || "Enter next steps..."}
                   value={aiForm.suggestedFix}
-                  onChange={(e) =>
-                    setAiForm((p) => ({ ...p, suggestedFix: e.target.value }))
+                  onChange={(event) =>
+                    setAiForm((prev) => ({
+                      ...prev,
+                      suggestedFix: event.target.value,
+                    }))
                   }
                   className="text-sm"
                 />
               </div>
               <Button
-                onClick={handleAISave}
+                onClick={() => void handleAISave()}
                 disabled={updateAI.isPending}
                 data-ocid="incident_detail.ai.save_button"
                 className="bg-primary/90 hover:bg-primary text-primary-foreground"
@@ -405,7 +440,7 @@ export function IncidentDetailPage() {
                 {updateAI.isPending ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 ) : null}
-                Save AI Fields
+                Save triage fields
               </Button>
             </CardContent>
           </Card>
@@ -439,23 +474,23 @@ export function IncidentDetailPage() {
                 No comments yet
               </p>
             ) : (
-              comments.map((c, i) => (
+              comments.map((comment, index) => (
                 <div
-                  key={c.id.toString()}
-                  data-ocid={`incident_detail.comments.item.${i + 1}`}
+                  key={comment.id}
+                  data-ocid={`incident_detail.comments.item.${index + 1}`}
                   className="p-3 bg-muted/30 border border-border rounded-md"
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-semibold text-primary">
-                      {c.author}
+                      {comment.author}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(
-                        Number(c.createdAt) / 1_000_000,
-                      ).toLocaleString()}
+                      {formatDate(comment.createdAt)}
                     </span>
                   </div>
-                  <p className="text-sm text-foreground">{c.text}</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                    {comment.text}
+                  </p>
                 </div>
               ))
             )}
@@ -468,11 +503,11 @@ export function IncidentDetailPage() {
                 placeholder="Add a comment..."
                 rows={3}
                 value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
+                onChange={(event) => setCommentText(event.target.value)}
               />
               <Button
                 data-ocid="incident_detail.add_comment.button"
-                onClick={handleAddComment}
+                onClick={() => void handleAddComment()}
                 disabled={addComment.isPending || !commentText.trim()}
                 className="bg-primary/90 hover:bg-primary text-primary-foreground"
               >

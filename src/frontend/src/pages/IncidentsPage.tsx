@@ -32,7 +32,15 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { SeverityBadge } from "../components/SeverityBadge";
 import { StatusBadge } from "../components/StatusBadge";
-import { useCreateIncident, useListIncidents } from "../hooks/useQueries";
+import { useCreateIncident, useListIncidents } from "../hooks/useIncidents";
+
+const SKELETON_KEYS = ["sk1", "sk2", "sk3", "sk4", "sk5"];
+
+function formatDate(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+}
 
 export function IncidentsPage() {
   const { data: incidents, isLoading } = useListIncidents();
@@ -49,9 +57,9 @@ export function IncidentsPage() {
     rawLog: "",
   });
 
-  const filtered = (incidents ?? []).filter((inc) => {
-    if (filterStatus !== "all" && inc.status !== filterStatus) return false;
-    if (filterSeverity !== "all" && inc.severity !== filterSeverity)
+  const filtered = (incidents ?? []).filter((incident) => {
+    if (filterStatus !== "all" && incident.status !== filterStatus) return false;
+    if (filterSeverity !== "all" && incident.severity !== filterSeverity)
       return false;
     return true;
   });
@@ -61,26 +69,27 @@ export function IncidentsPage() {
       toast.error("Title is required");
       return;
     }
+    if (!form.source.trim()) {
+      toast.error("Source is required");
+      return;
+    }
     try {
       await createIncident.mutateAsync(form);
       toast.success("Incident created");
       setOpen(false);
       setForm({ title: "", severity: "medium", source: "", rawLog: "" });
-    } catch {
-      toast.error("Failed to create incident");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create incident",
+      );
     }
   };
-
-  const formatDate = (ts: bigint) =>
-    new Date(Number(ts) / 1_000_000).toLocaleDateString();
-
-  const SKELETON_KEYS = ["sk1", "sk2", "sk3", "sk4", "sk5"];
 
   return (
     <div className="mission-page p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-700 text-foreground">
+          <h1 className="font-display text-2xl font-bold text-foreground">
             Incidents
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -113,8 +122,8 @@ export function IncidentsPage() {
                   data-ocid="incidents.title.input"
                   placeholder="e.g. Pod crash loop in prod-cluster"
                   value={form.title}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, title: e.target.value }))
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, title: event.target.value }))
                   }
                 />
               </div>
@@ -122,7 +131,9 @@ export function IncidentsPage() {
                 <Label>Severity</Label>
                 <Select
                   value={form.severity}
-                  onValueChange={(v) => setForm((p) => ({ ...p, severity: v }))}
+                  onValueChange={(value) =>
+                    setForm((prev) => ({ ...prev, severity: value }))
+                  }
                 >
                   <SelectTrigger data-ocid="incidents.severity.select">
                     <SelectValue />
@@ -132,6 +143,7 @@ export function IncidentsPage() {
                     <SelectItem value="high">High</SelectItem>
                     <SelectItem value="medium">Medium</SelectItem>
                     <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="info">Info</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -141,8 +153,8 @@ export function IncidentsPage() {
                   data-ocid="incidents.source.input"
                   placeholder="e.g. kubernetes, prometheus, elk"
                   value={form.source}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, source: e.target.value }))
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, source: event.target.value }))
                   }
                 />
               </div>
@@ -154,8 +166,8 @@ export function IncidentsPage() {
                   rows={5}
                   className="font-mono text-xs"
                   value={form.rawLog}
-                  onChange={(e) =>
-                    setForm((p) => ({ ...p, rawLog: e.target.value }))
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, rawLog: event.target.value }))
                   }
                 />
               </div>
@@ -170,7 +182,7 @@ export function IncidentsPage() {
               </Button>
               <Button
                 data-ocid="incidents.create.submit_button"
-                onClick={handleCreate}
+                onClick={() => void handleCreate()}
                 disabled={createIncident.isPending}
                 className="bg-primary/90 hover:bg-primary text-primary-foreground"
               >
@@ -184,7 +196,6 @@ export function IncidentsPage() {
         </Dialog>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-3">
         <Select value={filterStatus} onValueChange={setFilterStatus}>
           <SelectTrigger
@@ -196,7 +207,8 @@ export function IncidentsPage() {
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="open">Open</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
+            <SelectItem value="acknowledged">Acknowledged</SelectItem>
+            <SelectItem value="investigating">Investigating</SelectItem>
             <SelectItem value="resolved">Resolved</SelectItem>
           </SelectContent>
         </Select>
@@ -217,7 +229,6 @@ export function IncidentsPage() {
         </Select>
       </div>
 
-      {/* Table */}
       <div
         className="border border-border rounded-lg overflow-hidden"
         data-ocid="incidents.table"
@@ -234,8 +245,8 @@ export function IncidentsPage() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              SKELETON_KEYS.map((k) => (
-                <TableRow key={k}>
+              SKELETON_KEYS.map((key) => (
+                <TableRow key={key}>
                   <TableCell colSpan={5}>
                     <Skeleton className="h-8" />
                   </TableCell>
@@ -252,27 +263,32 @@ export function IncidentsPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((inc, i) => (
+              filtered.map((incident, index) => (
                 <TableRow
-                  key={inc.id.toString()}
-                  data-ocid={`incidents.item.${i + 1}`}
+                  key={incident.id}
+                  data-ocid={`incidents.item.${index + 1}`}
                   className="cursor-pointer hover:bg-muted/30 border-b border-border transition-colors"
-                  onClick={() => navigate({ to: `/incidents/${inc.id}` })}
+                  onClick={() =>
+                    navigate({
+                      to: "/incidents/$id",
+                      params: { id: incident.id },
+                    })
+                  }
                 >
                   <TableCell className="font-medium text-foreground">
-                    {inc.title}
+                    {incident.title}
                   </TableCell>
                   <TableCell>
-                    <SeverityBadge severity={inc.severity} />
+                    <SeverityBadge severity={incident.severity} />
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={inc.status} />
+                    <StatusBadge status={incident.status} />
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-xs">
-                    {inc.source}
+                    {incident.source}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs">
-                    {formatDate(inc.createdAt)}
+                    {formatDate(incident.createdAt)}
                   </TableCell>
                 </TableRow>
               ))

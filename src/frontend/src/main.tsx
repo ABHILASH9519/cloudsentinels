@@ -1,7 +1,7 @@
 ﻿import ReactDOM from "react-dom/client";
 import App from "./App";
 import { FirebaseAuthProvider } from "./auth/FirebaseAuth";
-import "../index.css";
+import "./index.css";
 BigInt.prototype.toJSON = function () {
   return this.toString();
 };

@@ -1,4 +1,4 @@
-# CloudSentinels ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â switchable AWS + ICP architectures
+# CloudSentinels — switchable AWS + ICP architectures
 
 This branch contains **Option 1: AWS-native**. The existing ICP implementation remains on `main`; the separate Clerk + ICP experiment remains on its own branch. Nothing here deletes or rewrites those architectures. See [architecture switching](../../../docs/architecture-switching.md) for switching the source branch between ICP and AWS.
 
@@ -44,7 +44,7 @@ Use the exact deployed Vercel origin, with no path or trailing slash. `CognitoDo
 4. Resumes Lambda execution.
 5. Prints the frontend configuration values.
 
-After the first successful start, configure the printed outputs in Vercel Project â†’ Settings â†’ Environment Variables for the active Preview branch (currently `feat/airtable-cluster-monitoring-zapier`) and locally in `src/frontend/.env.local` if required. Use the exact AWS API URL and region from the deployed runtime stack. Obtain the four Firebase values from the registered Firebase Web App; the project ID must match `FirebaseProjectID` passed to the runtime deployment. Set all six values below, then create a fresh Preview deployment because Vite embeds `VITE_*` values at build time:
+After the first successful start, configure the printed outputs in Vercel Project → Settings → Environment Variables for the active Preview branch (currently `feat/airtable-cluster-monitoring-zapier`) and locally in `src/frontend/.env.local` if required. Use the exact AWS API URL and region from the deployed runtime stack. Obtain the four Firebase values from the registered Firebase Web App; the project ID must match `FirebaseProjectID` passed to the runtime deployment. Set all six values below, then create a fresh Preview deployment because Vite embeds `VITE_*` values at build time:
 
 - `VITE_AWS_REGION`
 - `VITE_AWS_API_URL`
@@ -90,7 +90,7 @@ The core stack is intentionally retained. Do not delete it as a normal stop acti
 
 ## Optional workflow automation
 
-See [n8n / Zapier automation](../../automation/README.md) for the EventBridge ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ SQS event path, and [Zapier self-healing setup](../../../docs/zapier-self-healing-setup.md) for the Catch Hook ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ human approval ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ signed AWS command workflow and adapter contract. The command endpoint can queue approvals without enabling cluster changes; live remediation remains off until a real adapter is deployed and explicitly enabled.
+See [n8n / Zapier automation](../../automation/README.md) for the EventBridge → SQS event path, and [Zapier self-healing setup](../../../docs/zapier-self-healing-setup.md) for the Catch Hook → human approval → signed AWS command workflow and adapter contract. The command endpoint can queue approvals without enabling cluster changes; live remediation remains off until a real adapter is deployed and explicitly enabled.
 
 ## AWS server and Lambda monitoring
 
@@ -98,17 +98,17 @@ See [AWS monitoring integration](../monitoring/README.md) for read-only monitori
 
 ## Current API
 
-- `GET /health` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â unauthenticated health probe.
-- `GET /me` â€” authenticated Firebase identity summary.
+- `GET /health` — unauthenticated health probe.
+- `GET /me` — authenticated Firebase identity summary.
 - `GET|POST /incidents`
 - `GET|PATCH|DELETE /incidents/{id}`
-- `POST /incidents/{id}/analyze` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â user-triggered, redacted incident analysis through Amazon Bedrock.
+- `POST /incidents/{id}/analyze` — user-triggered, redacted incident analysis through Amazon Bedrock.
 - `GET|POST /incidents/{id}/comments`
 - `GET|POST /alerts`
 - `PATCH /alerts/{id}`
 - `GET|POST /metrics`
-- `GET /automation/events` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â authenticated, owner-scoped automation processing history.
-- `POST /telemetry/events` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â HMAC-authenticated cluster-agent ingestion; requires `ClusterAgentSecretArn`.
+- `GET /automation/events` — authenticated, owner-scoped automation processing history.
+- `POST /telemetry/events` — HMAC-authenticated cluster-agent ingestion; requires `ClusterAgentSecretArn`.
 
 AI analysis uses the India-geographic Bedrock profile `in.anthropic.claude-sonnet-5` and runs only when a signed-in user requests it. Incident title, source, severity, and a redacted/truncated raw-log excerpt are sent to Bedrock; each request may incur model-inference charges. All application endpoints except health require a valid Firebase ID token validated by the API Gateway JWT authorizer. This is the AWS backend foundation; remaining application features/integrations must be validated before production use.
 

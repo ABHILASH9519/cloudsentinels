@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cloudSentinelsRequest } from "../aws/cloudSentinelsApi";
+import { cloudSentinelsRequest } from "../lib/cloudSentinels";
 
 export type ClusterRecord = {
   id: string;

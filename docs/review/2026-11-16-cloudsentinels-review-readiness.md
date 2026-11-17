@@ -1,4 +1,4 @@
-# CloudSentinels review readiness ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 16 November 2026
+# CloudSentinels review readiness — 16 November 2026
 
 **Repository:** `ABHILASH9519/cloudsentinels`  
 **Branch:** `feat/airtable-cluster-monitoring-zapier`  
@@ -8,7 +8,7 @@
 
 The local development environment is operational, the hosted AWS foundation is deployed, and the frontend/API routing changes are committed. The project is **not yet production-ready** because Firebase configuration and the hosted runtime migration still require external setup and a non-root AWS deployment identity.
 
-## Local environment ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â verified
+## Local environment — verified
 
 | Component | Observed state |
 |---|---|
@@ -23,7 +23,7 @@ The local development environment is operational, the hosted AWS foundation is d
 
 The API liveness check is not the same as readiness. Firebase sign-in and protected Go API routes must not be presented as working until `/readyz` returns 200 and a real Firebase ID token passes `GET /api/v1/auth/me`.
 
-## Hosted AWS ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â verified
+## Hosted AWS — verified
 
 | Component | Observed state |
 |---|---|

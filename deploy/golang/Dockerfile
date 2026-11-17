@@ -13,5 +13,6 @@ WORKDIR /app
 COPY --from=build /out/cloudsentinels /app/cloudsentinels
 COPY deploy/eks/airtable-inventory.snapshot.json /app/deploy/eks/airtable-inventory.snapshot.json
 USER nonroot:nonroot
-EXPOSE 8080
+ENV CLOUDSENTINELS_HTTP_ADDR=:8082
+EXPOSE 8082
 ENTRYPOINT ["/app/cloudsentinels"]

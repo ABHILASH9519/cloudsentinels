@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -67,6 +68,8 @@ type Server struct {
 	n8n                 *automation.Dispatcher
 	incidentsMu         sync.RWMutex
 	incidents           map[string]domain.Incident
+	commentsMu          sync.RWMutex
+	comments            map[string][]domain.IncidentComment
 	telemetryMu         sync.RWMutex
 	localTelemetry      map[string]LocalTelemetry
 	automationMu        sync.Mutex
@@ -89,7 +92,8 @@ func NewServerWithServices(cfg config.Config, logger *slog.Logger, authenticator
 		config: cfg, logger: logger, authenticator: authenticator,
 		inventory: inventoryStore, automationQueue: queue, zapier: dispatcher,
 		n8n:       newN8NDispatcher(cfg),
-		incidents: make(map[string]domain.Incident), localTelemetry: make(map[string]LocalTelemetry),
+		incidents: make(map[string]domain.Incident), comments: make(map[string][]domain.IncidentComment),
+		localTelemetry:      make(map[string]LocalTelemetry),
 		lastAutomationEvent: make(map[string]time.Time), automationInFlight: make(map[string]struct{}),
 	}
 }
@@ -102,6 +106,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/auth/me", s.currentUser)
 	mux.HandleFunc("GET /api/v1/incidents", s.listIncidents)
 	mux.HandleFunc("POST /api/v1/incidents", s.createIncident)
+	mux.HandleFunc("GET /api/v1/incidents/{id}", s.getIncident)
+	mux.HandleFunc("PATCH /api/v1/incidents/{id}", s.updateIncident)
+	mux.HandleFunc("DELETE /api/v1/incidents/{id}", s.deleteIncident)
+	mux.HandleFunc("POST /api/v1/incidents/{id}/analyze", s.analyzeIncident)
+	mux.HandleFunc("GET /api/v1/incidents/{id}/comments", s.listIncidentComments)
+	mux.HandleFunc("POST /api/v1/incidents/{id}/comments", s.addIncidentComment)
 	mux.HandleFunc("GET /api/v1/inventory/clusters", s.listClusters)
 	mux.HandleFunc("POST /api/v1/inventory/refresh", s.refreshInventory)
 	mux.HandleFunc("GET /api/v1/monitoring/summary", s.monitoringSummary)
@@ -220,10 +230,6 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	if item.Status == "" {
 		item.Status = domain.StatusOpen
 	}
-	if err := item.Validate(); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid_incident", err.Error())
-		return
-	}
 	if item.ID == "" {
 		id, err := newID()
 		if err != nil {
@@ -235,6 +241,21 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	if item.DetectedAt.IsZero() {
 		item.DetectedAt = time.Now().UTC()
 	}
+	now := time.Now().UTC()
+	if item.CreatedAt.IsZero() {
+		item.CreatedAt = now
+	}
+	item.UpdatedAt = now
+	if strings.TrimSpace(item.Description) == "" && strings.TrimSpace(item.RawLog) != "" {
+		item.Description = item.RawLog
+	}
+	if strings.TrimSpace(string(item.Target)) == "" {
+		item.Target = domain.TargetOnlineServer
+	}
+	if err := item.Validate(); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid_incident", err.Error())
+		return
+	}
 	s.incidentsMu.Lock()
 	if _, exists := s.incidents[item.ID]; exists {
 		s.incidentsMu.Unlock()
@@ -245,6 +266,318 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	s.incidentsMu.Unlock()
 	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: item.Description}, 0)
 	writeJSON(w, http.StatusCreated, item)
+}
+
+func incidentPathID(r *http.Request) string {
+	return strings.TrimSpace(r.PathValue("id"))
+}
+
+func (s *Server) lookupIncident(id string) (domain.Incident, bool) {
+	s.incidentsMu.RLock()
+	defer s.incidentsMu.RUnlock()
+	item, ok := s.incidents[id]
+	return item, ok
+}
+
+func (s *Server) getIncident(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := incidentPathID(r)
+	item, ok := s.lookupIncident(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "incident_not_found", "No incident exists for this identifier")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+// updateIncident applies a validated partial update. Only supplied fields change.
+func (s *Server) updateIncident(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := incidentPathID(r)
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	var patch struct {
+		Title         *string `json:"title"`
+		Description   *string `json:"description"`
+		Severity      *string `json:"severity"`
+		Status        *string `json:"status"`
+		Assignee      *string `json:"assignee"`
+		RawLog        *string `json:"rawLog"`
+		AISummary     *string `json:"aiSummary"`
+		RootCause     *string `json:"rootCause"`
+		SuggestedFix  *string `json:"suggestedFix"`
+		CorrelationID *string `json:"correlationId"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&patch); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Request body is not valid incident patch JSON")
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Request body must contain exactly one JSON object")
+		return
+	}
+	s.incidentsMu.Lock()
+	item, ok := s.incidents[id]
+	if !ok {
+		s.incidentsMu.Unlock()
+		writeError(w, http.StatusNotFound, "incident_not_found", "No incident exists for this identifier")
+		return
+	}
+	previousStatus := item.Status
+	if patch.Title != nil {
+		item.Title = strings.TrimSpace(*patch.Title)
+	}
+	if patch.Description != nil {
+		item.Description = *patch.Description
+	}
+	if patch.Severity != nil {
+		item.Severity = domain.Severity(strings.ToLower(strings.TrimSpace(*patch.Severity)))
+	}
+	if patch.Status != nil {
+		item.Status = domain.IncidentStatus(strings.ToLower(strings.TrimSpace(*patch.Status)))
+	}
+	if patch.Assignee != nil {
+		item.Assignee = strings.TrimSpace(*patch.Assignee)
+	}
+	if patch.RawLog != nil {
+		item.RawLog = *patch.RawLog
+	}
+	if patch.AISummary != nil {
+		item.AISummary = *patch.AISummary
+	}
+	if patch.RootCause != nil {
+		item.RootCause = *patch.RootCause
+	}
+	if patch.SuggestedFix != nil {
+		item.SuggestedFix = *patch.SuggestedFix
+	}
+	if patch.CorrelationID != nil {
+		item.CorrelationID = strings.TrimSpace(*patch.CorrelationID)
+	}
+	if err := item.Validate(); err != nil {
+		s.incidentsMu.Unlock()
+		writeError(w, http.StatusUnprocessableEntity, "invalid_incident", err.Error())
+		return
+	}
+	item.UpdatedAt = time.Now().UTC()
+	s.incidents[id] = item
+	s.incidentsMu.Unlock()
+	if item.Status != previousStatus {
+		s.emitAutomationEvent("incident-status:"+item.ID, automation.Event{
+			EventType: "incident.status_changed", EventID: item.ID, SourceType: "cloudsentinels-api",
+			Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title,
+			Summary: fmt.Sprintf("Incident status changed from %s to %s.", previousStatus, item.Status),
+		}, 0)
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := incidentPathID(r)
+	s.incidentsMu.Lock()
+	if _, ok := s.incidents[id]; !ok {
+		s.incidentsMu.Unlock()
+		writeError(w, http.StatusNotFound, "incident_not_found", "No incident exists for this identifier")
+		return
+	}
+	delete(s.incidents, id)
+	s.incidentsMu.Unlock()
+	s.commentsMu.Lock()
+	delete(s.comments, id)
+	s.commentsMu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// analyzeIncident runs the explainable deterministic triage rules against one
+// incident and persists the resulting summary, root cause and suggested fix.
+// It intentionally does not call an external model: the documented architecture
+// is an explainable rules engine, not a trained ML/LLM analyzer.
+func (s *Server) analyzeIncident(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := incidentPathID(r)
+	s.incidentsMu.Lock()
+	item, ok := s.incidents[id]
+	if !ok {
+		s.incidentsMu.Unlock()
+		writeError(w, http.StatusNotFound, "incident_not_found", "No incident exists for this identifier")
+		return
+	}
+	summary, rootCause, suggestedFix := triageIncident(item)
+	item.AISummary = summary
+	item.RootCause = rootCause
+	item.SuggestedFix = suggestedFix
+	item.UpdatedAt = time.Now().UTC()
+	if err := item.Validate(); err != nil {
+		s.incidentsMu.Unlock()
+		writeError(w, http.StatusUnprocessableEntity, "invalid_incident", err.Error())
+		return
+	}
+	s.incidents[id] = item
+	s.incidentsMu.Unlock()
+	s.emitAutomationEvent("incident-analysis:"+item.ID, automation.Event{
+		EventType: "incident.analyzed", EventID: item.ID, SourceType: "cloudsentinels-api",
+		Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title,
+		Summary: "Explainable rule-engine triage produced a summary, likely cause and safe next steps.",
+	}, 10*time.Minute)
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) listIncidentComments(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := incidentPathID(r)
+	if _, ok := s.lookupIncident(id); !ok {
+		writeError(w, http.StatusNotFound, "incident_not_found", "No incident exists for this identifier")
+		return
+	}
+	s.commentsMu.RLock()
+	items := append([]domain.IncidentComment(nil), s.comments[id]...)
+	s.commentsMu.RUnlock()
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "count": len(items)})
+}
+
+func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
+		return
+	}
+	id := incidentPathID(r)
+	if _, ok := s.lookupIncident(id); !ok {
+		writeError(w, http.StatusNotFound, "incident_not_found", "No incident exists for this identifier")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+	var input struct {
+		Author string `json:"author"`
+		Text   string `json:"text"`
+	}
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_comment", "Comment JSON is invalid")
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid_comment", "Comment body must contain exactly one JSON object")
+		return
+	}
+	comment := domain.IncidentComment{
+		IncidentID: id,
+		Author:     strings.TrimSpace(input.Author),
+		Text:       strings.TrimSpace(input.Text),
+	}
+	if comment.Author == "" && s.authenticator != nil {
+		if principal, err := s.authenticator.Authenticate(r); err == nil {
+			comment.Author = firstNonEmpty(principal.Email, principal.Subject)
+		}
+	}
+	if comment.Author == "" {
+		comment.Author = "operator"
+	}
+	if err := comment.Validate(); err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "invalid_comment", "Comment text is required and must be within length bounds")
+		return
+	}
+	commentID, err := newID()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "id_generation_failed", "Could not generate a comment identifier")
+		return
+	}
+	comment.ID = commentID
+	comment.CreatedAt = time.Now().UTC()
+	s.commentsMu.Lock()
+	s.comments[id] = append(s.comments[id], comment)
+	s.commentsMu.Unlock()
+	writeJSON(w, http.StatusCreated, comment)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+// triageIncident is the deterministic, explainable rules engine used for a
+// single incident. It maps observed signals to a likely cause and safe checks.
+func triageIncident(item domain.Incident) (summary, rootCause, suggestedFix string) {
+	haystack := strings.ToLower(strings.Join([]string{item.Title, item.Description, item.RawLog}, " "))
+	type signalRule struct {
+		keys   []string
+		cause  string
+		checks []string
+	}
+	rules := []signalRule{
+		{[]string{"crashloopbackoff", "crash loop", "back-off restarting"}, "The container is repeatedly restarting, most often due to a failing startup command, a failing probe, or a missing configuration/secret.", []string{"Read the previous container logs (kubectl logs --previous)", "Inspect the readiness/liveness probes and startup command", "Confirm required ConfigMaps/Secrets are mounted"}},
+		{[]string{"imagepullbackoff", "errimagepull", "image pull"}, "The kubelet cannot pull the container image, usually from a bad image reference or missing registry credentials.", []string{"Verify the image name and tag exist in the registry", "Check imagePullSecrets are attached to the pod/service account", "Confirm the node can reach the registry"}},
+		{[]string{"oomkilled", "oom killed", "out of memory"}, "The container exceeded its memory limit and was OOM-killed by the kernel.", []string{"Review memory usage against the configured limit", "Right-size requests/limits or fix the memory leak", "Confirm the node has free memory capacity"}},
+		{[]string{"evicted", "node pressure", "disk pressure", "memory pressure"}, "The pod was evicted because the node is under resource pressure.", []string{"Check node conditions for DiskPressure/MemoryPressure", "Free space or add capacity", "Set appropriate resource requests for scheduling"}},
+		{[]string{"pending", "unschedulable", "insufficient cpu", "insufficient memory", "no nodes available"}, "The pod cannot be scheduled, typically due to insufficient resources, taints, or unsatisfied affinity/anti-affinity.", []string{"Inspect scheduler events for the reason", "Check node capacity and resource requests", "Review taints, tolerations and affinity rules"}},
+		{[]string{"unavailable", "rollout", "deployment", "progressdeadline"}, "The deployment rollout is not reaching the desired available replica count.", []string{"Compare desired vs available replicas", "Check the ReplicaSet and pod events", "Consider pausing or rolling back only with approval"}},
+		{[]string{"unhealthy", "readiness", "liveness", "probe failed"}, "A health probe is failing, removing the pod from service or triggering restarts.", []string{"Test the probe endpoint from inside the pod", "Confirm probe path, port and timing thresholds", "Verify downstream dependencies the probe relies on"}},
+		{[]string{"timeout", "latency", "503", "502", "500", "error rate"}, "Elevated latency or error rates suggest a saturated dependency or a failing upstream service.", []string{"Correlate errors with dependency health metrics", "Check ingress and service saturation", "Apply an approved mitigation only after review"}},
+		{[]string{"cpu", "saturation", "throttl"}, "CPU utilisation is high, which can throttle request handling.", []string{"Identify the top CPU consumers", "Compare requests/limits with actual usage", "Scale only through an approved capacity policy"}},
+		{[]string{"certificate", "tls", "x509"}, "A TLS/certificate error indicates an expired or untrusted certificate.", []string{"Check certificate expiry and chain", "Confirm the trust store used by the client", "Rotate the certificate through the normal process"}},
+	}
+	matched := make([]string, 0, 3)
+	checks := make([]string, 0, 3)
+	cause := "No single rule matched the supplied signals; treat this as an unexplained incident and gather more evidence."
+	for _, rule := range rules {
+		for _, key := range rule.keys {
+			if strings.Contains(haystack, key) {
+				cause = rule.cause
+				matched = append(matched, key)
+				for _, check := range rule.checks {
+					if !containsString(checks, check) {
+						checks = append(checks, check)
+					}
+				}
+				break
+			}
+		}
+		if cause != "No single rule matched the supplied signals; treat this as an unexplained incident and gather more evidence." {
+			break
+		}
+	}
+	confidence := 0.55
+	if len(matched) > 0 {
+		confidence = 0.8
+	}
+	signal := "none"
+	if len(matched) > 0 {
+		signal = matched[0]
+	}
+	summary = fmt.Sprintf(
+		"Explainable rule-engine triage (severity %s, status %s). Matched signal: %s. Confidence %.0f%%. This is deterministic rule output, not a trained ML/LLM diagnosis; verify against live telemetry before acting.",
+		item.Severity, item.Status, signal, confidence*100,
+	)
+	if len(checks) == 0 {
+		checks = []string{"Collect recent logs and Kubernetes events", "Confirm current cluster telemetry freshness", "Escalate to an operator if the signal recurs"}
+	}
+	return summary, cause, strings.Join(checks, " ")
+}
+
+func containsString(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
