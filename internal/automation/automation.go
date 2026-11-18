@@ -47,6 +47,7 @@ type Event struct {
 	ClusterName   string    `json:"clusterName,omitempty"`
 	SourceType    string    `json:"sourceType,omitempty"`
 	Environment   string    `json:"environment,omitempty"`
+	Target        string    `json:"target,omitempty"`
 	Severity      string    `json:"severity,omitempty"`
 	Title         string    `json:"title,omitempty"`
 	Summary       string    `json:"summary,omitempty"`

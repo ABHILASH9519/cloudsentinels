@@ -48,6 +48,8 @@ Resources:
         AllowMethods:
           - GET
           - POST
+          - PATCH
+          - DELETE
           - OPTIONS
 
   CloudSentinelsFunction:

@@ -90,14 +90,15 @@ A deployment must use the dedicated GitHub OIDC role and scoped CloudFormation e
 
 ## Firebase frontend configuration for the current preview branch
 
-The Vercel project `devops` is connected to this repository. For the `feat/airtable-cluster-monitoring-zapier` Preview branch, configure these public Firebase Web App variables in Vercel:
+The Vercel project `devops` is connected to this repository. For the `feat/airtable-cluster-monitoring-zapier` Preview branch, configure the Go API origin and these public Firebase Web App variables in Vercel:
 
+- `VITE_CLOUDSENTINELS_API_URL` — the exact HTTPS origin of a separately deployed, compatible CloudSentinels Go API. The AWS serverless deployment workflow in this guide provisions an API Gateway + Node.js Lambda backend and does not output this Go API origin. Its `ApiBaseUrl` is not compatible with the current frontend's `/api/v1/incidents` routes; do not use it for this variable. Configure the Go API origin only after its `/healthz` and authenticated `/api/v1` routes are verified.
 - `VITE_FIREBASE_API_KEY`
 - `VITE_FIREBASE_AUTH_DOMAIN`
 - `VITE_FIREBASE_PROJECT_ID`
 - `VITE_FIREBASE_APP_ID`
 
-`VITE_FIREBASE_PROJECT_ID` must equal the GitHub preview environment variable `FIREBASE_PROJECT_ID`. The `VITE_AWS_API_URL` and `VITE_AWS_REGION` variables are already configured for this branch. The Firebase values must come from the registered Firebase Web App; do not invent placeholders. Do not put a Firebase Admin service-account private key in Vercel or any `VITE_*` variable.
+`VITE_CLOUDSENTINELS_API_URL` must point to the Go API origin used by the frontend. `VITE_FIREBASE_PROJECT_ID` must equal the GitHub preview environment variable `FIREBASE_PROJECT_ID`. The Firebase values must come from the registered Firebase Web App; do not invent placeholders. `VITE_AWS_API_URL` and `VITE_AWS_REGION` are not read by the current Go API client. Do not put a Firebase Admin service-account private key in Vercel or any `VITE_*` variable.
 
 For the local Go API, keep the Firebase Admin service-account JSON outside the repository and set `GOOGLE_APPLICATION_CREDENTIALS` using `scripts/configure-firebase-local.ps1`. The hosted API Gateway validates Firebase ID tokens using its JWT authorizer and does not need the Admin private key in the browser.
 

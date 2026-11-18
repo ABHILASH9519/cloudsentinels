@@ -231,6 +231,7 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	if item.Status == "" {
 		item.Status = domain.StatusOpen
 	}
+	item.ID = strings.TrimSpace(item.ID)
 	if item.ID == "" {
 		id, err := newID()
 		if err != nil {
@@ -272,38 +273,15 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	s.incidents[item.ID] = item
 	s.incidentsMu.Unlock()
-	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: safeIncidentSummary(item)}, 0)
+	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Target: string(item.Target), Severity: string(item.Severity), Title: "CloudSentinels incident", Summary: safeIncidentSummary(item)}, 0)
 	writeJSON(w, http.StatusCreated, item)
 }
 
-var (
-	credentialAssignmentPattern = regexp.MustCompile(`(?i)\b(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|client[_-]?secret)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)`)
-	bearerTokenPattern          = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
-	awsAccessKeyPattern         = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
-	jwtPattern                  = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
-	githubTokenPattern          = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{20,}\b`)
-)
-
-// safeIncidentSummary keeps useful operator-authored descriptions for ticket
-// sync while excluding raw logs and common credential formats from webhooks.
-func safeIncidentSummary(item domain.Incident) string {
-	summary := strings.TrimSpace(item.Description)
-	if summary == "" || summary == "Raw log attached. Review it in the incident details." {
-		return "A new incident was created. Open CloudSentinels to inspect its details."
-	}
-	summary = bearerTokenPattern.ReplaceAllString(summary, "Bearer [REDACTED]")
-	summary = credentialAssignmentPattern.ReplaceAllString(summary, "$1=[REDACTED]")
-	summary = awsAccessKeyPattern.ReplaceAllString(summary, "[REDACTED_AWS_ACCESS_KEY]")
-	summary = jwtPattern.ReplaceAllString(summary, "[REDACTED_JWT]")
-	summary = githubTokenPattern.ReplaceAllString(summary, "[REDACTED_GITHUB_TOKEN]")
-	runes := []rune(summary)
-	if len(runes) > 1000 {
-		summary = string(runes[:1000])
-	}
-	if strings.TrimSpace(summary) == "" {
-		return "A new incident was created. Open CloudSentinels to inspect its details."
-	}
-	return summary
+// safeIncidentSummary deliberately excludes user-authored descriptions and raw logs
+// from external automation webhooks. Those fields can contain unknown credential
+// formats; operators can inspect the full incident through the authenticated API.
+func safeIncidentSummary(_ domain.Incident) string {
+	return "A new incident was created. Open CloudSentinels to inspect its details."
 }
 
 func incidentPathID(r *http.Request) string {
@@ -556,29 +534,35 @@ func firstNonEmpty(values ...string) string {
 func triageIncident(item domain.Incident) (summary, rootCause, suggestedFix string) {
 	haystack := strings.ToLower(strings.Join([]string{item.Title, item.Description, item.RawLog}, " "))
 	type signalRule struct {
-		keys   []string
-		cause  string
-		checks []string
+		priority int
+		keys     []string
+		cause    string
+		checks   []string
 	}
 	rules := []signalRule{
-		{[]string{"crashloopbackoff", "crash loop", "back-off restarting"}, "The container is repeatedly restarting, most often due to a failing startup command, a failing probe, or a missing configuration/secret.", []string{"Read the previous container logs (kubectl logs --previous)", "Inspect the readiness/liveness probes and startup command", "Confirm required ConfigMaps/Secrets are mounted"}},
-		{[]string{"imagepullbackoff", "errimagepull", "image pull"}, "The kubelet cannot pull the container image, usually from a bad image reference or missing registry credentials.", []string{"Verify the image name and tag exist in the registry", "Check imagePullSecrets are attached to the pod/service account", "Confirm the node can reach the registry"}},
-		{[]string{"oomkilled", "oom killed", "out of memory"}, "The container exceeded its memory limit and was OOM-killed by the kernel.", []string{"Review memory usage against the configured limit", "Right-size requests/limits or fix the memory leak", "Confirm the node has free memory capacity"}},
-		{[]string{"evicted", "node pressure", "disk pressure", "memory pressure"}, "The pod was evicted because the node is under resource pressure.", []string{"Check node conditions for DiskPressure/MemoryPressure", "Free space or add capacity", "Set appropriate resource requests for scheduling"}},
-		{[]string{"pending", "unschedulable", "insufficient cpu", "insufficient memory", "no nodes available"}, "The pod cannot be scheduled, typically due to insufficient resources, taints, or unsatisfied affinity/anti-affinity.", []string{"Inspect scheduler events for the reason", "Check node capacity and resource requests", "Review taints, tolerations and affinity rules"}},
-		{[]string{"unavailable", "rollout", "deployment", "progressdeadline"}, "The deployment rollout is not reaching the desired available replica count.", []string{"Compare desired vs available replicas", "Check the ReplicaSet and pod events", "Consider pausing or rolling back only with approval"}},
-		{[]string{"unhealthy", "readiness", "liveness", "probe failed"}, "A health probe is failing, removing the pod from service or triggering restarts.", []string{"Test the probe endpoint from inside the pod", "Confirm probe path, port and timing thresholds", "Verify downstream dependencies the probe relies on"}},
-		{[]string{"timeout", "latency", "503", "502", "500", "error rate"}, "Elevated latency or error rates suggest a saturated dependency or a failing upstream service.", []string{"Correlate errors with dependency health metrics", "Check ingress and service saturation", "Apply an approved mitigation only after review"}},
-		{[]string{"cpu", "saturation", "throttling", "throttled"}, "CPU utilisation is high, which can throttle request handling.", []string{"Identify the top CPU consumers", "Compare requests/limits with actual usage", "Scale only through an approved capacity policy"}},
-		{[]string{"certificate", "tls", "x509"}, "A TLS/certificate error indicates an expired or untrusted certificate.", []string{"Check certificate expiry and chain", "Confirm the trust store used by the client", "Rotate the certificate through the normal process"}},
+		{100, []string{"crashloopbackoff", "crash loop", "back-off restarting"}, "The container is repeatedly restarting, most often due to a failing startup command, a failing probe, or a missing configuration/secret.", []string{"Read the previous container logs (kubectl logs --previous)", "Inspect the readiness/liveness probes and startup command", "Confirm required ConfigMaps/Secrets are mounted"}},
+		{100, []string{"imagepullbackoff", "errimagepull", "image pull"}, "The kubelet cannot pull the container image, usually from a bad image reference or missing registry credentials.", []string{"Verify the image name and tag exist in the registry", "Check imagePullSecrets are attached to the pod/service account", "Confirm the node can reach the registry"}},
+		{110, []string{"oomkilled", "oom killed", "out of memory"}, "The container exceeded its memory limit and was OOM-killed by the kernel.", []string{"Review memory usage against the configured limit", "Right-size requests/limits or fix the memory leak", "Confirm the node has free memory capacity"}},
+		{105, []string{"evicted", "node pressure", "disk pressure", "memory pressure"}, "The pod was evicted because the node is under resource pressure.", []string{"Check node conditions for DiskPressure/MemoryPressure", "Free space or add capacity", "Set appropriate resource requests for scheduling"}},
+		{95, []string{"pending", "unschedulable", "insufficient cpu", "insufficient memory", "no nodes available"}, "The pod cannot be scheduled, typically due to insufficient resources, taints, or unsatisfied affinity/anti-affinity.", []string{"Inspect scheduler events for the reason", "Check node capacity and resource requests", "Review taints, tolerations and affinity rules"}},
+		{40, []string{"unavailable", "rollout", "deployment", "progressdeadline"}, "The deployment rollout is not reaching the desired available replica count.", []string{"Compare desired vs available replicas", "Check the ReplicaSet and pod events", "Consider pausing or rolling back only with approval"}},
+		{80, []string{"unhealthy", "readiness", "liveness", "probe failed"}, "A health probe is failing, removing the pod from service or triggering restarts.", []string{"Test the probe endpoint from inside the pod", "Confirm probe path, port and timing thresholds", "Verify downstream dependencies the probe relies on"}},
+		{50, []string{"timeout", "latency", "503", "502", "500", "error rate"}, "Elevated latency or error rates suggest a saturated dependency or a failing upstream service.", []string{"Correlate errors with dependency health metrics", "Check ingress and service saturation", "Apply an approved mitigation only after review"}},
+		{80, []string{"cpu", "saturation", "throttling", "throttled"}, "CPU utilisation is high, which can throttle request handling.", []string{"Identify the top CPU consumers", "Compare requests/limits with actual usage", "Scale only through an approved capacity policy"}},
+		{90, []string{"certificate", "tls", "x509"}, "A TLS/certificate error indicates an expired or untrusted certificate.", []string{"Check certificate expiry and chain", "Confirm the trust store used by the client", "Rotate the certificate through the normal process"}},
 	}
 	bestKey := ""
 	bestRule := -1
+	bestPriority := -1
 	for ruleIndex, rule := range rules {
 		for _, key := range rule.keys {
-			if signalMatches(haystack, key) && len(key) > len(bestKey) {
+			if !signalMatches(haystack, key) {
+				continue
+			}
+			if rule.priority > bestPriority || (rule.priority == bestPriority && len(key) > len(bestKey)) {
 				bestKey = key
 				bestRule = ruleIndex
+				bestPriority = rule.priority
 			}
 		}
 	}
@@ -1376,7 +1360,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-CS-Timestamp, X-CS-Signature")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Max-Age", "600")
 		}
 		if r.Method == http.MethodOptions {

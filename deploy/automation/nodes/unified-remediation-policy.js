@@ -1,7 +1,10 @@
 const e = $input.first().json;
 const type = String(e.eventType || "").toLowerCase();
 const source = String(e.sourceType || "").toLowerCase();
-const text = [type, source, e.title, e.summary, e.service, e.resourceId, e.resourceState].join(" ").toLowerCase();
+const targetCategory = ["online-server", "online-serverless", "offline-kubernetes"].includes(String(e.target || "").toLowerCase())
+  ? String(e.target).toLowerCase()
+  : "";
+const text = [type, source, targetCategory, e.service, e.resourceId, e.resourceState].join(" ").toLowerCase();
 
 let target = "cloudsentinels-core";
 let adapter = "core-incident-policy";

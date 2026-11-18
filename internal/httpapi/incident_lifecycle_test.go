@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ABHILASH9519/cloudsentinels/internal/config"
 	"github.com/ABHILASH9519/cloudsentinels/internal/domain"
@@ -48,8 +49,15 @@ func TestIncidentCreateDefaultsTargetAndStampsTimestamps(t *testing.T) {
 	if item["target"] != "online-server" {
 		t.Fatalf("expected default online-server target, got %#v", item["target"])
 	}
-	if item["createdAt"] == "" || item["updatedAt"] == "" {
-		t.Fatalf("expected createdAt/updatedAt to be stamped, got %#v", item)
+	for _, field := range []string{"createdAt", "updatedAt"} {
+		value, ok := item[field].(string)
+		if !ok || value == "" {
+			t.Fatalf("expected %s to be a timestamp string, got %#v", field, item[field])
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil || parsed.IsZero() {
+			t.Fatalf("expected %s to be a valid nonzero RFC3339 timestamp, got %q (err=%v)", field, value, err)
+		}
 	}
 	if item["status"] != "open" {
 		t.Fatalf("expected default open status, got %#v", item["status"])
@@ -121,19 +129,36 @@ func TestIncidentCommentRejectsClientSuppliedAuthor(t *testing.T) {
 	}
 }
 
-func TestSafeIncidentSummaryPreservesSafeDescriptionsAndRedactsCredentials(t *testing.T) {
+func TestSafeIncidentSummaryAlwaysUsesFixedWebhookText(t *testing.T) {
+	descriptions := []string{
+		"Payments API failed after deployment",
+		"token=plain-secret",
+		"SLACK_TOKEN=xoxb-secret-value",
+		"connect https://operator:password@internal.example",
+		"-----BEGIN PRIVATE KEY-----\\nprivate-key-material\\n-----END PRIVATE KEY-----",
+	}
+	for _, description := range descriptions {
+		item := domain.Incident{Description: description, RawLog: "password=raw-log-secret"}
+		summary := safeIncidentSummary(item)
+		if summary != "A new incident was created. Open CloudSentinels to inspect its details." {
+			t.Fatalf("expected fixed generic webhook summary for %q, got %q", description, summary)
+		}
+		if strings.Contains(summary, "secret") || strings.Contains(summary, "private-key-material") {
+			t.Fatalf("sensitive material leaked into webhook summary: %q", summary)
+		}
+	}
+}
+
+func TestSafeIncidentSummaryFallsBackForPrefixedCredentialsAndBasicAuth(t *testing.T) {
 	item := domain.Incident{
-		Description: "Payments API failed; api_key=supersecret Bearer abc.def.ghi",
-		RawLog:      "password=raw-log-secret",
+		Description: "DB_PASSWORD=hunter2; Authorization: Basic c2VjcmV0",
 	}
 	summary := safeIncidentSummary(item)
-	if !strings.Contains(summary, "Payments API failed") {
-		t.Fatalf("expected safe description to be preserved, got %q", summary)
+	if strings.Contains(summary, "hunter2") || strings.Contains(summary, "c2VjcmV0") {
+		t.Fatalf("credential material leaked into webhook summary: %q", summary)
 	}
-	for _, secret := range []string{"supersecret", "abc.def.ghi", "raw-log-secret"} {
-		if strings.Contains(summary, secret) {
-			t.Fatalf("webhook summary contains secret %q: %q", secret, summary)
-		}
+	if !strings.Contains(summary, "Open CloudSentinels") {
+		t.Fatalf("expected generic fallback for credential-like description, got %q", summary)
 	}
 }
 
@@ -151,11 +176,35 @@ func TestSafeIncidentSummaryUsesGenericTextForRawLogFallback(t *testing.T) {
 	}
 }
 
-func TestTriageChoosesSpecificSignalsAndUsesNumericBoundaries(t *testing.T) {
-	deployment := domain.Incident{Title: "Deployment pending; request took 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
-	_, cause, _ := triageIncident(deployment)
+func TestTriagePrioritizesSpecificSignalsAndNumericBoundaries(t *testing.T) {
+	pending := domain.Incident{Title: "Deployment pending; request took 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ := triageIncident(pending)
+	if !strings.Contains(cause, "cannot be scheduled") {
+		t.Fatalf("expected pending scheduler signal to outrank generic deployment, got %q", cause)
+	}
+
+	oom := domain.Incident{Title: "OOMKilled in deployment checkout", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(oom)
+	if !strings.Contains(cause, "OOM-killed") {
+		t.Fatalf("expected OOMKilled to outrank deployment rollout, got %q", cause)
+	}
+
+	evicted := domain.Incident{Title: "Pod evicted from deployment api", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(evicted)
+	if !strings.Contains(cause, "evicted because the node") {
+		t.Fatalf("expected eviction to outrank deployment rollout, got %q", cause)
+	}
+
+	genericDeployment := domain.Incident{Title: "Deployment rollout unavailable", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(genericDeployment)
 	if !strings.Contains(cause, "deployment rollout") {
-		t.Fatalf("expected the more specific deployment signal, got %q", cause)
+		t.Fatalf("expected generic deployment signal when no specific cause exists, got %q", cause)
+	}
+
+	insufficientCPU := domain.Incident{Title: "Pod Pending: 0/3 nodes available, insufficient cpu", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(insufficientCPU)
+	if !strings.Contains(cause, "cannot be scheduled") {
+		t.Fatalf("expected scheduler capacity advice to outrank generic CPU advice, got %q", cause)
 	}
 
 	falsePositive := domain.Incident{Title: "Request duration was 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
@@ -347,6 +396,23 @@ func TestIncidentLifecycleRoutesFailClosedWithoutAuthenticator(t *testing.T) {
 		server.Handler().ServeHTTP(response, httptest.NewRequest(route.method, route.path, nil))
 		if response.Code != http.StatusServiceUnavailable {
 			t.Fatalf("%s %s: expected fail-closed 503, got %d", route.method, route.path, response.Code)
+		}
+	}
+}
+
+func TestCORSAllowsIncidentLifecycleMethods(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigins: []string{"http://localhost:5173"}}, slog.Default(), nil)
+	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
+		request := httptest.NewRequest(http.MethodOptions, "/api/v1/incidents/test", nil)
+		request.Header.Set("Origin", "http://localhost:5173")
+		request.Header.Set("Access-Control-Request-Method", method)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 preflight for %s, got %d", method, response.Code)
+		}
+		if !strings.Contains(response.Header().Get("Access-Control-Allow-Methods"), method) {
+			t.Fatalf("CORS methods do not include %s: %q", method, response.Header().Get("Access-Control-Allow-Methods"))
 		}
 	}
 }

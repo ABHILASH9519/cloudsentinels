@@ -32,8 +32,9 @@ import {
   MessageSquare,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useFirebaseAuth } from "../auth/FirebaseAuth";
 import { SeverityBadge } from "../components/SeverityBadge";
 import {
   useAddComment,
@@ -44,6 +45,7 @@ import {
   useUpdateIncidentAIFields,
   useUpdateIncidentStatus,
 } from "../hooks/useIncidents";
+import { CloudSentinelsApiError } from "../lib/cloudSentinels";
 
 function formatDate(value?: string) {
   if (!value) return "—";
@@ -54,9 +56,22 @@ function formatDate(value?: string) {
 export function IncidentDetailPage() {
   const { id } = useParams({ from: "/incidents/$id" });
   const navigate = useNavigate();
+  const { isOperator } = useFirebaseAuth();
 
-  const { data: incident, isLoading } = useGetIncident(id);
-  const { data: comments } = useGetComments(id);
+  const {
+    data: incident,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useGetIncident(id);
+  const {
+    data: comments,
+    isLoading: commentsLoading,
+    isError: commentsError,
+    error: commentsQueryError,
+    refetch: refetchComments,
+  } = useGetComments(id);
   const updateStatus = useUpdateIncidentStatus();
   const updateAI = useUpdateIncidentAIFields();
   const analyzeIncident = useAnalyzeIncident();
@@ -68,7 +83,25 @@ export function IncidentDetailPage() {
     rootCause: "",
     suggestedFix: "",
   });
+  const [aiFormDirty, setAiFormDirty] = useState(false);
+  const [formIncidentId, setFormIncidentId] = useState(id);
   const [commentText, setCommentText] = useState("");
+
+  useEffect(() => {
+    if (formIncidentId === id) return;
+    setFormIncidentId(id);
+    setAiForm({ aiSummary: "", rootCause: "", suggestedFix: "" });
+    setAiFormDirty(false);
+  }, [formIncidentId, id]);
+
+  useEffect(() => {
+    if (!incident || incident.id !== id || aiFormDirty) return;
+    setAiForm({
+      aiSummary: incident.aiSummary ?? "",
+      rootCause: incident.rootCause ?? "",
+      suggestedFix: incident.suggestedFix ?? "",
+    });
+  }, [incident, aiFormDirty, id]);
 
   if (isLoading) {
     return (
@@ -76,6 +109,24 @@ export function IncidentDetailPage() {
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-32" />
         <Skeleton className="h-48" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    const notFound = error instanceof CloudSentinelsApiError && error.status === 404;
+    return (
+      <div
+        className="p-6 text-center text-muted-foreground space-y-3"
+        data-ocid="incident_detail.error_state"
+        role="alert"
+      >
+        <p>{notFound ? "Incident not found" : error instanceof Error ? error.message : "Unable to load incident."}</p>
+        {!notFound && (
+          <Button variant="outline" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        )}
       </div>
     );
   }
@@ -96,6 +147,7 @@ export function IncidentDetailPage() {
       await updateStatus.mutateAsync({ id, status });
       toast.success("Status updated");
     } catch (error) {
+      await refetch();
       toast.error(
         error instanceof Error ? error.message : "Failed to update status",
       );
@@ -103,6 +155,10 @@ export function IncidentDetailPage() {
   };
 
   const handleAIAnalyze = async () => {
+    if (!isOperator) {
+      toast.error("An operator or admin role is required");
+      return;
+    }
     try {
       await analyzeIncident.mutateAsync(id);
       toast.success("Explainable triage completed");
@@ -114,8 +170,13 @@ export function IncidentDetailPage() {
   };
 
   const handleAISave = async () => {
+    if (!isOperator) {
+      toast.error("An operator or admin role is required");
+      return;
+    }
     try {
       await updateAI.mutateAsync({ id, ...aiForm });
+      setAiFormDirty(false);
       toast.success("Triage fields updated");
     } catch (error) {
       toast.error(
@@ -137,7 +198,7 @@ export function IncidentDetailPage() {
   };
 
   const handleAddComment = async () => {
-    if (!commentText.trim()) return;
+    if (!isOperator || !commentText.trim()) return;
     try {
       await addComment.mutateAsync({ incidentId: id, text: commentText });
       toast.success("Comment added");
@@ -180,7 +241,8 @@ export function IncidentDetailPage() {
 
         <div className="flex items-center gap-2 shrink-0">
           <Select
-            defaultValue={incident.status}
+            value={incident.status}
+            disabled={!isOperator || updateStatus.isPending}
             onValueChange={(value) => void handleStatusChange(value)}
           >
             <SelectTrigger
@@ -202,6 +264,7 @@ export function IncidentDetailPage() {
               <Button
                 variant="destructive"
                 size="icon"
+                disabled={!isOperator || deleteIncident.isPending}
                 data-ocid="incident_detail.delete.delete_button"
               >
                 <Trash2 className="w-4 h-4" />
@@ -321,7 +384,7 @@ export function IncidentDetailPage() {
               </div>
               <Button
                 onClick={() => void handleAIAnalyze()}
-                disabled={analyzeIncident.isPending}
+                disabled={!isOperator || analyzeIncident.isPending}
                 data-ocid="incident_detail.ai.generate_button"
                 className="shrink-0 bg-primary/90 hover:bg-primary text-primary-foreground"
               >
@@ -390,12 +453,14 @@ export function IncidentDetailPage() {
                   rows={3}
                   placeholder={incident.aiSummary || "Enter summary..."}
                   value={aiForm.aiSummary}
-                  onChange={(event) =>
+                  disabled={!isOperator || updateAI.isPending}
+                  onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
                       aiSummary: event.target.value,
-                    }))
-                  }
+                    }));
+                    setAiFormDirty(true);
+                  }}
                   className="text-sm"
                 />
               </div>
@@ -406,12 +471,14 @@ export function IncidentDetailPage() {
                   rows={2}
                   placeholder={incident.rootCause || "Enter likely cause..."}
                   value={aiForm.rootCause}
-                  onChange={(event) =>
+                  disabled={!isOperator || updateAI.isPending}
+                  onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
                       rootCause: event.target.value,
-                    }))
-                  }
+                    }));
+                    setAiFormDirty(true);
+                  }}
                   className="text-sm"
                 />
               </div>
@@ -422,18 +489,20 @@ export function IncidentDetailPage() {
                   rows={2}
                   placeholder={incident.suggestedFix || "Enter next steps..."}
                   value={aiForm.suggestedFix}
-                  onChange={(event) =>
+                  disabled={!isOperator || updateAI.isPending}
+                  onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
                       suggestedFix: event.target.value,
-                    }))
-                  }
+                    }));
+                    setAiFormDirty(true);
+                  }}
                   className="text-sm"
                 />
               </div>
               <Button
                 onClick={() => void handleAISave()}
-                disabled={updateAI.isPending}
+                disabled={!isOperator || updateAI.isPending}
                 data-ocid="incident_detail.ai.save_button"
                 className="bg-primary/90 hover:bg-primary text-primary-foreground"
               >
@@ -466,7 +535,18 @@ export function IncidentDetailPage() {
         {/* Comments */}
         <TabsContent value="comments" className="mt-4 space-y-4">
           <div className="space-y-3">
-            {!comments || comments.length === 0 ? (
+            {commentsError ? (
+              <div className="flex flex-col items-start gap-2" role="alert" data-ocid="incident_detail.comments.error_state">
+                <p className="text-sm text-muted-foreground">
+                  {commentsQueryError instanceof Error ? commentsQueryError.message : "Unable to load comments."}
+                </p>
+                <Button variant="outline" size="sm" onClick={() => void refetchComments()}>
+                  Retry
+                </Button>
+              </div>
+            ) : commentsLoading ? (
+              <p className="text-muted-foreground text-sm">Loading comments…</p>
+            ) : !comments || comments.length === 0 ? (
               <p
                 className="text-muted-foreground text-sm"
                 data-ocid="incident_detail.comments.empty_state"
@@ -508,7 +588,7 @@ export function IncidentDetailPage() {
               <Button
                 data-ocid="incident_detail.add_comment.button"
                 onClick={() => void handleAddComment()}
-                disabled={addComment.isPending || !commentText.trim()}
+                disabled={!isOperator || addComment.isPending || !commentText.trim()}
                 className="bg-primary/90 hover:bg-primary text-primary-foreground"
               >
                 {addComment.isPending ? (

@@ -5,7 +5,7 @@ CloudSentinels separates authentication from incident mutation permissions.
 ## Access rules
 
 - Listing, reading, creating incidents, and reading comments require a valid authenticated session.
-- Updating an incident, running triage analysis, or deleting an incident requires a Firebase custom claim containing `roles: ["operator"]` or `roles: ["admin"]`.
+- Updating an incident, running triage analysis, deleting an incident, or posting an incident comment requires a Firebase custom claim containing `roles: ["operator"]` or `roles: ["admin"]`.
 - Comment authors are derived from the verified Firebase identity (email, falling back to UID). The API rejects client-supplied author names.
 - Incident deletion writes an audit log entry with the incident ID and authenticated subject.
 - The local development bearer token is assigned both `operator` and `admin` roles by the local authenticator. It is disabled in production unless explicitly enabled.
@@ -46,10 +46,12 @@ const auth = getAuth();
 const user = await auth.getUser(uid);
 const claims = { ...user.customClaims };
 const roles = Array.isArray(claims.roles) ? claims.roles : [];
-claims.roles = roles.filter((value) => value !== "operator");
+claims.roles = roles.filter((value) => !["operator", "admin"].includes(value));
 await auth.setCustomUserClaims(uid, claims);
 await auth.revokeRefreshTokens(uid);
 ```
+
+For immediate removal of all incident-mutation permissions, remove both `operator` and `admin` as shown. If the intent is only to remove the operator label while intentionally retaining administrator access, remove only `operator` and do not describe that as revoking mutation access.
 
 Role changes must preserve unrelated custom claims. After revocation, the user must sign in again to obtain a new ID token.
 
