@@ -92,9 +92,7 @@ export function useCreateIncident() {
           title: input.title,
           severity: input.severity,
           source: input.source,
-          ...(input.rawLog
-            ? { rawLog: input.rawLog, description: input.rawLog }
-            : {}),
+          ...(input.rawLog ? { rawLog: input.rawLog } : {}),
         }),
       }),
     onSuccess: () => {
