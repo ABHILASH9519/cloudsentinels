@@ -489,7 +489,7 @@ func (s *Server) listIncidentComments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
-	principal, authorized := s.authorizePrincipal(w, r)
+	principal, authorized := s.authorizeOperatorPrincipal(w, r)
 	if !authorized {
 		return
 	}
