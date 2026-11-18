@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ABHILASH9519/cloudsentinels/internal/config"
+	"github.com/ABHILASH9519/cloudsentinels/internal/domain"
 )
 
 // createIncidentForTest creates one incident through the public route and
