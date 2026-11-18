@@ -39,7 +39,19 @@ await getAuth().setCustomUserClaims(uid, { ...user.customClaims, roles });
 console.log(`Assigned ${role} to ${uid}; refresh the user's ID token.`);
 ```
 
-After assigning a role, the user must obtain a refreshed Firebase ID token before the claim is available to CloudSentinels. Role removal should also be performed server-side with the Admin SDK and should preserve unrelated custom claims.
+After assigning a role, the user must obtain a refreshed Firebase ID token before the claim is available to CloudSentinels. To remove an operator's access immediately, update the custom claims **and revoke refresh tokens**; CloudSentinels verifies Firebase tokens with revocation checking enabled, so the old token is rejected:
+
+```js
+const auth = getAuth();
+const user = await auth.getUser(uid);
+const claims = { ...user.customClaims };
+const roles = Array.isArray(claims.roles) ? claims.roles : [];
+claims.roles = roles.filter((value) => value !== "operator");
+await auth.setCustomUserClaims(uid, claims);
+await auth.revokeRefreshTokens(uid);
+```
+
+Role changes must preserve unrelated custom claims. After revocation, the user must sign in again to obtain a new ID token.
 
 ## Operational note
 
