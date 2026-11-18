@@ -387,7 +387,8 @@ func (s *Server) updateIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
-	if !s.authorizeOperator(w, r) {
+	principal, authorized := s.authorizeOperatorPrincipal(w, r)
+	if !authorized {
 		return
 	}
 	id := incidentPathID(r)
@@ -402,6 +403,7 @@ func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
 	delete(s.comments, id)
 	s.commentsMu.Unlock()
 	s.incidentsMu.Unlock()
+	s.logger.Info("incident deleted", "incident_id", id, "actor_subject", principal.Subject)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1274,19 +1276,24 @@ func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
 
 // authorizeOperator restricts incident mutations to explicitly provisioned
 // operators and administrators. Authentication alone is not an authorization policy.
-func (s *Server) authorizeOperator(w http.ResponseWriter, r *http.Request) bool {
+func (s *Server) authorizeOperatorPrincipal(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
 	principal, ok := s.authorizePrincipal(w, r)
 	if !ok {
-		return false
+		return auth.Principal{}, false
 	}
 	for _, role := range principal.Roles {
 		switch strings.ToLower(strings.TrimSpace(role)) {
 		case "operator", "admin":
-			return true
+			return principal, true
 		}
 	}
 	writeError(w, http.StatusForbidden, "forbidden", "An operator or admin role is required for this incident action")
-	return false
+	return auth.Principal{}, false
+}
+
+func (s *Server) authorizeOperator(w http.ResponseWriter, r *http.Request) bool {
+	_, ok := s.authorizeOperatorPrincipal(w, r)
+	return ok
 }
 func (s *Server) authorizeAgent(w http.ResponseWriter, r *http.Request, clusterID string) bool {
 	if strings.TrimSpace(clusterID) == "" {
