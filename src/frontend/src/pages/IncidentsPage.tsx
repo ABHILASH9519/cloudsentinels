@@ -43,7 +43,7 @@ function formatDate(value?: string) {
 }
 
 export function IncidentsPage() {
-  const { data: incidents, isLoading } = useListIncidents();
+  const { data: incidents, isLoading, isError, error, refetch } = useListIncidents();
   const createIncident = useCreateIncident();
   const navigate = useNavigate();
 
@@ -244,7 +244,20 @@ export function IncidentsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {isError ? (
+              <TableRow>
+                <TableCell colSpan={5} className="py-12 text-center">
+                  <div className="flex flex-col items-center gap-3" role="alert" data-ocid="incidents.error_state">
+                    <span className="text-sm text-muted-foreground">
+                      {error instanceof Error ? error.message : "Unable to load incidents."}
+                    </span>
+                    <Button variant="outline" size="sm" onClick={() => void refetch()}>
+                      Retry
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : isLoading ? (
               SKELETON_KEYS.map((key) => (
                 <TableRow key={key}>
                   <TableCell colSpan={5}>
