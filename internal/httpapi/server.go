@@ -278,31 +278,34 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	credentialAssignmentPattern = regexp.MustCompile(`(?i)\b(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|client[_-]?secret)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)`)
-	bearerTokenPattern          = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
-	awsAccessKeyPattern         = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
-	jwtPattern                  = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
-	githubTokenPattern          = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{20,}\b`)
+	credentialAssignmentPattern = regexp.MustCompile(`(?i)([A-Za-z0-9_-]*(?:authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|client[_-]?secret)[A-Za-z0-9_-]*)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)`)
+	authorizationSchemePattern = regexp.MustCompile(`(?i)(?:proxy-)?authorization\s*[:=]\s*(?:basic|bearer)\s+[A-Za-z0-9._~+/=-]+`)
+	bearerTokenPattern = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
+	awsAccessKeyPattern = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
+	jwtPattern = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
+	githubTokenPattern = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{20,}\b`)
 )
 
-// safeIncidentSummary keeps useful operator-authored descriptions for ticket
-// sync while excluding raw logs and common credential formats from webhooks.
+// safeIncidentSummary forwards operator-authored text only when it contains no
+// recognizable credential material. Uncertain descriptions fall back to a
+// generic message; raw logs are never included in automation webhook events.
 func safeIncidentSummary(item domain.Incident) string {
+	const fallback = "A new incident was created. Open CloudSentinels to inspect its details."
 	summary := strings.TrimSpace(item.Description)
 	if summary == "" || summary == "Raw log attached. Review it in the incident details." {
-		return "A new incident was created. Open CloudSentinels to inspect its details."
+		return fallback
 	}
-	summary = bearerTokenPattern.ReplaceAllString(summary, "Bearer [REDACTED]")
-	summary = credentialAssignmentPattern.ReplaceAllString(summary, "$1=[REDACTED]")
-	summary = awsAccessKeyPattern.ReplaceAllString(summary, "[REDACTED_AWS_ACCESS_KEY]")
-	summary = jwtPattern.ReplaceAllString(summary, "[REDACTED_JWT]")
-	summary = githubTokenPattern.ReplaceAllString(summary, "[REDACTED_GITHUB_TOKEN]")
+	if credentialAssignmentPattern.MatchString(summary) ||
+		authorizationSchemePattern.MatchString(summary) ||
+		bearerTokenPattern.MatchString(summary) ||
+		awsAccessKeyPattern.MatchString(summary) ||
+		jwtPattern.MatchString(summary) ||
+		githubTokenPattern.MatchString(summary) {
+		return fallback
+	}
 	runes := []rune(summary)
 	if len(runes) > 1000 {
 		summary = string(runes[:1000])
-	}
-	if strings.TrimSpace(summary) == "" {
-		return "A new incident was created. Open CloudSentinels to inspect its details."
 	}
 	return summary
 }
