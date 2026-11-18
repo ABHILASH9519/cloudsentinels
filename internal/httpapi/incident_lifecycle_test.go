@@ -176,11 +176,29 @@ func TestSafeIncidentSummaryUsesGenericTextForRawLogFallback(t *testing.T) {
 	}
 }
 
-func TestTriageChoosesSpecificSignalsAndUsesNumericBoundaries(t *testing.T) {
-	deployment := domain.Incident{Title: "Deployment pending; request took 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
-	_, cause, _ := triageIncident(deployment)
+func TestTriagePrioritizesSpecificSignalsAndNumericBoundaries(t *testing.T) {
+	pending := domain.Incident{Title: "Deployment pending; request took 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ := triageIncident(pending)
+	if !strings.Contains(cause, "cannot be scheduled") {
+		t.Fatalf("expected pending scheduler signal to outrank generic deployment, got %q", cause)
+	}
+
+	oom := domain.Incident{Title: "OOMKilled in deployment checkout", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(oom)
+	if !strings.Contains(cause, "OOM-killed") {
+		t.Fatalf("expected OOMKilled to outrank deployment rollout, got %q", cause)
+	}
+
+	evicted := domain.Incident{Title: "Pod evicted from deployment api", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(evicted)
+	if !strings.Contains(cause, "evicted because the node") {
+		t.Fatalf("expected eviction to outrank deployment rollout, got %q", cause)
+	}
+
+	genericDeployment := domain.Incident{Title: "Deployment rollout unavailable", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(genericDeployment)
 	if !strings.Contains(cause, "deployment rollout") {
-		t.Fatalf("expected the more specific deployment signal, got %q", cause)
+		t.Fatalf("expected generic deployment signal when no specific cause exists, got %q", cause)
 	}
 
 	falsePositive := domain.Incident{Title: "Request duration was 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
@@ -201,6 +219,7 @@ func TestTriageChoosesSpecificSignalsAndUsesNumericBoundaries(t *testing.T) {
 		t.Fatalf("expected exact HTTP 500 to match the error-rate rule, got %q", cause)
 	}
 }
+
 
 func TestIncidentGetReturnsCreatedIncident(t *testing.T) {
 	server := newTestServer()
