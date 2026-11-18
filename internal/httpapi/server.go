@@ -610,6 +610,16 @@ func signalMatches(haystack, key string) bool {
 	if strings.ContainsAny(key, " \t") {
 		return strings.Contains(haystack, key)
 	}
+	if key == "cpu" {
+		for _, token := range strings.FieldsFunc(haystack, func(char rune) bool {
+			return !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9')
+		}) {
+			if token == key || strings.HasSuffix(token, key) {
+				return true
+			}
+		}
+		return false
+	}
 	pattern := `\b` + regexp.QuoteMeta(key) + `\b`
 	matched, _ := regexp.MatchString(pattern, haystack)
 	return matched
