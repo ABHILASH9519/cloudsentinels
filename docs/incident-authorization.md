@@ -5,7 +5,7 @@ CloudSentinels separates authentication from incident mutation permissions.
 ## Access rules
 
 - Listing, reading, creating incidents, and reading comments require a valid authenticated session.
-- Updating an incident, running triage analysis, or deleting an incident requires a Firebase custom claim containing `roles: ["operator"]` or `roles: ["admin"]`.
+- Updating an incident, running triage analysis, deleting an incident, or posting an incident comment requires a Firebase custom claim containing `roles: ["operator"]` or `roles: ["admin"]`.
 - Comment authors are derived from the verified Firebase identity (email, falling back to UID). The API rejects client-supplied author names.
 - Incident deletion writes an audit log entry with the incident ID and authenticated subject.
 - The local development bearer token is assigned both `operator` and `admin` roles by the local authenticator. It is disabled in production unless explicitly enabled.
