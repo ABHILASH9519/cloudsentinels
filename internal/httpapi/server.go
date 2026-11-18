@@ -279,11 +279,11 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 
 var (
 	credentialAssignmentPattern = regexp.MustCompile(`(?i)([A-Za-z0-9_-]*(?:authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|client[_-]?secret)[A-Za-z0-9_-]*)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)`)
-	authorizationSchemePattern = regexp.MustCompile(`(?i)(?:proxy-)?authorization\s*[:=]\s*(?:basic|bearer)\s+[A-Za-z0-9._~+/=-]+`)
-	bearerTokenPattern = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
-	awsAccessKeyPattern = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
-	jwtPattern = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
-	githubTokenPattern = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{20,}\b`)
+	authorizationSchemePattern  = regexp.MustCompile(`(?i)(?:proxy-)?authorization\s*[:=]\s*(?:basic|bearer)\s+[A-Za-z0-9._~+/=-]+`)
+	bearerTokenPattern          = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
+	awsAccessKeyPattern         = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
+	jwtPattern                  = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
+	githubTokenPattern          = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{20,}\b`)
 )
 
 // safeIncidentSummary forwards operator-authored text only when it contains no
