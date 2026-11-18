@@ -248,10 +248,7 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	item.UpdatedAt = now
 	if strings.TrimSpace(item.Description) == "" && strings.TrimSpace(item.RawLog) != "" {
-		item.Description = item.RawLog
-		if len(item.Description) > 10000 {
-			item.Description = strings.ToValidUTF8(item.Description[:10000], "")
-		}
+		item.Description = "Raw log attached. Review it in the incident details."
 	}
 	if strings.TrimSpace(string(item.Target)) == "" {
 		item.Target = domain.TargetOnlineServer
