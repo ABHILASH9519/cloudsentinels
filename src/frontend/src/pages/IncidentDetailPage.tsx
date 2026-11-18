@@ -33,6 +33,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { CloudSentinelsApiError } from "../lib/cloudSentinels";
 import { toast } from "sonner";
 import { SeverityBadge } from "../components/SeverityBadge";
 import {
@@ -55,8 +56,20 @@ export function IncidentDetailPage() {
   const { id } = useParams({ from: "/incidents/$id" });
   const navigate = useNavigate();
 
-  const { data: incident, isLoading } = useGetIncident(id);
-  const { data: comments } = useGetComments(id);
+  const {
+    data: incident,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useGetIncident(id);
+  const {
+    data: comments,
+    isLoading: commentsLoading,
+    isError: commentsError,
+    error: commentsQueryError,
+    refetch: refetchComments,
+  } = useGetComments(id);
   const updateStatus = useUpdateIncidentStatus();
   const updateAI = useUpdateIncidentAIFields();
   const analyzeIncident = useAnalyzeIncident();
@@ -86,6 +99,24 @@ export function IncidentDetailPage() {
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-32" />
         <Skeleton className="h-48" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    const notFound = error instanceof CloudSentinelsApiError && error.status === 404;
+    return (
+      <div
+        className="p-6 text-center text-muted-foreground space-y-3"
+        data-ocid="incident_detail.error_state"
+        role="alert"
+      >
+        <p>{notFound ? "Incident not found" : error instanceof Error ? error.message : "Unable to load incident."}</p>
+        {!notFound && (
+          <Button variant="outline" onClick={() => void refetch()}>
+            Retry
+          </Button>
+        )}
       </div>
     );
   }
@@ -480,7 +511,18 @@ export function IncidentDetailPage() {
         {/* Comments */}
         <TabsContent value="comments" className="mt-4 space-y-4">
           <div className="space-y-3">
-            {!comments || comments.length === 0 ? (
+            {commentsError ? (
+              <div className="flex flex-col items-start gap-2" role="alert" data-ocid="incident_detail.comments.error_state">
+                <p className="text-sm text-muted-foreground">
+                  {commentsQueryError instanceof Error ? commentsQueryError.message : "Unable to load comments."}
+                </p>
+                <Button variant="outline" size="sm" onClick={() => void refetchComments()}>
+                  Retry
+                </Button>
+              </div>
+            ) : commentsLoading ? (
+              <p className="text-muted-foreground text-sm">Loading comments…</p>
+            ) : !comments || comments.length === 0 ? (
               <p
                 className="text-muted-foreground text-sm"
                 data-ocid="incident_detail.comments.empty_state"
