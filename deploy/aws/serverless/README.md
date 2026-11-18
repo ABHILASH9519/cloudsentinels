@@ -44,16 +44,15 @@ Use the exact deployed Vercel origin, with no path or trailing slash. `CognitoDo
 4. Resumes Lambda execution.
 5. Prints the frontend configuration values.
 
-After the first successful start, configure the printed outputs in Vercel Project → Settings → Environment Variables for the active Preview branch (currently `feat/airtable-cluster-monitoring-zapier`) and locally in `src/frontend/.env.local` if required. Use the exact AWS API URL and region from the deployed runtime stack. Obtain the four Firebase values from the registered Firebase Web App; the project ID must match `FirebaseProjectID` passed to the runtime deployment. Set all six values below, then create a fresh Preview deployment because Vite embeds `VITE_*` values at build time:
+After the first successful start, configure the printed outputs in Vercel Project → Settings → Environment Variables for the active Preview branch (currently `feat/airtable-cluster-monitoring-zapier`) and locally in `src/frontend/.env.local` if required. Use the exact AWS API URL and region from the deployed runtime stack. Obtain the four Firebase values from the registered Firebase Web App; the project ID must match `FirebaseProjectID` passed to the runtime deployment. Set the Go API origin and four Firebase Web App values below, then create a fresh Preview deployment because Vite embeds `VITE_*` values at build time:
 
-- `VITE_AWS_REGION`
-- `VITE_AWS_API_URL`
+- `VITE_CLOUDSENTINELS_API_URL` — exact deployed Go API origin, taken from the verified deployment output
 - `VITE_FIREBASE_API_KEY`
 - `VITE_FIREBASE_AUTH_DOMAIN`
 - `VITE_FIREBASE_PROJECT_ID`
 - `VITE_FIREBASE_APP_ID`
 
-These are public browser configuration values, not secrets. Never put AWS access keys, Firebase Admin private keys, or other credentials in `VITE_*` variables. `VITE_AWS_API_URL` is the `ApiBaseUrl` output including the stage path. In Firebase Authentication, enable the intended providers and add the exact Vercel preview/production hostnames to Authorized domains.
+These are public browser configuration values, not secrets. Never put AWS access keys, Firebase Admin private keys, or other credentials in `VITE_*` variables. The current frontend uses `VITE_CLOUDSENTINELS_API_URL` for the Go API origin; it does not read `VITE_AWS_API_URL` or `VITE_AWS_REGION`. In Firebase Authentication, enable the intended providers and add the exact Vercel preview/production hostnames to Authorized domains.
 ## Daily start / stop
 
 Start or resume:
