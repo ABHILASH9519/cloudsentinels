@@ -58,7 +58,7 @@ Requirements: Docker Desktop/Minikube or a working local kubeconfig context, plu
 
 ```powershell
 go build -trimpath -o cloudsentinels-agent.exe ./cmd/cloudsentinels-agent
-$env:CLOUDSENTINELS_API_URL = "http://127.0.0.1:8080"
+$env:CLOUDSENTINELS_API_URL = "http://127.0.0.1:8082"
 $env:CLOUDSENTINELS_AGENT_CLUSTER_ID = "minikube"
 $env:CLOUDSENTINELS_AGENT_CONTEXT = "minikube"
 $env:CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS = "false"
