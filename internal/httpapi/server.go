@@ -247,10 +247,17 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	item.UpdatedAt = now
 	if strings.TrimSpace(item.Description) == "" && strings.TrimSpace(item.RawLog) != "" {
-		item.Description = item.RawLog
+		item.Description = "Raw log attached. Review it in the incident details."
 	}
 	if strings.TrimSpace(string(item.Target)) == "" {
-		item.Target = domain.TargetOnlineServer
+		switch s.config.ExecutionMode {
+		case "offline-kubernetes":
+			item.Target = domain.TargetOfflineKubernetes
+		case "online-serverless":
+			item.Target = domain.TargetOnlineServerless
+		default:
+			item.Target = domain.TargetOnlineServer
+		}
 	}
 	if err := item.Validate(); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_incident", err.Error())
@@ -264,7 +271,7 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	s.incidents[item.ID] = item
 	s.incidentsMu.Unlock()
-	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: item.Description}, 0)
+	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: "A new incident was created. Open CloudSentinels to inspect its details."}, 0)
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -294,7 +301,7 @@ func (s *Server) getIncident(w http.ResponseWriter, r *http.Request) {
 
 // updateIncident applies a validated partial update. Only supplied fields change.
 func (s *Server) updateIncident(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) {
+	if !s.authorizeOperator(w, r) {
 		return
 	}
 	id := incidentPathID(r)
@@ -379,7 +386,7 @@ func (s *Server) updateIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) {
+	if !s.authorizeOperator(w, r) {
 		return
 	}
 	id := incidentPathID(r)
@@ -402,7 +409,7 @@ func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
 // It intentionally does not call an external model: the documented architecture
 // is an explainable rules engine, not a trained ML/LLM analyzer.
 func (s *Server) analyzeIncident(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) {
+	if !s.authorizeOperator(w, r) {
 		return
 	}
 	id := incidentPathID(r)
@@ -449,7 +456,8 @@ func (s *Server) listIncidentComments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) {
+	principal, authorized := s.authorizePrincipal(w, r)
+	if !authorized {
 		return
 	}
 	id := incidentPathID(r)
@@ -459,8 +467,7 @@ func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	var input struct {
-		Author string `json:"author"`
-		Text   string `json:"text"`
+		Text string `json:"text"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -475,18 +482,10 @@ func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
 	}
 	comment := domain.IncidentComment{
 		IncidentID: id,
-		Author:     strings.TrimSpace(input.Author),
+		Author:     firstNonEmpty(principal.Email, principal.Subject),
 		Text:       strings.TrimSpace(input.Text),
 	}
-	if comment.Author == "" && s.authenticator != nil {
-		if principal, err := s.authenticator.Authenticate(r); err == nil {
-			comment.Author = firstNonEmpty(principal.Email, principal.Subject)
-		}
-	}
-	if comment.Author == "" {
-		comment.Author = "operator"
-	}
-	if err := comment.Validate(); err != nil {
+		if err := comment.Validate(); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_comment", "Comment text is required and must be within length bounds")
 		return
 	}
@@ -1242,16 +1241,39 @@ func (s *Server) currentUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "uid": principal.Subject, "email": principal.Email, "roles": principal.Roles})
 }
 
-func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
+func (s *Server) authorizePrincipal(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
 	if s.authenticator == nil {
 		writeError(w, http.StatusServiceUnavailable, "authentication_unconfigured", "Protected API routes are disabled until Firebase Authentication or local development authentication is configured")
-		return false
+		return auth.Principal{}, false
 	}
-	if _, err := s.authenticator.Authenticate(r); err != nil {
+	principal, err := s.authenticator.Authenticate(r)
+	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "A valid authenticated session is required")
+		return auth.Principal{}, false
+	}
+	return principal, true
+}
+
+func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
+	_, ok := s.authorizePrincipal(w, r)
+	return ok
+}
+
+// authorizeOperator restricts incident mutations to explicitly provisioned
+// operators and administrators. Authentication alone is not an authorization policy.
+func (s *Server) authorizeOperator(w http.ResponseWriter, r *http.Request) bool {
+	principal, ok := s.authorizePrincipal(w, r)
+	if !ok {
 		return false
 	}
-	return true
+	for _, role := range principal.Roles {
+		switch strings.ToLower(strings.TrimSpace(role)) {
+		case "operator", "admin":
+			return true
+		}
+	}
+	writeError(w, http.StatusForbidden, "forbidden", "An operator or admin role is required for this incident action")
+	return false
 }
 func (s *Server) authorizeAgent(w http.ResponseWriter, r *http.Request, clusterID string) bool {
 	if strings.TrimSpace(clusterID) == "" {
