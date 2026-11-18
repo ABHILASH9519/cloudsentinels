@@ -220,7 +220,6 @@ func TestTriagePrioritizesSpecificSignalsAndNumericBoundaries(t *testing.T) {
 	}
 }
 
-
 func TestIncidentGetReturnsCreatedIncident(t *testing.T) {
 	server := newTestServer()
 	id := createIncidentForTest(t, server)
