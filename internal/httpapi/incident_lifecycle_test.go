@@ -149,7 +149,6 @@ func TestSafeIncidentSummaryAlwaysUsesFixedWebhookText(t *testing.T) {
 	}
 }
 
-
 func TestSafeIncidentSummaryFallsBackForPrefixedCredentialsAndBasicAuth(t *testing.T) {
 	item := domain.Incident{
 		Description: "DB_PASSWORD=hunter2; Authorization: Basic c2VjcmV0",
@@ -162,7 +161,6 @@ func TestSafeIncidentSummaryFallsBackForPrefixedCredentialsAndBasicAuth(t *testi
 		t.Fatalf("expected generic fallback for credential-like description, got %q", summary)
 	}
 }
-
 
 func TestSafeIncidentSummaryUsesGenericTextForRawLogFallback(t *testing.T) {
 	item := domain.Incident{
