@@ -55,6 +55,71 @@ func TestIncidentCreateDefaultsTargetAndStampsTimestamps(t *testing.T) {
 	}
 }
 
+func TestIncidentDefaultsTargetFromExecutionMode(t *testing.T) {
+	for _, test := range []struct {
+		mode string
+		want string
+	}{
+		{mode: "online-server", want: "online-server"},
+		{mode: "online-serverless", want: "online-serverless"},
+		{mode: "offline-kubernetes", want: "offline-kubernetes"},
+	} {
+		t.Run(test.mode, func(t *testing.T) {
+			server := NewServer(config.Config{ExecutionMode: test.mode}, slog.Default(), testAuthenticator{})
+			body := `{"title":"Mode target test","severity":"low","source":"test"}`
+			response := httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/incidents", strings.NewReader(body)))
+			if response.Code != http.StatusCreated {
+				t.Fatalf("expected 201, got %d: %s", response.Code, response.Body.String())
+			}
+			var item map[string]any
+			if err := json.Unmarshal(response.Body.Bytes(), &item); err != nil {
+				t.Fatal(err)
+			}
+			if item["target"] != test.want {
+				t.Fatalf("expected target %q, got %#v", test.want, item["target"])
+			}
+		})
+	}
+}
+
+func TestIncidentCreateKeepsRawLogOutOfDescription(t *testing.T) {
+	server := newTestServer()
+	secret := "authorization=do-not-forward-this"
+	body, err := json.Marshal(map[string]string{
+		"title": "Raw log incident", "severity": "high", "source": "test", "rawLog": secret,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/incidents", strings.NewReader(string(body))))
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", response.Code, response.Body.String())
+	}
+	var item map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &item); err != nil {
+		t.Fatal(err)
+	}
+	if item["rawLog"] != secret {
+		t.Fatalf("expected raw log to remain attached to incident")
+	}
+	if strings.Contains(item["description"].(string), secret) {
+		t.Fatalf("raw log leaked into description: %#v", item["description"])
+	}
+}
+
+func TestIncidentCommentRejectsClientSuppliedAuthor(t *testing.T) {
+	server := newTestServer()
+	id := createIncidentForTest(t, server)
+	response := httptest.NewRecorder()
+	body := `{"author":"admin@example.com","text":"spoof attempt"}`
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/incidents/"+id+"/comments", strings.NewReader(body)))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for client-supplied author, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestIncidentGetReturnsCreatedIncident(t *testing.T) {
 	server := newTestServer()
 	id := createIncidentForTest(t, server)
@@ -183,7 +248,7 @@ func TestIncidentCommentsRoundTrip(t *testing.T) {
 	if payload.Count != 1 || len(payload.Items) != 1 {
 		t.Fatalf("expected exactly one comment, got %#v", payload)
 	}
-	if payload.Items[0]["author"] != "alice" || payload.Items[0]["incidentId"] != id {
+	if payload.Items[0]["author"] != "test-user" || payload.Items[0]["incidentId"] != id {
 		t.Fatalf("unexpected comment payload: %#v", payload.Items[0])
 	}
 }
@@ -192,7 +257,7 @@ func TestIncidentCommentRejectsEmptyText(t *testing.T) {
 	server := newTestServer()
 	id := createIncidentForTest(t, server)
 	response := httptest.NewRecorder()
-	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/incidents/"+id+"/comments", strings.NewReader(`{"author":"alice","text":"   "}`)))
+	server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/incidents/"+id+"/comments", strings.NewReader(`{"text":"   "}`)))
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for empty comment, got %d", response.Code)
 	}
