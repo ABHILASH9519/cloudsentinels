@@ -230,6 +230,7 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	if item.Status == "" {
 		item.Status = domain.StatusOpen
 	}
+	item.ID = strings.TrimSpace(item.ID)
 	if item.ID == "" {
 		id, err := newID()
 		if err != nil {
@@ -248,6 +249,9 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	item.UpdatedAt = now
 	if strings.TrimSpace(item.Description) == "" && strings.TrimSpace(item.RawLog) != "" {
 		item.Description = item.RawLog
+		if len(item.Description) > 10000 {
+			item.Description = strings.ToValidUTF8(item.Description[:10000], "")
+		}
 	}
 	if strings.TrimSpace(string(item.Target)) == "" {
 		item.Target = domain.TargetOnlineServer
@@ -390,10 +394,10 @@ func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	delete(s.incidents, id)
-	s.incidentsMu.Unlock()
 	s.commentsMu.Lock()
 	delete(s.comments, id)
 	s.commentsMu.Unlock()
+	s.incidentsMu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -497,9 +501,16 @@ func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
 	}
 	comment.ID = commentID
 	comment.CreatedAt = time.Now().UTC()
+	s.incidentsMu.Lock()
+	if _, ok := s.incidents[id]; !ok {
+		s.incidentsMu.Unlock()
+		writeError(w, http.StatusNotFound, "incident_not_found", "No incident exists for this identifier")
+		return
+	}
 	s.commentsMu.Lock()
 	s.comments[id] = append(s.comments[id], comment)
 	s.commentsMu.Unlock()
+	s.incidentsMu.Unlock()
 	writeJSON(w, http.StatusCreated, comment)
 }
 
@@ -1294,7 +1305,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-CS-Timestamp, X-CS-Signature")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Max-Age", "600")
 		}
 		if r.Method == http.MethodOptions {
