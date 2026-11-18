@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -397,10 +398,10 @@ func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	delete(s.incidents, id)
-	s.incidentsMu.Unlock()
 	s.commentsMu.Lock()
 	delete(s.comments, id)
 	s.commentsMu.Unlock()
+	s.incidentsMu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -496,9 +497,16 @@ func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
 	}
 	comment.ID = commentID
 	comment.CreatedAt = time.Now().UTC()
+	s.incidentsMu.Lock()
+	if _, ok := s.incidents[id]; !ok {
+		s.incidentsMu.Unlock()
+		writeError(w, http.StatusNotFound, "incident_not_found", "No incident exists for this identifier")
+		return
+	}
 	s.commentsMu.Lock()
 	s.comments[id] = append(s.comments[id], comment)
 	s.commentsMu.Unlock()
+	s.incidentsMu.Unlock()
 	writeJSON(w, http.StatusCreated, comment)
 }
 
@@ -532,33 +540,27 @@ func triageIncident(item domain.Incident) (summary, rootCause, suggestedFix stri
 		{[]string{"cpu", "saturation", "throttl"}, "CPU utilisation is high, which can throttle request handling.", []string{"Identify the top CPU consumers", "Compare requests/limits with actual usage", "Scale only through an approved capacity policy"}},
 		{[]string{"certificate", "tls", "x509"}, "A TLS/certificate error indicates an expired or untrusted certificate.", []string{"Check certificate expiry and chain", "Confirm the trust store used by the client", "Rotate the certificate through the normal process"}},
 	}
-	matched := make([]string, 0, 3)
-	checks := make([]string, 0, 3)
-	cause := "No single rule matched the supplied signals; treat this as an unexplained incident and gather more evidence."
-	for _, rule := range rules {
+	bestKey := ""
+	bestRule := -1
+	for ruleIndex, rule := range rules {
 		for _, key := range rule.keys {
-			if strings.Contains(haystack, key) {
-				cause = rule.cause
-				matched = append(matched, key)
-				for _, check := range rule.checks {
-					if !containsString(checks, check) {
-						checks = append(checks, check)
-					}
-				}
-				break
+			if signalMatches(haystack, key) && len(key) > len(bestKey) {
+				bestKey = key
+				bestRule = ruleIndex
 			}
 		}
-		if cause != "No single rule matched the supplied signals; treat this as an unexplained incident and gather more evidence." {
-			break
-		}
 	}
+	cause := "No single rule matched the supplied signals; treat this as an unexplained incident and gather more evidence."
+	checks := make([]string, 0, 3)
 	confidence := 0.55
-	if len(matched) > 0 {
+	if bestRule >= 0 {
+		cause = rules[bestRule].cause
+		checks = append(checks, rules[bestRule].checks...)
 		confidence = 0.8
 	}
-	signal := "none"
-	if len(matched) > 0 {
-		signal = matched[0]
+	signal := bestKey
+	if signal == "" {
+		signal = "none"
 	}
 	summary = fmt.Sprintf(
 		"Explainable rule-engine triage (severity %s, status %s). Matched signal: %s. Confidence %.0f%%. This is deterministic rule output, not a trained ML/LLM diagnosis; verify against live telemetry before acting.",
@@ -568,6 +570,17 @@ func triageIncident(item domain.Incident) (summary, rootCause, suggestedFix stri
 		checks = []string{"Collect recent logs and Kubernetes events", "Confirm current cluster telemetry freshness", "Escalate to an operator if the signal recurs"}
 	}
 	return summary, cause, strings.Join(checks, " ")
+}
+
+// signalMatches uses word boundaries for single-token signals so a rule for
+// HTTP 500 does not accidentally match values such as 5000ms or request IDs.
+func signalMatches(haystack, key string) bool {
+	if strings.ContainsAny(key, " \t") {
+		return strings.Contains(haystack, key)
+	}
+	pattern := `\b` + regexp.QuoteMeta(key) + `\b`
+	matched, _ := regexp.MatchString(pattern, haystack)
+	return matched
 }
 
 func containsString(items []string, target string) bool {
