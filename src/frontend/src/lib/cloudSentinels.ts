@@ -53,13 +53,13 @@ export async function cloudSentinelsRequest<T>(
     },
   });
   if (response.status === 204) return undefined as T;
-  const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
     throw new Error(
       body.message ??
         body.error ??
         `CloudSentinels API request failed (${response.status}).`,
     );
   }
-  return body as T;
+  return (await response.json()) as T;
 }
