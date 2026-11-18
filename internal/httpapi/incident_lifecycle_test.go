@@ -129,19 +129,26 @@ func TestIncidentCommentRejectsClientSuppliedAuthor(t *testing.T) {
 	}
 }
 
-func TestSafeIncidentSummaryPreservesDescriptionsWithoutCredentialMaterial(t *testing.T) {
-	item := domain.Incident{
-		Description: "Payments API failed after deployment",
-		RawLog:      "password=raw-log-secret",
+func TestSafeIncidentSummaryAlwaysUsesFixedWebhookText(t *testing.T) {
+	descriptions := []string{
+		"Payments API failed after deployment",
+		"token=plain-secret",
+		"SLACK_TOKEN=xoxb-secret-value",
+		"connect https://operator:password@internal.example",
+		"-----BEGIN PRIVATE KEY-----\\nprivate-key-material\\n-----END PRIVATE KEY-----",
 	}
-	summary := safeIncidentSummary(item)
-	if summary != item.Description {
-		t.Fatalf("expected safe description to be preserved, got %q", summary)
-	}
-	if strings.Contains(summary, "raw-log-secret") {
-		t.Fatalf("raw log leaked into webhook summary: %q", summary)
+	for _, description := range descriptions {
+		item := domain.Incident{Description: description, RawLog: "password=raw-log-secret"}
+		summary := safeIncidentSummary(item)
+		if summary != "A new incident was created. Open CloudSentinels to inspect its details." {
+			t.Fatalf("expected fixed generic webhook summary for %q, got %q", description, summary)
+		}
+		if strings.Contains(summary, "secret") || strings.Contains(summary, "private-key-material") {
+			t.Fatalf("sensitive material leaked into webhook summary: %q", summary)
+		}
 	}
 }
+
 
 func TestSafeIncidentSummaryFallsBackForPrefixedCredentialsAndBasicAuth(t *testing.T) {
 	item := domain.Incident{
