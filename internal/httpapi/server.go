@@ -273,7 +273,7 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	s.incidents[item.ID] = item
 	s.incidentsMu.Unlock()
-	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Target: string(item.Target), Severity: string(item.Severity), Title: item.Title, Summary: safeIncidentSummary(item)}, 0)
+	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Target: string(item.Target), Severity: string(item.Severity), Title: "CloudSentinels incident", Summary: safeIncidentSummary(item)}, 0)
 	writeJSON(w, http.StatusCreated, item)
 }
 
