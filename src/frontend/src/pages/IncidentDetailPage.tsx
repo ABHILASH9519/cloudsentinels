@@ -33,7 +33,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CloudSentinelsApiError } from "../lib/cloudSentinels";
 import { toast } from "sonner";
 import { SeverityBadge } from "../components/SeverityBadge";
 import {
@@ -45,6 +44,7 @@ import {
   useUpdateIncidentAIFields,
   useUpdateIncidentStatus,
 } from "../hooks/useIncidents";
+import { CloudSentinelsApiError } from "../lib/cloudSentinels";
 
 function formatDate(value?: string) {
   if (!value) return "—";
