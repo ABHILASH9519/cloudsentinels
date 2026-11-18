@@ -164,6 +164,12 @@ func TestTriageChoosesSpecificSignalsAndUsesNumericBoundaries(t *testing.T) {
 		t.Fatalf("HTTP 500 rule must not match 5000ms, got %q", cause)
 	}
 
+	compoundCPU := domain.Incident{Title: "KubernetesContainerHighCPU", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(compoundCPU)
+	if !strings.Contains(cause, "CPU utilisation is high") {
+		t.Fatalf("expected compound CPU alert to match CPU triage, got %q", cause)
+	}
+
 	httpError := domain.Incident{Title: "Upstream returned HTTP 500", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
 	_, cause, _ = triageIncident(httpError)
 	if !strings.Contains(cause, "Elevated latency or error rates") {
