@@ -79,6 +79,34 @@ func (testAuthenticator) Authenticate(*http.Request) (auth.Principal, error) {
 	return auth.Principal{Subject: "test-user", Roles: []string{"operator"}}, nil
 }
 
+type viewerAuthenticator struct{}
+
+func (viewerAuthenticator) Authenticate(*http.Request) (auth.Principal, error) {
+	return auth.Principal{Subject: "viewer-user", Roles: []string{"viewer"}}, nil
+}
+
+func TestIncidentMutationsRequireOperatorRole(t *testing.T) {
+	server := newTestServer()
+	ids := []string{createIncidentForTest(t, server), createIncidentForTest(t, server), createIncidentForTest(t, server)}
+	server.authenticator = viewerAuthenticator{}
+	requests := []struct {
+		method string
+		path string
+		body string
+	}{
+		{http.MethodPatch, "/api/v1/incidents/" + ids[0], `{"status":"resolved"}`},
+		{http.MethodDelete, "/api/v1/incidents/" + ids[1], ""},
+		{http.MethodPost, "/api/v1/incidents/" + ids[2] + "/analyze", ""},
+	}
+	for _, test := range requests {
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, httptest.NewRequest(test.method, test.path, strings.NewReader(test.body)))
+		if response.Code != http.StatusForbidden {
+			t.Errorf("%s %s: expected 403, got %d: %s", test.method, test.path, response.Code, response.Body.String())
+		}
+	}
+}
+
 func newTestServer() *Server {
 	return NewServer(config.Config{ExecutionMode: "online-server"}, slog.Default(), testAuthenticator{})
 }
