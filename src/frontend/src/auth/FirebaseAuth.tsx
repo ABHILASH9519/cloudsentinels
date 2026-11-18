@@ -20,6 +20,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -69,6 +70,7 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
       : null,
   );
   const [user, setUser] = useState<AuthUser | null>(null);
+  const roleLookupVersion = useRef(0);
 
   useEffect(() => {
     if (!firebaseAuth) {
@@ -85,6 +87,7 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
     return onIdTokenChanged(
       firebaseAuth,
       (nextUser) => {
+        const lookupVersion = ++roleLookupVersion.current;
         const mappedUser = mapUser(nextUser);
         setUser((previousUser) =>
           mappedUser
@@ -105,7 +108,10 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
               const roles = Array.isArray(rawRoles)
                 ? rawRoles.filter((role): role is string => typeof role === "string")
                 : [];
-              if (firebaseAuth?.currentUser?.uid === nextUser.uid) {
+              if (
+                lookupVersion === roleLookupVersion.current &&
+                firebaseAuth?.currentUser?.uid === nextUser.uid
+              ) {
                 setUser({
                   id: nextUser.uid,
                   email: nextUser.email,
@@ -115,7 +121,16 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
               }
             })
             .catch(() => {
-              // The API still enforces roles; missing claims only hide controls.
+              if (
+                lookupVersion === roleLookupVersion.current &&
+                firebaseAuth?.currentUser?.uid === nextUser.uid
+              ) {
+                setUser((previousUser) =>
+                  previousUser?.id === nextUser.uid
+                    ? { ...previousUser, roles: [] }
+                    : previousUser,
+                );
+              }
             });
         }
       },
