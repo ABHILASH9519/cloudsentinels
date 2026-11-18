@@ -82,12 +82,15 @@ export function IncidentDetailPage() {
     suggestedFix: "",
   });
   const [aiFormDirty, setAiFormDirty] = useState(false);
+  const [formIncidentId, setFormIncidentId] = useState(id);
   const [commentText, setCommentText] = useState("");
 
   useEffect(() => {
+    if (formIncidentId === id) return;
+    setFormIncidentId(id);
     setAiForm({ aiSummary: "", rootCause: "", suggestedFix: "" });
     setAiFormDirty(false);
-  }, [id]);
+  }, [formIncidentId, id]);
 
   useEffect(() => {
     if (!incident || incident.id !== id || aiFormDirty) return;
@@ -96,7 +99,7 @@ export function IncidentDetailPage() {
       rootCause: incident.rootCause ?? "",
       suggestedFix: incident.suggestedFix ?? "",
     });
-  }, [incident, aiFormDirty]);
+  }, [incident, aiFormDirty, id]);
 
   if (isLoading) {
     return (
