@@ -4,7 +4,7 @@ const source = String(e.sourceType || "").toLowerCase();
 const targetCategory = ["online-server", "online-serverless", "offline-kubernetes"].includes(String(e.target || "").toLowerCase())
   ? String(e.target).toLowerCase()
   : "";
-const text = [type, source, targetCategory, e.title, e.service, e.resourceId, e.resourceState].join(" ").toLowerCase();
+const text = [type, source, targetCategory, e.service, e.resourceId, e.resourceState].join(" ").toLowerCase();
 
 let target = "cloudsentinels-core";
 let adapter = "core-incident-policy";
