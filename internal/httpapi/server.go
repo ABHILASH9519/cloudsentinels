@@ -534,29 +534,35 @@ func firstNonEmpty(values ...string) string {
 func triageIncident(item domain.Incident) (summary, rootCause, suggestedFix string) {
 	haystack := strings.ToLower(strings.Join([]string{item.Title, item.Description, item.RawLog}, " "))
 	type signalRule struct {
-		keys   []string
-		cause  string
-		checks []string
+		priority int
+		keys     []string
+		cause    string
+		checks   []string
 	}
 	rules := []signalRule{
-		{[]string{"crashloopbackoff", "crash loop", "back-off restarting"}, "The container is repeatedly restarting, most often due to a failing startup command, a failing probe, or a missing configuration/secret.", []string{"Read the previous container logs (kubectl logs --previous)", "Inspect the readiness/liveness probes and startup command", "Confirm required ConfigMaps/Secrets are mounted"}},
-		{[]string{"imagepullbackoff", "errimagepull", "image pull"}, "The kubelet cannot pull the container image, usually from a bad image reference or missing registry credentials.", []string{"Verify the image name and tag exist in the registry", "Check imagePullSecrets are attached to the pod/service account", "Confirm the node can reach the registry"}},
-		{[]string{"oomkilled", "oom killed", "out of memory"}, "The container exceeded its memory limit and was OOM-killed by the kernel.", []string{"Review memory usage against the configured limit", "Right-size requests/limits or fix the memory leak", "Confirm the node has free memory capacity"}},
-		{[]string{"evicted", "node pressure", "disk pressure", "memory pressure"}, "The pod was evicted because the node is under resource pressure.", []string{"Check node conditions for DiskPressure/MemoryPressure", "Free space or add capacity", "Set appropriate resource requests for scheduling"}},
-		{[]string{"pending", "unschedulable", "insufficient cpu", "insufficient memory", "no nodes available"}, "The pod cannot be scheduled, typically due to insufficient resources, taints, or unsatisfied affinity/anti-affinity.", []string{"Inspect scheduler events for the reason", "Check node capacity and resource requests", "Review taints, tolerations and affinity rules"}},
-		{[]string{"unavailable", "rollout", "deployment", "progressdeadline"}, "The deployment rollout is not reaching the desired available replica count.", []string{"Compare desired vs available replicas", "Check the ReplicaSet and pod events", "Consider pausing or rolling back only with approval"}},
-		{[]string{"unhealthy", "readiness", "liveness", "probe failed"}, "A health probe is failing, removing the pod from service or triggering restarts.", []string{"Test the probe endpoint from inside the pod", "Confirm probe path, port and timing thresholds", "Verify downstream dependencies the probe relies on"}},
-		{[]string{"timeout", "latency", "503", "502", "500", "error rate"}, "Elevated latency or error rates suggest a saturated dependency or a failing upstream service.", []string{"Correlate errors with dependency health metrics", "Check ingress and service saturation", "Apply an approved mitigation only after review"}},
-		{[]string{"cpu", "saturation", "throttling", "throttled"}, "CPU utilisation is high, which can throttle request handling.", []string{"Identify the top CPU consumers", "Compare requests/limits with actual usage", "Scale only through an approved capacity policy"}},
-		{[]string{"certificate", "tls", "x509"}, "A TLS/certificate error indicates an expired or untrusted certificate.", []string{"Check certificate expiry and chain", "Confirm the trust store used by the client", "Rotate the certificate through the normal process"}},
+		{100, []string{"crashloopbackoff", "crash loop", "back-off restarting"}, "The container is repeatedly restarting, most often due to a failing startup command, a failing probe, or a missing configuration/secret.", []string{"Read the previous container logs (kubectl logs --previous)", "Inspect the readiness/liveness probes and startup command", "Confirm required ConfigMaps/Secrets are mounted"}},
+		{100, []string{"imagepullbackoff", "errimagepull", "image pull"}, "The kubelet cannot pull the container image, usually from a bad image reference or missing registry credentials.", []string{"Verify the image name and tag exist in the registry", "Check imagePullSecrets are attached to the pod/service account", "Confirm the node can reach the registry"}},
+		{110, []string{"oomkilled", "oom killed", "out of memory"}, "The container exceeded its memory limit and was OOM-killed by the kernel.", []string{"Review memory usage against the configured limit", "Right-size requests/limits or fix the memory leak", "Confirm the node has free memory capacity"}},
+		{105, []string{"evicted", "node pressure", "disk pressure", "memory pressure"}, "The pod was evicted because the node is under resource pressure.", []string{"Check node conditions for DiskPressure/MemoryPressure", "Free space or add capacity", "Set appropriate resource requests for scheduling"}},
+		{65, []string{"pending", "unschedulable", "insufficient cpu", "insufficient memory", "no nodes available"}, "The pod cannot be scheduled, typically due to insufficient resources, taints, or unsatisfied affinity/anti-affinity.", []string{"Inspect scheduler events for the reason", "Check node capacity and resource requests", "Review taints, tolerations and affinity rules"}},
+		{40, []string{"unavailable", "rollout", "deployment", "progressdeadline"}, "The deployment rollout is not reaching the desired available replica count.", []string{"Compare desired vs available replicas", "Check the ReplicaSet and pod events", "Consider pausing or rolling back only with approval"}},
+		{80, []string{"unhealthy", "readiness", "liveness", "probe failed"}, "A health probe is failing, removing the pod from service or triggering restarts.", []string{"Test the probe endpoint from inside the pod", "Confirm probe path, port and timing thresholds", "Verify downstream dependencies the probe relies on"}},
+		{50, []string{"timeout", "latency", "503", "502", "500", "error rate"}, "Elevated latency or error rates suggest a saturated dependency or a failing upstream service.", []string{"Correlate errors with dependency health metrics", "Check ingress and service saturation", "Apply an approved mitigation only after review"}},
+		{80, []string{"cpu", "saturation", "throttling", "throttled"}, "CPU utilisation is high, which can throttle request handling.", []string{"Identify the top CPU consumers", "Compare requests/limits with actual usage", "Scale only through an approved capacity policy"}},
+		{90, []string{"certificate", "tls", "x509"}, "A TLS/certificate error indicates an expired or untrusted certificate.", []string{"Check certificate expiry and chain", "Confirm the trust store used by the client", "Rotate the certificate through the normal process"}},
 	}
 	bestKey := ""
 	bestRule := -1
+	bestPriority := -1
 	for ruleIndex, rule := range rules {
 		for _, key := range rule.keys {
-			if signalMatches(haystack, key) && len(key) > len(bestKey) {
+			if !signalMatches(haystack, key) {
+				continue
+			}
+			if rule.priority > bestPriority || (rule.priority == bestPriority && len(key) > len(bestKey)) {
 				bestKey = key
 				bestRule = ruleIndex
+				bestPriority = rule.priority
 			}
 		}
 	}
