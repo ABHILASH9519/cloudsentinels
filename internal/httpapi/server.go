@@ -272,8 +272,38 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	s.incidents[item.ID] = item
 	s.incidentsMu.Unlock()
-	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: "A new incident was created. Open CloudSentinels to inspect its details."}, 0)
+	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: safeIncidentSummary(item)}, 0)
 	writeJSON(w, http.StatusCreated, item)
+}
+
+var (
+	credentialAssignmentPattern = regexp.MustCompile(`(?i)\b(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|client[_-]?secret)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)`)
+	bearerTokenPattern = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
+	awsAccessKeyPattern = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
+	jwtPattern = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
+	githubTokenPattern = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{20,}\b`)
+)
+
+// safeIncidentSummary keeps useful operator-authored descriptions for ticket
+// sync while excluding raw logs and common credential formats from webhooks.
+func safeIncidentSummary(item domain.Incident) string {
+	summary := strings.TrimSpace(item.Description)
+	if summary == "" || summary == "Raw log attached. Review it in the incident details." {
+		return "A new incident was created. Open CloudSentinels to inspect its details."
+	}
+	summary = bearerTokenPattern.ReplaceAllString(summary, "Bearer [REDACTED]")
+	summary = credentialAssignmentPattern.ReplaceAllString(summary, "$1=[REDACTED]")
+	summary = awsAccessKeyPattern.ReplaceAllString(summary, "[REDACTED_AWS_ACCESS_KEY]")
+	summary = jwtPattern.ReplaceAllString(summary, "[REDACTED_JWT]")
+	summary = githubTokenPattern.ReplaceAllString(summary, "[REDACTED_GITHUB_TOKEN]")
+	runes := []rune(summary)
+	if len(runes) > 1000 {
+		summary = string(runes[:1000])
+	}
+	if strings.TrimSpace(summary) == "" {
+		return "A new incident was created. Open CloudSentinels to inspect its details."
+	}
+	return summary
 }
 
 func incidentPathID(r *http.Request) string {
