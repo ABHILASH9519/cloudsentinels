@@ -32,6 +32,13 @@ export function getCloudSentinelsConfigError(): string | null {
  * Calls the CloudSentinels Go API with the current Firebase ID token.
  * Paths are absolute (for example "/api/v1/incidents").
  */
+export class CloudSentinelsApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "CloudSentinelsApiError";
+  }
+}
+
 export async function cloudSentinelsRequest<T>(
   path: string,
   init: RequestInit = {},
@@ -55,10 +62,11 @@ export async function cloudSentinelsRequest<T>(
   if (response.status === 204) return undefined as T;
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(
+    throw new CloudSentinelsApiError(
       body.message ??
         body.error ??
         `CloudSentinels API request failed (${response.status}).`,
+      response.status,
     );
   }
   return (await response.json()) as T;
