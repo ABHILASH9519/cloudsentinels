@@ -129,21 +129,33 @@ func TestIncidentCommentRejectsClientSuppliedAuthor(t *testing.T) {
 	}
 }
 
-func TestSafeIncidentSummaryPreservesSafeDescriptionsAndRedactsCredentials(t *testing.T) {
+func TestSafeIncidentSummaryPreservesDescriptionsWithoutCredentialMaterial(t *testing.T) {
 	item := domain.Incident{
-		Description: "Payments API failed; api_key=supersecret Bearer abc.def.ghi",
+		Description: "Payments API failed after deployment",
 		RawLog:      "password=raw-log-secret",
 	}
 	summary := safeIncidentSummary(item)
-	if !strings.Contains(summary, "Payments API failed") {
+	if summary != item.Description {
 		t.Fatalf("expected safe description to be preserved, got %q", summary)
 	}
-	for _, secret := range []string{"supersecret", "abc.def.ghi", "raw-log-secret"} {
-		if strings.Contains(summary, secret) {
-			t.Fatalf("webhook summary contains secret %q: %q", secret, summary)
-		}
+	if strings.Contains(summary, "raw-log-secret") {
+		t.Fatalf("raw log leaked into webhook summary: %q", summary)
 	}
 }
+
+func TestSafeIncidentSummaryFallsBackForPrefixedCredentialsAndBasicAuth(t *testing.T) {
+	item := domain.Incident{
+		Description: "DB_PASSWORD=hunter2; Authorization: Basic c2VjcmV0",
+	}
+	summary := safeIncidentSummary(item)
+	if strings.Contains(summary, "hunter2") || strings.Contains(summary, "c2VjcmV0") {
+		t.Fatalf("credential material leaked into webhook summary: %q", summary)
+	}
+	if !strings.Contains(summary, "Open CloudSentinels") {
+		t.Fatalf("expected generic fallback for credential-like description, got %q", summary)
+	}
+}
+
 
 func TestSafeIncidentSummaryUsesGenericTextForRawLogFallback(t *testing.T) {
 	item := domain.Incident{
