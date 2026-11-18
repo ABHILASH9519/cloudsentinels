@@ -7,7 +7,7 @@ import {
   getAuth,
   getIdTokenResult,
   getRedirectResult,
-  onAuthStateChanged,
+  onIdTokenChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
@@ -82,7 +82,7 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
         reason instanceof Error ? reason.message : "Google redirect sign-in failed.",
       );
     });
-    return onAuthStateChanged(
+    return onIdTokenChanged(
       firebaseAuth,
       (nextUser) => {
         setUser(mapUser(nextUser));
