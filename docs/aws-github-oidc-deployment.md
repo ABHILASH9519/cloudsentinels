@@ -92,7 +92,7 @@ A deployment must use the dedicated GitHub OIDC role and scoped CloudFormation e
 
 The Vercel project `devops` is connected to this repository. For the `feat/airtable-cluster-monitoring-zapier` Preview branch, configure the Go API origin and these public Firebase Web App variables in Vercel:
 
-- `VITE_CLOUDSENTINELS_API_URL` — the exact HTTPS origin of the deployed Go API, taken from the verified deployment output; do not use an invented or placeholder endpoint.
+- `VITE_CLOUDSENTINELS_API_URL` — the exact HTTPS origin of a separately deployed, compatible CloudSentinels Go API. The AWS serverless deployment workflow in this guide provisions an API Gateway + Node.js Lambda backend and does not output this Go API origin. Its `ApiBaseUrl` is not compatible with the current frontend's `/api/v1/incidents` routes; do not use it for this variable. Configure the Go API origin only after its `/healthz` and authenticated `/api/v1` routes are verified.
 - `VITE_FIREBASE_API_KEY`
 - `VITE_FIREBASE_AUTH_DOMAIN`
 - `VITE_FIREBASE_PROJECT_ID`
