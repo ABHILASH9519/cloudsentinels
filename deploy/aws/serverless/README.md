@@ -46,7 +46,9 @@ Use the exact deployed Vercel origin, with no path or trailing slash. `CognitoDo
 
 After the first successful start, configure the printed outputs in Vercel Project → Settings → Environment Variables for the active Preview branch (currently `feat/airtable-cluster-monitoring-zapier`) and locally in `src/frontend/.env.local` if required. Use the exact AWS API URL and region from the deployed runtime stack. Obtain the four Firebase values from the registered Firebase Web App; the project ID must match `FirebaseProjectID` passed to the runtime deployment. Set the Go API origin and four Firebase Web App values below, then create a fresh Preview deployment because Vite embeds `VITE_*` values at build time:
 
-- `VITE_CLOUDSENTINELS_API_URL` — exact deployed Go API origin, taken from the verified deployment output
+- `VITE_CLOUDSENTINELS_API_URL` — exact HTTPS origin of a separately deployed, compatible CloudSentinels Go API
+
+**API compatibility warning:** the `aws-on.ps1` script in this directory deploys the AWS API Gateway + Node.js Lambda runtime. Its `ApiBaseUrl` output is not the Go API origin and does not implement the frontend client's `/api/v1/incidents` route contract. Do not copy that AWS URL into `VITE_CLOUDSENTINELS_API_URL`. The current frontend requires the Go API; deploy that service separately and configure this variable only after its `/healthz` and authenticated `/api/v1` routes have been verified. The AWS Lambda runtime remains a separate backend architecture until an explicit API adapter is implemented.
 - `VITE_FIREBASE_API_KEY`
 - `VITE_FIREBASE_AUTH_DOMAIN`
 - `VITE_FIREBASE_PROJECT_ID`
