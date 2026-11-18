@@ -237,7 +237,6 @@ func TestIncidentLifecycleRoutesFailClosedWithoutAuthenticator(t *testing.T) {
 	}
 }
 
-
 func TestCORSAllowsIncidentLifecycleMethods(t *testing.T) {
 	server := NewServer(config.Config{AllowedOrigins: []string{"http://localhost:5173"}}, slog.Default(), nil)
 	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
