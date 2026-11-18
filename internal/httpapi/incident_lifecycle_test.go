@@ -121,6 +121,36 @@ func TestIncidentCommentRejectsClientSuppliedAuthor(t *testing.T) {
 	}
 }
 
+func TestSafeIncidentSummaryPreservesSafeDescriptionsAndRedactsCredentials(t *testing.T) {
+	item := domain.Incident{
+		Description: "Payments API failed; api_key=supersecret Bearer abc.def.ghi",
+		RawLog:      "password=raw-log-secret",
+	}
+	summary := safeIncidentSummary(item)
+	if !strings.Contains(summary, "Payments API failed") {
+		t.Fatalf("expected safe description to be preserved, got %q", summary)
+	}
+	for _, secret := range []string{"supersecret", "abc.def.ghi", "raw-log-secret"} {
+		if strings.Contains(summary, secret) {
+			t.Fatalf("webhook summary contains secret %q: %q", secret, summary)
+		}
+	}
+}
+
+func TestSafeIncidentSummaryUsesGenericTextForRawLogFallback(t *testing.T) {
+	item := domain.Incident{
+		Description: "Raw log attached. Review it in the incident details.",
+		RawLog:      "password=do-not-forward-this",
+	}
+	summary := safeIncidentSummary(item)
+	if strings.Contains(summary, "do-not-forward-this") || strings.Contains(summary, "password") {
+		t.Fatalf("raw log leaked into webhook summary: %q", summary)
+	}
+	if !strings.Contains(summary, "Open CloudSentinels") {
+		t.Fatalf("expected safe generic summary, got %q", summary)
+	}
+}
+
 func TestTriageChoosesSpecificSignalsAndUsesNumericBoundaries(t *testing.T) {
 	deployment := domain.Incident{Title: "Deployment pending; request took 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
 	_, cause, _ := triageIncident(deployment)
