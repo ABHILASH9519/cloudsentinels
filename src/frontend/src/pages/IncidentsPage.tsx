@@ -143,6 +143,7 @@ export function IncidentsPage() {
                     <SelectItem value="high">High</SelectItem>
                     <SelectItem value="medium">Medium</SelectItem>
                     <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="info">Info</SelectItem>
                     <SelectItem value="info">Info</SelectItem>
                   </SelectContent>
                 </Select>
