@@ -6,6 +6,7 @@ import {
   signOut as firebaseSignOut,
   getAuth,
   getRedirectResult,
+  getIdTokenResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -37,12 +38,14 @@ const firebaseApp =
     : null;
 export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : null;
 
-type AuthUser = { id: string; email: string | null; name: string | null };
+type AuthUser = { id: string; email: string | null; name: string | null; roles: string[] };
 type AuthContextValue = {
   isLoaded: boolean;
   isConfigured: boolean;
   isSignedIn: boolean;
   user: AuthUser | null;
+  roles: string[];
+  isOperator: boolean;
   error: string | null;
   signIn: () => Promise<void>;
   signInEmail: (email: string, password: string) => Promise<void>;
@@ -54,7 +57,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 function mapUser(user: User | null): AuthUser | null {
   return user
-    ? { id: user.uid, email: user.email, name: user.displayName }
+    ? { id: user.uid, email: user.email, name: user.displayName, roles: [] }
     : null;
 }
 
@@ -84,6 +87,26 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
       (nextUser) => {
         setUser(mapUser(nextUser));
         setIsLoaded(true);
+        if (nextUser) {
+          void getIdTokenResult(nextUser)
+            .then((tokenResult) => {
+              const rawRoles = tokenResult.claims.roles;
+              const roles = Array.isArray(rawRoles)
+                ? rawRoles.filter((role): role is string => typeof role === "string")
+                : [];
+              if (firebaseAuth?.currentUser?.uid === nextUser.uid) {
+                setUser({
+                  id: nextUser.uid,
+                  email: nextUser.email,
+                  name: nextUser.displayName,
+                  roles,
+                });
+              }
+            })
+            .catch(() => {
+              // The API still enforces roles; missing claims only hide controls.
+            });
+        }
       },
       (reason) => {
         setError(reason.message);
@@ -150,12 +173,18 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
     return firebaseAuth.currentUser.getIdToken();
   }, []);
 
+  const roles = user?.roles ?? [];
+  const isOperator = roles.some((role) =>
+    ["operator", "admin"].includes(role.toLowerCase()),
+  );
   const value = useMemo(
     () => ({
       isLoaded,
       isConfigured: !!firebaseAuth,
       isSignedIn: !!user,
       user,
+      roles,
+      isOperator,
       error,
       signIn,
       signInEmail,
@@ -163,7 +192,7 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
       signOut: logout,
       getToken,
     }),
-    [isLoaded, user, error, signIn, signInEmail, signUpEmail, logout, getToken],
+    [isLoaded, user, roles, isOperator, error, signIn, signInEmail, signUpEmail, logout, getToken],
   );
   return createElement(AuthContext.Provider, { value, children });
 }
