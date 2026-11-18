@@ -9,6 +9,25 @@ import (
 	"time"
 )
 
+func TestEventIncludesValidatedTargetCategory(t *testing.T) {
+	event := Event{
+		EventType: "incident.created",
+		Target:    "online-serverless",
+		Summary:   "A new incident was created. Open CloudSentinels to inspect its details.",
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded Event
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Target != "online-serverless" {
+		t.Fatalf("expected target category to round-trip, got %q", decoded.Target)
+	}
+}
+
 func TestWebhookSignatureRequiresFreshTimestamp(t *testing.T) {
 	secret := "test-secret-that-is-long-enough-for-a-hmac"
 	body := []byte(`{"eventType":"incident.created"}`)
