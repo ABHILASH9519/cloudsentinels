@@ -437,6 +437,7 @@ export function IncidentDetailPage() {
                   rows={3}
                   placeholder={incident.aiSummary || "Enter summary..."}
                   value={aiForm.aiSummary}
+                  disabled={updateAI.isPending}
                   onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
@@ -454,6 +455,7 @@ export function IncidentDetailPage() {
                   rows={2}
                   placeholder={incident.rootCause || "Enter likely cause..."}
                   value={aiForm.rootCause}
+                  disabled={updateAI.isPending}
                   onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
@@ -471,6 +473,7 @@ export function IncidentDetailPage() {
                   rows={2}
                   placeholder={incident.suggestedFix || "Enter next steps..."}
                   value={aiForm.suggestedFix}
+                  disabled={updateAI.isPending}
                   onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
