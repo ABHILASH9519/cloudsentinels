@@ -91,8 +91,8 @@ func TestIncidentMutationsRequireOperatorRole(t *testing.T) {
 	server.authenticator = viewerAuthenticator{}
 	requests := []struct {
 		method string
-		path string
-		body string
+		path   string
+		body   string
 	}{
 		{http.MethodPatch, "/api/v1/incidents/" + ids[0], `{"status":"resolved"}`},
 		{http.MethodDelete, "/api/v1/incidents/" + ids[1], ""},
