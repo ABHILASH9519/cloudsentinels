@@ -13,6 +13,7 @@ export function StatusBadge({ status, className }: Props) {
     in_progress: "bg-amber-500/20 text-amber-400 border-amber-500/30",
     resolved: "bg-green-500/20 text-green-400 border-green-500/30",
     acknowledged: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+    investigating: "bg-amber-500/20 text-amber-400 border-amber-500/30",
     active: "bg-red-500/20 text-red-400 border-red-500/30",
   };
   return (

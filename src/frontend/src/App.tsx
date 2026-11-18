@@ -8,8 +8,8 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { useFirebaseAuth } from "./auth/FirebaseAuth";
-import { useAwsActor } from "./aws/useAwsActor";
 import { Layout } from "./components/Layout";
+import { getCloudSentinelsConfigError } from "./lib/cloudSentinels";
 import { AIInsightsPage } from "./pages/AIInsightsPage";
 import { ClustersPage } from "./pages/ClustersPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -28,24 +28,16 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-sm text-muted-foreground">
-          Initializing AWS authenticationÃ¢â‚¬Â¦
+          Initializing authentication…
         </p>
       </div>
     );
   if (!isSignedIn) return <LoginPage authError={error} />;
-  return <AuthenticatedWorkspace>{children}</AuthenticatedWorkspace>;
+  return <ApiGate>{children}</ApiGate>;
 }
-function AuthenticatedWorkspace({ children }: { children: React.ReactNode }) {
-  const { actor, isFetching, error } = useAwsActor();
-  if (isFetching)
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">
-          Connecting to AWS servicesÃ¢â‚¬Â¦
-        </p>
-      </div>
-    );
-  if (!actor)
+function ApiGate({ children }: { children: React.ReactNode }) {
+  const configError = getCloudSentinelsConfigError();
+  if (configError)
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6">
@@ -53,14 +45,14 @@ function AuthenticatedWorkspace({ children }: { children: React.ReactNode }) {
             CloudSentinels API unavailable
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your Firebase session is active, but the API could not be
-            initialized.
+            Your Firebase session is active, but the Go API endpoint is not
+            configured.
           </p>
           <div
             role="alert"
             className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
           >
-            {error instanceof Error ? error.message : "AWS API unavailable."}
+            {configError}
           </div>
           <button
             type="button"

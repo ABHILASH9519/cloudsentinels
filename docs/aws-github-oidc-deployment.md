@@ -66,7 +66,7 @@ The CloudFormation execution role is a separate role assumed by CloudFormation. 
 
 1. Confirm the GitHub preview environment variables and OIDC secret are set and branch restrictions include the branch selected for the manual run.
 2. Confirm the artifact bucket exists, is private, and has encryption enabled.
-3. Open Actions Ã¢â€ â€™ Deploy CloudSentinels AWS preview Ã¢â€ â€™ Run workflow.
+3. Open Actions → Deploy CloudSentinels AWS preview → Run workflow.
 4. Select the branch containing the workflow and the reviewed runtime template. For the current reviewed architecture, select `feat/airtable-cluster-monitoring-zapier`; do not select the base branch unless it contains the same reviewed workflow and template.
 5. Review the workflow result and its API /health smoke test.
 
