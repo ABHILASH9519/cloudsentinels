@@ -485,7 +485,7 @@ func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
 		Author:     firstNonEmpty(principal.Email, principal.Subject),
 		Text:       strings.TrimSpace(input.Text),
 	}
-		if err := comment.Validate(); err != nil {
+	if err := comment.Validate(); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_comment", "Comment text is required and must be within length bounds")
 		return
 	}
