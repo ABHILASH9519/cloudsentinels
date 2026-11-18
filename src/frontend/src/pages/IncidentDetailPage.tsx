@@ -85,7 +85,12 @@ export function IncidentDetailPage() {
   const [commentText, setCommentText] = useState("");
 
   useEffect(() => {
-    if (!incident || aiFormDirty) return;
+    setAiForm({ aiSummary: "", rootCause: "", suggestedFix: "" });
+    setAiFormDirty(false);
+  }, [id]);
+
+  useEffect(() => {
+    if (!incident || incident.id !== id || aiFormDirty) return;
     setAiForm({
       aiSummary: incident.aiSummary ?? "",
       rootCause: incident.rootCause ?? "",
