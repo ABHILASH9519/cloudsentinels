@@ -193,7 +193,7 @@ Current Go event types:
 
 The AWS relay normalizes raw EventBridge names to the same Paths contract: `IncidentCreated` → `incident.created`, `IncidentUpdated` → `incident.updated`, `AlertCreated`/`AlertUpdated` → `alert.created`/`alert.updated`, Kubernetes node/pod/deployment/capacity events → `cluster.health.degraded`, and API latency events → `server.health.degraded`. The original EventBridge name remains in `sourceEventType` for traceability. CloudWatch alarms map to `serverless.invocation_failed` / `serverless.invocation_recovered` or `server.health.failed` / `server.health.recovered`.
 
-The event envelope uses `schemaVersion`, `eventId`, `eventType`, `occurredAt`, `clusterId`, `clusterName`, `sourceType`, `environment`, `severity`, `title`, and a sanitized `summary`. The local agent is identified as `sourceType=local-kubernetes`, `environment=local`. Airtable record IDs remain the cluster identifiers when a local agent is paired to an Airtable record; the dedicated local kind cluster uses its own local ID until explicitly mapped.
+The event envelope uses `schemaVersion`, `eventId`, `eventType`, `occurredAt`, `clusterId`, `clusterName`, `sourceType`, `environment`, a validated `target` category (`online-server`, `online-serverless`, or `offline-kubernetes`), `severity`, `title`, and a fixed safe `summary`. The local agent is identified as `sourceType=local-kubernetes`, `environment=local`. Airtable record IDs remain the cluster identifiers when a local agent is paired to an Airtable record; the dedicated local kind cluster uses its own local ID until explicitly mapped.
 
 Recommended Zap Paths:
 1. **Critical / offline:** `severity=critical` OR `eventType=cluster.offline` → on-call Slack/Teams + email.
