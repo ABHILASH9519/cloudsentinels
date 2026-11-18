@@ -35,6 +35,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SeverityBadge } from "../components/SeverityBadge";
+import { useFirebaseAuth } from "../auth/FirebaseAuth";
 import {
   useAddComment,
   useAnalyzeIncident,
@@ -55,6 +56,7 @@ function formatDate(value?: string) {
 export function IncidentDetailPage() {
   const { id } = useParams({ from: "/incidents/$id" });
   const navigate = useNavigate();
+  const { isOperator } = useFirebaseAuth();
 
   const {
     data: incident,
@@ -145,6 +147,7 @@ export function IncidentDetailPage() {
       await updateStatus.mutateAsync({ id, status });
       toast.success("Status updated");
     } catch (error) {
+      await refetch();
       toast.error(
         error instanceof Error ? error.message : "Failed to update status",
       );
@@ -230,7 +233,8 @@ export function IncidentDetailPage() {
 
         <div className="flex items-center gap-2 shrink-0">
           <Select
-            defaultValue={incident.status}
+            value={incident.status}
+            disabled={!isOperator || updateStatus.isPending}
             onValueChange={(value) => void handleStatusChange(value)}
           >
             <SelectTrigger
@@ -252,6 +256,7 @@ export function IncidentDetailPage() {
               <Button
                 variant="destructive"
                 size="icon"
+                disabled={!isOperator || deleteIncident.isPending}
                 data-ocid="incident_detail.delete.delete_button"
               >
                 <Trash2 className="w-4 h-4" />
@@ -371,7 +376,7 @@ export function IncidentDetailPage() {
               </div>
               <Button
                 onClick={() => void handleAIAnalyze()}
-                disabled={analyzeIncident.isPending}
+                disabled={!isOperator || analyzeIncident.isPending}
                 data-ocid="incident_detail.ai.generate_button"
                 className="shrink-0 bg-primary/90 hover:bg-primary text-primary-foreground"
               >
@@ -440,7 +445,7 @@ export function IncidentDetailPage() {
                   rows={3}
                   placeholder={incident.aiSummary || "Enter summary..."}
                   value={aiForm.aiSummary}
-                  disabled={updateAI.isPending}
+                  disabled={!isOperator || updateAI.isPending}
                   onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
@@ -458,7 +463,7 @@ export function IncidentDetailPage() {
                   rows={2}
                   placeholder={incident.rootCause || "Enter likely cause..."}
                   value={aiForm.rootCause}
-                  disabled={updateAI.isPending}
+                  disabled={!isOperator || updateAI.isPending}
                   onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
@@ -575,7 +580,7 @@ export function IncidentDetailPage() {
               <Button
                 data-ocid="incident_detail.add_comment.button"
                 onClick={() => void handleAddComment()}
-                disabled={addComment.isPending || !commentText.trim()}
+                disabled={!isOperator || addComment.isPending || !commentText.trim()}
                 className="bg-primary/90 hover:bg-primary text-primary-foreground"
               >
                 {addComment.isPending ? (
