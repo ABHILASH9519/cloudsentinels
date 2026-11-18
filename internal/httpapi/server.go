@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -251,7 +252,14 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 		item.Description = "Raw log attached. Review it in the incident details."
 	}
 	if strings.TrimSpace(string(item.Target)) == "" {
-		item.Target = domain.TargetOnlineServer
+		switch s.config.ExecutionMode {
+		case "offline-kubernetes":
+			item.Target = domain.TargetOfflineKubernetes
+		case "online-serverless":
+			item.Target = domain.TargetOnlineServerless
+		default:
+			item.Target = domain.TargetOnlineServer
+		}
 	}
 	if err := item.Validate(); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_incident", err.Error())
@@ -265,8 +273,38 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 	}
 	s.incidents[item.ID] = item
 	s.incidentsMu.Unlock()
-	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: item.Description}, 0)
+	s.emitAutomationEvent("incident:"+item.ID, automation.Event{EventType: "incident.created", EventID: item.ID, SourceType: "cloudsentinels-api", Environment: s.config.Environment, Severity: string(item.Severity), Title: item.Title, Summary: safeIncidentSummary(item)}, 0)
 	writeJSON(w, http.StatusCreated, item)
+}
+
+var (
+	credentialAssignmentPattern = regexp.MustCompile(`(?i)\b(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|client[_-]?secret)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)`)
+	bearerTokenPattern          = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
+	awsAccessKeyPattern         = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
+	jwtPattern                  = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
+	githubTokenPattern          = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{20,}\b`)
+)
+
+// safeIncidentSummary keeps useful operator-authored descriptions for ticket
+// sync while excluding raw logs and common credential formats from webhooks.
+func safeIncidentSummary(item domain.Incident) string {
+	summary := strings.TrimSpace(item.Description)
+	if summary == "" || summary == "Raw log attached. Review it in the incident details." {
+		return "A new incident was created. Open CloudSentinels to inspect its details."
+	}
+	summary = bearerTokenPattern.ReplaceAllString(summary, "Bearer [REDACTED]")
+	summary = credentialAssignmentPattern.ReplaceAllString(summary, "$1=[REDACTED]")
+	summary = awsAccessKeyPattern.ReplaceAllString(summary, "[REDACTED_AWS_ACCESS_KEY]")
+	summary = jwtPattern.ReplaceAllString(summary, "[REDACTED_JWT]")
+	summary = githubTokenPattern.ReplaceAllString(summary, "[REDACTED_GITHUB_TOKEN]")
+	runes := []rune(summary)
+	if len(runes) > 1000 {
+		summary = string(runes[:1000])
+	}
+	if strings.TrimSpace(summary) == "" {
+		return "A new incident was created. Open CloudSentinels to inspect its details."
+	}
+	return summary
 }
 
 func incidentPathID(r *http.Request) string {
@@ -295,7 +333,7 @@ func (s *Server) getIncident(w http.ResponseWriter, r *http.Request) {
 
 // updateIncident applies a validated partial update. Only supplied fields change.
 func (s *Server) updateIncident(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) {
+	if !s.authorizeOperator(w, r) {
 		return
 	}
 	id := incidentPathID(r)
@@ -380,7 +418,8 @@ func (s *Server) updateIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) {
+	principal, authorized := s.authorizeOperatorPrincipal(w, r)
+	if !authorized {
 		return
 	}
 	id := incidentPathID(r)
@@ -395,6 +434,7 @@ func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
 	delete(s.comments, id)
 	s.commentsMu.Unlock()
 	s.incidentsMu.Unlock()
+	s.logger.Info("incident deleted", "incident_id", id, "actor_subject", principal.Subject)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -403,7 +443,7 @@ func (s *Server) deleteIncident(w http.ResponseWriter, r *http.Request) {
 // It intentionally does not call an external model: the documented architecture
 // is an explainable rules engine, not a trained ML/LLM analyzer.
 func (s *Server) analyzeIncident(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) {
+	if !s.authorizeOperator(w, r) {
 		return
 	}
 	id := incidentPathID(r)
@@ -450,7 +490,8 @@ func (s *Server) listIncidentComments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
-	if !s.authorize(w, r) {
+	principal, authorized := s.authorizeOperatorPrincipal(w, r)
+	if !authorized {
 		return
 	}
 	id := incidentPathID(r)
@@ -460,8 +501,7 @@ func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
 	var input struct {
-		Author string `json:"author"`
-		Text   string `json:"text"`
+		Text string `json:"text"`
 	}
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -476,16 +516,8 @@ func (s *Server) addIncidentComment(w http.ResponseWriter, r *http.Request) {
 	}
 	comment := domain.IncidentComment{
 		IncidentID: id,
-		Author:     strings.TrimSpace(input.Author),
+		Author:     firstNonEmpty(principal.Email, principal.Subject),
 		Text:       strings.TrimSpace(input.Text),
-	}
-	if comment.Author == "" && s.authenticator != nil {
-		if principal, err := s.authenticator.Authenticate(r); err == nil {
-			comment.Author = firstNonEmpty(principal.Email, principal.Subject)
-		}
-	}
-	if comment.Author == "" {
-		comment.Author = "operator"
 	}
 	if err := comment.Validate(); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "invalid_comment", "Comment text is required and must be within length bounds")
@@ -538,36 +570,30 @@ func triageIncident(item domain.Incident) (summary, rootCause, suggestedFix stri
 		{[]string{"unavailable", "rollout", "deployment", "progressdeadline"}, "The deployment rollout is not reaching the desired available replica count.", []string{"Compare desired vs available replicas", "Check the ReplicaSet and pod events", "Consider pausing or rolling back only with approval"}},
 		{[]string{"unhealthy", "readiness", "liveness", "probe failed"}, "A health probe is failing, removing the pod from service or triggering restarts.", []string{"Test the probe endpoint from inside the pod", "Confirm probe path, port and timing thresholds", "Verify downstream dependencies the probe relies on"}},
 		{[]string{"timeout", "latency", "503", "502", "500", "error rate"}, "Elevated latency or error rates suggest a saturated dependency or a failing upstream service.", []string{"Correlate errors with dependency health metrics", "Check ingress and service saturation", "Apply an approved mitigation only after review"}},
-		{[]string{"cpu", "saturation", "throttl"}, "CPU utilisation is high, which can throttle request handling.", []string{"Identify the top CPU consumers", "Compare requests/limits with actual usage", "Scale only through an approved capacity policy"}},
+		{[]string{"cpu", "saturation", "throttling", "throttled"}, "CPU utilisation is high, which can throttle request handling.", []string{"Identify the top CPU consumers", "Compare requests/limits with actual usage", "Scale only through an approved capacity policy"}},
 		{[]string{"certificate", "tls", "x509"}, "A TLS/certificate error indicates an expired or untrusted certificate.", []string{"Check certificate expiry and chain", "Confirm the trust store used by the client", "Rotate the certificate through the normal process"}},
 	}
-	matched := make([]string, 0, 3)
-	checks := make([]string, 0, 3)
-	cause := "No single rule matched the supplied signals; treat this as an unexplained incident and gather more evidence."
-	for _, rule := range rules {
+	bestKey := ""
+	bestRule := -1
+	for ruleIndex, rule := range rules {
 		for _, key := range rule.keys {
-			if strings.Contains(haystack, key) {
-				cause = rule.cause
-				matched = append(matched, key)
-				for _, check := range rule.checks {
-					if !containsString(checks, check) {
-						checks = append(checks, check)
-					}
-				}
-				break
+			if signalMatches(haystack, key) && len(key) > len(bestKey) {
+				bestKey = key
+				bestRule = ruleIndex
 			}
 		}
-		if cause != "No single rule matched the supplied signals; treat this as an unexplained incident and gather more evidence." {
-			break
-		}
 	}
+	cause := "No single rule matched the supplied signals; treat this as an unexplained incident and gather more evidence."
+	checks := make([]string, 0, 3)
 	confidence := 0.55
-	if len(matched) > 0 {
+	if bestRule >= 0 {
+		cause = rules[bestRule].cause
+		checks = append(checks, rules[bestRule].checks...)
 		confidence = 0.8
 	}
-	signal := "none"
-	if len(matched) > 0 {
-		signal = matched[0]
+	signal := bestKey
+	if signal == "" {
+		signal = "none"
 	}
 	summary = fmt.Sprintf(
 		"Explainable rule-engine triage (severity %s, status %s). Matched signal: %s. Confidence %.0f%%. This is deterministic rule output, not a trained ML/LLM diagnosis; verify against live telemetry before acting.",
@@ -577,6 +603,27 @@ func triageIncident(item domain.Incident) (summary, rootCause, suggestedFix stri
 		checks = []string{"Collect recent logs and Kubernetes events", "Confirm current cluster telemetry freshness", "Escalate to an operator if the signal recurs"}
 	}
 	return summary, cause, strings.Join(checks, " ")
+}
+
+// signalMatches uses word boundaries for single-token signals so a rule for
+// HTTP 500 does not accidentally match values such as 5000ms or request IDs.
+func signalMatches(haystack, key string) bool {
+	if strings.ContainsAny(key, " \t") {
+		return strings.Contains(haystack, key)
+	}
+	if key == "cpu" {
+		for _, token := range strings.FieldsFunc(haystack, func(char rune) bool {
+			return !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9')
+		}) {
+			if token == key || strings.HasSuffix(token, key) {
+				return true
+			}
+		}
+		return false
+	}
+	pattern := `\b` + regexp.QuoteMeta(key) + `\b`
+	matched, _ := regexp.MatchString(pattern, haystack)
+	return matched
 }
 
 func containsString(items []string, target string) bool {
@@ -1250,16 +1297,44 @@ func (s *Server) currentUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "uid": principal.Subject, "email": principal.Email, "roles": principal.Roles})
 }
 
-func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
+func (s *Server) authorizePrincipal(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
 	if s.authenticator == nil {
 		writeError(w, http.StatusServiceUnavailable, "authentication_unconfigured", "Protected API routes are disabled until Firebase Authentication or local development authentication is configured")
-		return false
+		return auth.Principal{}, false
 	}
-	if _, err := s.authenticator.Authenticate(r); err != nil {
+	principal, err := s.authenticator.Authenticate(r)
+	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized", "A valid authenticated session is required")
-		return false
+		return auth.Principal{}, false
 	}
-	return true
+	return principal, true
+}
+
+func (s *Server) authorize(w http.ResponseWriter, r *http.Request) bool {
+	_, ok := s.authorizePrincipal(w, r)
+	return ok
+}
+
+// authorizeOperator restricts incident mutations to explicitly provisioned
+// operators and administrators. Authentication alone is not an authorization policy.
+func (s *Server) authorizeOperatorPrincipal(w http.ResponseWriter, r *http.Request) (auth.Principal, bool) {
+	principal, ok := s.authorizePrincipal(w, r)
+	if !ok {
+		return auth.Principal{}, false
+	}
+	for _, role := range principal.Roles {
+		switch strings.ToLower(strings.TrimSpace(role)) {
+		case "operator", "admin":
+			return principal, true
+		}
+	}
+	writeError(w, http.StatusForbidden, "forbidden", "An operator or admin role is required for this incident action")
+	return auth.Principal{}, false
+}
+
+func (s *Server) authorizeOperator(w http.ResponseWriter, r *http.Request) bool {
+	_, ok := s.authorizeOperatorPrincipal(w, r)
+	return ok
 }
 func (s *Server) authorizeAgent(w http.ResponseWriter, r *http.Request, clusterID string) bool {
 	if strings.TrimSpace(clusterID) == "" {
