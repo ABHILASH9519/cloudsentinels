@@ -32,7 +32,7 @@ import {
   MessageSquare,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SeverityBadge } from "../components/SeverityBadge";
 import {
@@ -68,7 +68,17 @@ export function IncidentDetailPage() {
     rootCause: "",
     suggestedFix: "",
   });
+  const [aiFormDirty, setAiFormDirty] = useState(false);
   const [commentText, setCommentText] = useState("");
+
+  useEffect(() => {
+    if (!incident || aiFormDirty) return;
+    setAiForm({
+      aiSummary: incident.aiSummary ?? "",
+      rootCause: incident.rootCause ?? "",
+      suggestedFix: incident.suggestedFix ?? "",
+    });
+  }, [incident, aiFormDirty]);
 
   if (isLoading) {
     return (
@@ -116,6 +126,7 @@ export function IncidentDetailPage() {
   const handleAISave = async () => {
     try {
       await updateAI.mutateAsync({ id, ...aiForm });
+      setAiFormDirty(false);
       toast.success("Triage fields updated");
     } catch (error) {
       toast.error(
@@ -390,12 +401,13 @@ export function IncidentDetailPage() {
                   rows={3}
                   placeholder={incident.aiSummary || "Enter summary..."}
                   value={aiForm.aiSummary}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
                       aiSummary: event.target.value,
-                    }))
-                  }
+                    }));
+                    setAiFormDirty(true);
+                  }}
                   className="text-sm"
                 />
               </div>
@@ -406,12 +418,13 @@ export function IncidentDetailPage() {
                   rows={2}
                   placeholder={incident.rootCause || "Enter likely cause..."}
                   value={aiForm.rootCause}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
                       rootCause: event.target.value,
-                    }))
-                  }
+                    }));
+                    setAiFormDirty(true);
+                  }}
                   className="text-sm"
                 />
               </div>
@@ -422,12 +435,13 @@ export function IncidentDetailPage() {
                   rows={2}
                   placeholder={incident.suggestedFix || "Enter next steps..."}
                   value={aiForm.suggestedFix}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
                       suggestedFix: event.target.value,
-                    }))
-                  }
+                    }));
+                    setAiFormDirty(true);
+                  }}
                   className="text-sm"
                 />
               </div>
