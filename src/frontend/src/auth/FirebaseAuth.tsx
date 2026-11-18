@@ -85,7 +85,18 @@ export function FirebaseAuthProvider({ children }: PropsWithChildren) {
     return onIdTokenChanged(
       firebaseAuth,
       (nextUser) => {
-        setUser(mapUser(nextUser));
+        const mappedUser = mapUser(nextUser);
+        setUser((previousUser) =>
+          mappedUser
+            ? {
+                ...mappedUser,
+                roles:
+                  previousUser?.id === mappedUser.id
+                    ? previousUser.roles
+                    : [],
+              }
+            : null,
+        );
         setIsLoaded(true);
         if (nextUser) {
           void getIdTokenResult(nextUser)
