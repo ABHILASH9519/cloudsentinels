@@ -228,7 +228,7 @@ func TestIncidentCommentsRoundTrip(t *testing.T) {
 	id := createIncidentForTest(t, server)
 
 	created := httptest.NewRecorder()
-	server.Handler().ServeHTTP(created, httptest.NewRequest(http.MethodPost, "/api/v1/incidents/"+id+"/comments", strings.NewReader(`{"author":"alice","text":"Investigated the restart loop."}`)))
+	server.Handler().ServeHTTP(created, httptest.NewRequest(http.MethodPost, "/api/v1/incidents/"+id+"/comments", strings.NewReader(`{"text":"Investigated the restart loop."}`)))
 	if created.Code != http.StatusCreated {
 		t.Fatalf("expected 201 comment, got %d: %s", created.Code, created.Body.String())
 	}
