@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ABHILASH9519/cloudsentinels/internal/config"
 	"github.com/ABHILASH9519/cloudsentinels/internal/domain"
@@ -48,8 +49,15 @@ func TestIncidentCreateDefaultsTargetAndStampsTimestamps(t *testing.T) {
 	if item["target"] != "online-server" {
 		t.Fatalf("expected default online-server target, got %#v", item["target"])
 	}
-	if item["createdAt"] == "" || item["updatedAt"] == "" {
-		t.Fatalf("expected createdAt/updatedAt to be stamped, got %#v", item)
+	for _, field := range []string{"createdAt", "updatedAt"} {
+		value, ok := item[field].(string)
+		if !ok || value == "" {
+			t.Fatalf("expected %s to be a timestamp string, got %#v", field, item[field])
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil || parsed.IsZero() {
+			t.Fatalf("expected %s to be a valid nonzero RFC3339 timestamp, got %q (err=%v)", field, value, err)
+		}
 	}
 	if item["status"] != "open" {
 		t.Fatalf("expected default open status, got %#v", item["status"])
@@ -121,21 +129,33 @@ func TestIncidentCommentRejectsClientSuppliedAuthor(t *testing.T) {
 	}
 }
 
-func TestSafeIncidentSummaryPreservesSafeDescriptionsAndRedactsCredentials(t *testing.T) {
+func TestSafeIncidentSummaryPreservesDescriptionsWithoutCredentialMaterial(t *testing.T) {
 	item := domain.Incident{
-		Description: "Payments API failed; api_key=supersecret Bearer abc.def.ghi",
+		Description: "Payments API failed after deployment",
 		RawLog:      "password=raw-log-secret",
 	}
 	summary := safeIncidentSummary(item)
-	if !strings.Contains(summary, "Payments API failed") {
+	if summary != item.Description {
 		t.Fatalf("expected safe description to be preserved, got %q", summary)
 	}
-	for _, secret := range []string{"supersecret", "abc.def.ghi", "raw-log-secret"} {
-		if strings.Contains(summary, secret) {
-			t.Fatalf("webhook summary contains secret %q: %q", secret, summary)
-		}
+	if strings.Contains(summary, "raw-log-secret") {
+		t.Fatalf("raw log leaked into webhook summary: %q", summary)
 	}
 }
+
+func TestSafeIncidentSummaryFallsBackForPrefixedCredentialsAndBasicAuth(t *testing.T) {
+	item := domain.Incident{
+		Description: "DB_PASSWORD=hunter2; Authorization: Basic c2VjcmV0",
+	}
+	summary := safeIncidentSummary(item)
+	if strings.Contains(summary, "hunter2") || strings.Contains(summary, "c2VjcmV0") {
+		t.Fatalf("credential material leaked into webhook summary: %q", summary)
+	}
+	if !strings.Contains(summary, "Open CloudSentinels") {
+		t.Fatalf("expected generic fallback for credential-like description, got %q", summary)
+	}
+}
+
 
 func TestSafeIncidentSummaryUsesGenericTextForRawLogFallback(t *testing.T) {
 	item := domain.Incident{
@@ -347,6 +367,23 @@ func TestIncidentLifecycleRoutesFailClosedWithoutAuthenticator(t *testing.T) {
 		server.Handler().ServeHTTP(response, httptest.NewRequest(route.method, route.path, nil))
 		if response.Code != http.StatusServiceUnavailable {
 			t.Fatalf("%s %s: expected fail-closed 503, got %d", route.method, route.path, response.Code)
+		}
+	}
+}
+
+func TestCORSAllowsIncidentLifecycleMethods(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigins: []string{"http://localhost:5173"}}, slog.Default(), nil)
+	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
+		request := httptest.NewRequest(http.MethodOptions, "/api/v1/incidents/test", nil)
+		request.Header.Set("Origin", "http://localhost:5173")
+		request.Header.Set("Access-Control-Request-Method", method)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 preflight for %s, got %d", method, response.Code)
+		}
+		if !strings.Contains(response.Header().Get("Access-Control-Allow-Methods"), method) {
+			t.Fatalf("CORS methods do not include %s: %q", method, response.Header().Get("Access-Control-Allow-Methods"))
 		}
 	}
 }

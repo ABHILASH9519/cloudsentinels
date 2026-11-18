@@ -46,10 +46,12 @@ const auth = getAuth();
 const user = await auth.getUser(uid);
 const claims = { ...user.customClaims };
 const roles = Array.isArray(claims.roles) ? claims.roles : [];
-claims.roles = roles.filter((value) => value !== "operator");
+claims.roles = roles.filter((value) => !["operator", "admin"].includes(value));
 await auth.setCustomUserClaims(uid, claims);
 await auth.revokeRefreshTokens(uid);
 ```
+
+For immediate removal of all incident-mutation permissions, remove both `operator` and `admin` as shown. If the intent is only to remove the operator label while intentionally retaining administrator access, remove only `operator` and do not describe that as revoking mutation access.
 
 Role changes must preserve unrelated custom claims. After revocation, the user must sign in again to obtain a new ID token.
 
