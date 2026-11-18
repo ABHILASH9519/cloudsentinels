@@ -201,6 +201,12 @@ func TestTriagePrioritizesSpecificSignalsAndNumericBoundaries(t *testing.T) {
 		t.Fatalf("expected generic deployment signal when no specific cause exists, got %q", cause)
 	}
 
+	insufficientCPU := domain.Incident{Title: "Pod Pending: 0/3 nodes available, insufficient cpu", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(insufficientCPU)
+	if !strings.Contains(cause, "cannot be scheduled") {
+		t.Fatalf("expected scheduler capacity advice to outrank generic CPU advice, got %q", cause)
+	}
+
 	falsePositive := domain.Incident{Title: "Request duration was 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
 	_, cause, _ = triageIncident(falsePositive)
 	if !strings.Contains(cause, "No single rule matched") {
