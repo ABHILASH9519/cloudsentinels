@@ -34,8 +34,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SeverityBadge } from "../components/SeverityBadge";
 import { useFirebaseAuth } from "../auth/FirebaseAuth";
+import { SeverityBadge } from "../components/SeverityBadge";
 import {
   useAddComment,
   useAnalyzeIncident,
