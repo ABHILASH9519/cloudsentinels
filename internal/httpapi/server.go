@@ -278,10 +278,10 @@ func (s *Server) createIncident(w http.ResponseWriter, r *http.Request) {
 
 var (
 	credentialAssignmentPattern = regexp.MustCompile(`(?i)\b(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|client[_-]?secret)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)`)
-	bearerTokenPattern = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
-	awsAccessKeyPattern = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
-	jwtPattern = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
-	githubTokenPattern = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{20,}\b`)
+	bearerTokenPattern          = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+`)
+	awsAccessKeyPattern         = regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`)
+	jwtPattern                  = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)
+	githubTokenPattern          = regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{20,}\b`)
 )
 
 // safeIncidentSummary keeps useful operator-authored descriptions for ticket
