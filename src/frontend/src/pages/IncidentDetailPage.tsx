@@ -155,6 +155,10 @@ export function IncidentDetailPage() {
   };
 
   const handleAIAnalyze = async () => {
+    if (!isOperator) {
+      toast.error("An operator or admin role is required");
+      return;
+    }
     try {
       await analyzeIncident.mutateAsync(id);
       toast.success("Explainable triage completed");
@@ -166,6 +170,10 @@ export function IncidentDetailPage() {
   };
 
   const handleAISave = async () => {
+    if (!isOperator) {
+      toast.error("An operator or admin role is required");
+      return;
+    }
     try {
       await updateAI.mutateAsync({ id, ...aiForm });
       setAiFormDirty(false);
@@ -190,7 +198,7 @@ export function IncidentDetailPage() {
   };
 
   const handleAddComment = async () => {
-    if (!commentText.trim()) return;
+    if (!isOperator || !commentText.trim()) return;
     try {
       await addComment.mutateAsync({ incidentId: id, text: commentText });
       toast.success("Comment added");
@@ -481,7 +489,7 @@ export function IncidentDetailPage() {
                   rows={2}
                   placeholder={incident.suggestedFix || "Enter next steps..."}
                   value={aiForm.suggestedFix}
-                  disabled={updateAI.isPending}
+                  disabled={!isOperator || updateAI.isPending}
                   onChange={(event) => {
                     setAiForm((prev) => ({
                       ...prev,
@@ -494,7 +502,7 @@ export function IncidentDetailPage() {
               </div>
               <Button
                 onClick={() => void handleAISave()}
-                disabled={updateAI.isPending}
+                disabled={!isOperator || updateAI.isPending}
                 data-ocid="incident_detail.ai.save_button"
                 className="bg-primary/90 hover:bg-primary text-primary-foreground"
               >
