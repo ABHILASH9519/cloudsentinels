@@ -120,6 +120,26 @@ func TestIncidentCommentRejectsClientSuppliedAuthor(t *testing.T) {
 	}
 }
 
+func TestTriageChoosesSpecificSignalsAndUsesNumericBoundaries(t *testing.T) {
+	deployment := domain.Incident{Title: "Deployment pending; request took 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ := triageIncident(deployment)
+	if !strings.Contains(cause, "deployment rollout") {
+		t.Fatalf("expected the more specific deployment signal, got %q", cause)
+	}
+
+	falsePositive := domain.Incident{Title: "Request duration was 5000ms", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(falsePositive)
+	if !strings.Contains(cause, "No single rule matched") {
+		t.Fatalf("HTTP 500 rule must not match 5000ms, got %q", cause)
+	}
+
+	httpError := domain.Incident{Title: "Upstream returned HTTP 500", Severity: domain.SeverityHigh, Status: domain.StatusOpen}
+	_, cause, _ = triageIncident(httpError)
+	if !strings.Contains(cause, "Elevated latency or error rates") {
+		t.Fatalf("expected exact HTTP 500 to match the error-rate rule, got %q", cause)
+	}
+}
+
 func TestIncidentGetReturnsCreatedIncident(t *testing.T) {
 	server := newTestServer()
 	id := createIncidentForTest(t, server)
