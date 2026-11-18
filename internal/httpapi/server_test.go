@@ -87,7 +87,7 @@ func (viewerAuthenticator) Authenticate(*http.Request) (auth.Principal, error) {
 
 func TestIncidentMutationsRequireOperatorRole(t *testing.T) {
 	server := newTestServer()
-	ids := []string{createIncidentForTest(t, server), createIncidentForTest(t, server), createIncidentForTest(t, server)}
+	ids := []string{createIncidentForTest(t, server), createIncidentForTest(t, server), createIncidentForTest(t, server), createIncidentForTest(t, server)}
 	server.authenticator = viewerAuthenticator{}
 	requests := []struct {
 		method string
@@ -97,6 +97,7 @@ func TestIncidentMutationsRequireOperatorRole(t *testing.T) {
 		{http.MethodPatch, "/api/v1/incidents/" + ids[0], `{"status":"resolved"}`},
 		{http.MethodDelete, "/api/v1/incidents/" + ids[1], ""},
 		{http.MethodPost, "/api/v1/incidents/" + ids[2] + "/analyze", ""},
+		{http.MethodPost, "/api/v1/incidents/" + ids[3] + "/comments", `{"text":"viewer comment"}`},
 	}
 	for _, test := range requests {
 		response := httptest.NewRecorder()
