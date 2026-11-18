@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ABHILASH9519/cloudsentinels/internal/config"
 )
@@ -47,8 +48,15 @@ func TestIncidentCreateDefaultsTargetAndStampsTimestamps(t *testing.T) {
 	if item["target"] != "online-server" {
 		t.Fatalf("expected default online-server target, got %#v", item["target"])
 	}
-	if item["createdAt"] == "" || item["updatedAt"] == "" {
-		t.Fatalf("expected createdAt/updatedAt to be stamped, got %#v", item)
+	for _, field := range []string{"createdAt", "updatedAt"} {
+		value, ok := item[field].(string)
+		if !ok || value == "" {
+			t.Fatalf("expected %s to be a timestamp string, got %#v", field, item[field])
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil || parsed.IsZero() {
+			t.Fatalf("expected %s to be a valid nonzero RFC3339 timestamp, got %q (err=%v)", field, value, err)
+		}
 	}
 	if item["status"] != "open" {
 		t.Fatalf("expected default open status, got %#v", item["status"])
@@ -225,6 +233,24 @@ func TestIncidentLifecycleRoutesFailClosedWithoutAuthenticator(t *testing.T) {
 		server.Handler().ServeHTTP(response, httptest.NewRequest(route.method, route.path, nil))
 		if response.Code != http.StatusServiceUnavailable {
 			t.Fatalf("%s %s: expected fail-closed 503, got %d", route.method, route.path, response.Code)
+		}
+	}
+}
+
+
+func TestCORSAllowsIncidentLifecycleMethods(t *testing.T) {
+	server := NewServer(config.Config{AllowedOrigins: []string{"http://localhost:5173"}}, slog.Default(), nil)
+	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
+		request := httptest.NewRequest(http.MethodOptions, "/api/v1/incidents/test", nil)
+		request.Header.Set("Origin", "http://localhost:5173")
+		request.Header.Set("Access-Control-Request-Method", method)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("expected 204 preflight for %s, got %d", method, response.Code)
+		}
+		if !strings.Contains(response.Header().Get("Access-Control-Allow-Methods"), method) {
+			t.Fatalf("CORS methods do not include %s: %q", method, response.Header().Get("Access-Control-Allow-Methods"))
 		}
 	}
 }
