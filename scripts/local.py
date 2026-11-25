@@ -56,8 +56,8 @@ def smoke(env):
             raise RuntimeError("API did not accept the signed-in cluster event")
     lookup = """from bridge import client
 import json,sys
-item=client('dynamodb').get_item(TableName='runbooks',Key={'eventId':{'S':sys.argv[1]}},ConsistentRead=True).get('Item')
-print(item['runbook']['S'] if item else 'null')"""
+items=client('dynamodb').query(TableName='runbooks',KeyConditionExpression='eventId = :id',ExpressionAttributeValues={':id':{'S':sys.argv[1]}},ConsistentRead=True)['Items']
+print(items[0]['runbook']['S'] if items else 'null')"""
     for _ in range(50):
         result = compose("exec", "-T", "bridge", "python", "-c", lookup, event_id, capture_output=True, text=True)
         plan = json.loads(result.stdout)

@@ -18,11 +18,11 @@ flowchart TD
     Q -->|repeated failures| DLQ["Dead-letter queue"]
 ```
 
-The ingress and worker run in the same bridge process. A successful API event acknowledgment means the bridge queued the alert. The worker acknowledges SQS after it stores the returned runbook. Delivery is at least once. Redelivery checks the stored event ID before invoking n8n again. A crash between webhook completion and storage can repeat a workflow execution. Runbooks are advisory, and cluster mutations are disabled in the local profile.
+The ingress and worker run in the same bridge process. A successful API event acknowledgment means the bridge queued the alert. The worker acknowledges SQS after it stores the returned runbook. Delivery is at least once. Redelivery checks the event ID and original message fingerprint before invoking n8n again. A crash between webhook completion and storage can repeat a workflow execution. Runbooks are advisory, and cluster mutations are disabled in the local profile.
 
 ## Run on your PC
 
-Install Docker with Compose v2 and Python 3.10 or newer (3.11+ for local bridge unit tests). The first build downloads container images and dependencies. From the repository root:
+Install Docker with Compose v2 and Python 3.11 or newer. The first build downloads container images and dependencies. From the repository root:
 
 ```sh
 python scripts/local.py up

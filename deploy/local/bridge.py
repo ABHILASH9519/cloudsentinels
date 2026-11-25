@@ -29,8 +29,10 @@ def provision(sqs, db):
     })["QueueUrl"]
     try:
         db.create_table(TableName="runbooks", BillingMode="PAY_PER_REQUEST",
-                        KeySchema=[{"AttributeName": "eventId", "KeyType": "HASH"}],
-                        AttributeDefinitions=[{"AttributeName": "eventId", "AttributeType": "S"}])
+                        KeySchema=[{"AttributeName": "eventId", "KeyType": "HASH"},
+                                   {"AttributeName": "delivery", "KeyType": "RANGE"}],
+                        AttributeDefinitions=[{"AttributeName": key, "AttributeType": "S"}
+                                              for key in ("eventId", "delivery")])
     except db.exceptions.ResourceInUseException:
         pass
     db.get_waiter("table_exists").wait(TableName="runbooks", WaiterConfig={"Delay": 1, "MaxAttempts": 30})
@@ -80,7 +82,10 @@ def ingest(sqs, queue, secret):
 
 def process(sqs, db, queue, message):
     event = json.loads(message["Body"])
-    key = {"eventId": {"S": event["eventId"]}}
+    # Incident updates can share an event ID, including across cluster sources.
+    # SQS redelivery preserves the body, including the original occurrence time.
+    fingerprint = hashlib.sha256(message["Body"].encode()).hexdigest()
+    key = {"eventId": {"S": event["eventId"]}, "delivery": {"S": fingerprint}}
     if "Item" not in db.get_item(TableName="runbooks", Key=key, ConsistentRead=True):
         request = Request(WORKFLOW, data=message["Body"].encode(), headers={"Content-Type": "application/json"})
         with urlopen(request, timeout=45) as response:

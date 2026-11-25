@@ -25,6 +25,7 @@ class BridgeTest(unittest.TestCase):
         with patch("bridge.urlopen", return_value=BytesIO(json.dumps({"sharedRemediationProcedure": plan}).encode())):
             process(sqs, db, "queue", message)
         db.put_item.assert_called_once()
+        self.assertIn("delivery", db.put_item.call_args.kwargs["Item"])
         sqs.delete_message.assert_called_once()
         sqs.reset_mock()
         with patch("bridge.urlopen", side_effect=OSError):
