@@ -1,5 +1,9 @@
 name: Local Floci stack
-on: [pull_request, workflow_dispatch, push]
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches: [main]
 permissions:
   contents: read
 jobs:
@@ -12,6 +16,26 @@ jobs:
       - run: node deploy/automation/test-unified-workflow.mjs
       - run: python scripts/local.py up
       - run: python scripts/local.py smoke
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+      - name: Verify telemetry from a live Minikube node
+        shell: bash
+        run: |
+          minikube start -p cloudsentinels-local --driver=docker --cpus=2 --memory=2400
+          python scripts/local.py agent cloudsentinels-local > "$RUNNER_TEMP/agent.log" 2>&1 &
+          agent_pid=$!
+          trap 'kill "$agent_pid" 2>/dev/null || true' EXIT
+          source .env.floci
+          for attempt in {1..90}; do
+            if curl -fsS -H "Authorization: Bearer $OPERATOR_KEY" http://127.0.0.1:8082/api/v1/agent/telemetry |
+              jq -e 'any(.items[]?; .clusterId == "cloudsentinels-local" and .readyNodeCount > 0)' > /dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          cat "$RUNNER_TEMP/agent.log"
+          exit 1
       - if: failure()
         run: docker compose --env-file .env.floci logs --tail=40 bridge workflow-init n8n api
       - if: always()

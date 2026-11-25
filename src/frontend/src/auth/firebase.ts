@@ -1,5 +1,5 @@
-import { localOperatorMode, localOperatorToken } from "./localOperator";
 import { firebaseAuth } from "./FirebaseAuth";
+import { localOperatorMode, localOperatorToken } from "./localOperator";
 
 export async function getFirebaseIdToken(): Promise<string | null> {
   if (localOperatorMode) return localOperatorToken();
