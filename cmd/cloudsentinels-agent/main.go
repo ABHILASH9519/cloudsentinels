@@ -316,7 +316,7 @@ func (a *agent) forwardClusterSignals(nodes, events, deployments []kubeItem, cpu
 		id := stableEventID(a.clusterID, event.Metadata.UID, event.InvolvedObject.Kind, event.InvolvedObject.Namespace, event.InvolvedObject.Name, event.Reason, eventTime, event.Message)
 		a.postClusterEvent(lambdaClusterEvent{
 			EventID: id, EventType: eventType, Severity: severity,
-			Title:     truncate("Kubernetes "+event.Reason+": "+event.InvolvedObject.Name, 176),
+			Title:   truncate("Kubernetes "+event.Reason+": "+event.InvolvedObject.Name, 176),
 			Message: truncate(event.Message, 996), Namespace: event.InvolvedObject.Namespace,
 			ResourceKind: event.InvolvedObject.Kind, ResourceName: event.InvolvedObject.Name, ObservedAt: eventTime,
 		})

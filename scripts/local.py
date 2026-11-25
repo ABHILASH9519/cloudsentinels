@@ -43,12 +43,12 @@ def agent(context, env):
     subprocess.run(["go", "run", "./cmd/cloudsentinels-agent"], cwd=ROOT, env=settings, check=True)
 
 
-def smoke(env):
+def smoke_event(env, summary):
     # A synthetic event with a unique identifier never replaces a cluster's latest telemetry.
     event_id = "smoke-" + secrets.token_hex(8)
     body = json.dumps({"eventId": event_id, "eventType": "cluster.warning",
                       "clusterId": "cloudsentinels-local", "severity": "high",
-                      "title": "Local pipeline smoke check"}).encode()
+                      "title": "Local pipeline smoke check", "summary": summary}).encode()
     post = Request("http://127.0.0.1:8082/api/v1/agent/events", data=body, headers={
         "Content-Type": "application/json", "Authorization": "Bearer " + env["MINIKUBE_KEY"]})
     with urlopen(post, timeout=15) as response:
@@ -63,9 +63,18 @@ print(items[0]['runbook']['S'] if items else 'null')"""
         plan = json.loads(result.stdout)
         if plan and plan["incidentId"] == event_id and plan["executionStatus"] == "NOT_EXECUTED":
             print(json.dumps(plan, indent=2))
-            return
+            return plan
         time.sleep(2)
     raise RuntimeError("No matching remediation runbook arrived")
+
+
+def smoke(env):
+    first = smoke_event(env, "insufficient cpu")
+    second = smoke_event(env, "failedmount")
+    if "sched-cpu" not in [step["id"] for step in first["catalog"]["steps"]]:
+        raise RuntimeError("Scheduler case not found")
+    if second["catalog"]["caseId"] != "cs/sched-cpu+volume-mount":
+        raise RuntimeError("Correlated runbook not found")
 
 
 def main():

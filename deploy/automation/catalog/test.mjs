@@ -35,3 +35,10 @@ for (const earlier of [
   assert.equal(result.catalog.steps.length,1);
 }
 console.log("Verified " + found.size + " unique cases in the generated n8n runbook node");
+
+const normalize = workflow.nodes.find(n => n.name === "Validate and Normalize Event").parameters.jsCode;
+const normalizeEvent = new Function("$input", normalize);
+const paired = {...target,catalogRecent:[{clusterId:"local",occurredAt:"2026-11-25T11:59:00Z",eventId:"previous",signalId:signals[1].id}]};
+const normalized = normalizeEvent({all:()=>[{json:{body:paired}}]})[0].json;
+assert.equal(execute(normalized).catalog.steps.length,2);
+console.log("Verified correlation metadata survives n8n event normalization");
