@@ -1,5 +1,23 @@
 # CloudSentinels
 
+<!-- portfolio-visual-start -->
+## Engineering overview
+
+![Go](https://img.shields.io/badge/Stack-Go-176b99) ![Stars](https://img.shields.io/github/stars/ABHILASH9519/cloudsentinels)
+
+![Animated workflow](docs/portfolio-flow.svg)
+
+```mermaid
+flowchart LR
+  N0["Telemetry"] --> N1["Go API"] --> N2["Rule-based triage"] --> N3["Approval gate"]
+```
+
+Illustrative workflow: Telemetry → Go API → Rule-based triage → Approval gate. Not live telemetry or proof of production integration.
+
+[Developer profile](https://github.com/ABHILASH9519) · [Issues](https://github.com/ABHILASH9519/cloudsentinels/issues)
+<!-- portfolio-visual-end -->
+
+
 **A Go-first cloud and Kubernetes observability platform with a React dashboard, explainable incident triage and approval-gated response workflows.**
 
 Go owns the cluster inventory/monitoring API, explainable cluster analysis, Kubernetes agent and a standalone Lambda adapter. The React/TypeScript frontend is the presentation layer. The currently deployed AWS Operations Lambda still serves persistent incident/alert/profile routes, and supporting EventBridge/SQS/Zapier workers remain Node.js; porting those deployed handlers into Go is a remaining migration task.
