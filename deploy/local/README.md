@@ -1,3 +1,7 @@
+For the Floci microservice stack, follow the [root quickstart](../../README.md).
+
+## Earlier PowerShell profile
+
 # Local CloudSentinels environment
 
 This setup reuses the existing Minikube profile `cloudsentinels-local` on Docker Desktop. It does not create an EKS cluster and does not mutate Airtable records.

@@ -1,0 +1,10 @@
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!src/
+!src/frontend/
+!src/frontend/**
+**/node_modules
+**/dist
+**/.env*

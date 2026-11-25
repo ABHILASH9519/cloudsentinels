@@ -1,0 +1,78 @@
+name: cloudsentinels-local
+services:
+  floci:
+    image: floci/floci:2.5.0
+    environment:
+      FLOCI_BASE_URL: http://floci:4566
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+    volumes:
+      - floci-data:/app/data
+    ports:
+      - "127.0.0.1:4566:4566"
+
+  workflow-init:
+    image: n8nio/n8n:2.16.1
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        n8n import:workflow --input=/config/workflow.json
+        n8n publish:workflow --id=cloudsentinelsUnified
+    volumes:
+      - workflows:/home/node/.n8n
+      - ./deploy/automation/n8n-cloudsentinels-unified.json:/config/workflow.json:ro
+
+  n8n:
+    image: n8nio/n8n:2.16.1
+    depends_on:
+      workflow-init:
+        condition: service_completed_successfully
+    environment:
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_SECURE_COOKIE: "false"
+    volumes:
+      - workflows:/home/node/.n8n
+    ports:
+      - "127.0.0.1:5678:5678"
+
+  bridge:
+    build: ./deploy/local
+    depends_on: [floci, n8n]
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8091/ready',timeout=2); urlopen('http://n8n:5678/healthz/readiness',timeout=2)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+    environment:
+      N8N_SIGNING_SECRET: ${SIGNING_KEY:?run python scripts/local.py init}
+    ports:
+      - "127.0.0.1:8082:8082"
+
+  api:
+    build: .
+    network_mode: service:bridge
+    depends_on:
+      bridge:
+        condition: service_healthy
+    environment:
+      CLOUDSENTINELS_HTTP_ADDR: ":8082"
+      CLOUDSENTINELS_LOCAL_AUTH_TOKEN: ${OPERATOR_KEY:?initialize local credentials}
+      CLOUDSENTINELS_AGENT_TOKENS: '{"docker-desktop-kubernetes":"${DESKTOP_KEY}","cloudsentinels-local":"${MINIKUBE_KEY}"}'
+      CLOUDSENTINELS_AGENT_ALLOW_MUTATIONS: "false"
+      CLOUDSENTINELS_ENV: development
+      AIRTABLE_SNAPSHOT_PATH: /app/inventory.json
+      N8N_WEBHOOK_URL: http://127.0.0.1:8091/events
+      N8N_SIGNING_SECRET: ${SIGNING_KEY}
+    volumes:
+      - ./deploy/local/inventory.json:/app/inventory.json:ro
+  dashboard:
+    build:
+      context: .
+      dockerfile: deploy/local/Dashboard.Dockerfile
+    ports:
+      - "127.0.0.1:5173:80"
+
+volumes:
+  floci-data:
+  workflows:
