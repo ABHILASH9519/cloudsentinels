@@ -89,3 +89,9 @@ python scripts/local.py smoke
 ```
 
 [Floci project](https://github.com/floci-io/floci) · [Workflow definition](deploy/automation/n8n-cloudsentinels-unified.json) · [MIT license](LICENSE)
+
+## Monitoring Floci itself
+
+The `watch` service checks SQS queue availability, the dead-letter queue depth, and the status of the DynamoDB runbooks table every 30 seconds after each probe cycle. On a failure or recovery it records an event in a separate SQLite volume and sends it directly to the n8n workflow. This path can report a Floci outage while its SQS and DynamoDB endpoints are unavailable. Pending notifications retry when n8n recovers. Delivery is at least once.
+
+Read generated notifications with `docker compose --env-file .env.floci logs -f watch`. Each includes the resource, observed state, and the procedure n8n selected. The observer shares the Docker host's failure domain. Whole-host outages require an external probe. Reconciliation that changes a hosted workload requires a configured target adapter.
