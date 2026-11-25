@@ -167,3 +167,24 @@ Never put server-side credentials in `VITE_*` variables or commit `.env.local` f
 - The legacy Motoko/Internet Computer backend, generated actor bindings, Internet Identity flow and SDK dependencies have been removed from the active project. The frontend remains React/TypeScript; the cluster API and Kubernetes agent are Go. The deployed AWS Operations Lambda and event-relay/automation workers remain Node.js pending their separate Go migration.
 
 CloudSentinels should only be described as production-ready after live integration, persistence, security and end-to-end deployment checks pass in the target environment.
+
+
+## Technical walkthrough
+
+```mermaid
+sequenceDiagram
+    participant P0 as Agent telemetry
+    participant P1 as Go API
+    participant P2 as Rules
+    participant P3 as Operator approval
+    P0->>P1: Go API
+    P1->>P2: Rules
+    P2->>P3: Operator approval
+    P3-->>P0: Result or status
+```
+
+This sequence is a conceptual review aid, not a recorded execution trace. Consult the implementation and existing run instructions for supported behavior.
+
+![Last commit](https://img.shields.io/github/last-commit/ABHILASH9519/cloudsentinels) ![Open issues](https://img.shields.io/github/issues/ABHILASH9519/cloudsentinels)
+
+**Review focus:** authenticated telemetry, deterministic triage and explicit approval boundaries. The Go Lambda adapter is not the deployed Operations API; consult the production gates below.
