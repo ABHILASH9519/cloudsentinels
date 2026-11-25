@@ -80,19 +80,33 @@ def ingest(sqs, queue, secret):
     return Handler
 
 
-def process(sqs, db, queue, message):
+def process(sqs, db, queue, message, recent=None):
     event = json.loads(message["Body"])
     # Incident updates can share an event ID, including across cluster sources.
     # SQS redelivery preserves the body, including the original occurrence time.
     fingerprint = hashlib.sha256(message["Body"].encode()).hexdigest()
     key = {"eventId": {"S": event["eventId"]}, "delivery": {"S": fingerprint}}
     if "Item" not in db.get_item(TableName="runbooks", Key=key, ConsistentRead=True):
-        request = Request(WORKFLOW, data=message["Body"].encode(), headers={"Content-Type": "application/json"})
+        event.pop("catalogRecent", None)
+        cluster = event.get("clusterId")
+        if recent is not None and cluster in recent:
+            event["catalogRecent"] = recent[cluster]
+        request = Request(WORKFLOW, data=json.dumps(event).encode(), headers={"Content-Type": "application/json"})
         with urlopen(request, timeout=45) as response:
             plan = json.load(response)["sharedRemediationProcedure"]
         if plan["incidentId"] != event["eventId"] or plan["executionStatus"] != "NOT_EXECUTED":
             raise ValueError("Unexpected n8n runbook response")
         db.put_item(TableName="runbooks", Item={**key, "runbook": {"S": json.dumps(plan)}})
+        case = plan.get("catalog", {})
+        evidence = case.get("primaryEvidence")
+        if recent is not None and evidence and cluster and evidence.get("clusterId") == cluster:
+            prior = [p for p in recent.get(cluster, []) if p["signalId"] != evidence["signalId"]]
+            recent[cluster] = [evidence, *prior[:3]]
+            if len(recent) > 256:
+                recent.pop(next(iter(recent)))
+        if case:
+            print(json.dumps({"notification": case["notification"], "caseId": case["caseId"],
+                              "clusterId": cluster, "eventId": event["eventId"]}), flush=True)
     sqs.delete_message(QueueUrl=queue, ReceiptHandle=message["ReceiptHandle"])
 
 
@@ -101,11 +115,12 @@ def run():
     queue = provision(sqs, db)
     server = ThreadingHTTPServer(("127.0.0.1", 8091), ingest(sqs, queue, os.environ["N8N_SIGNING_SECRET"].encode()))
     threading.Thread(target=server.serve_forever, daemon=True).start()
+    recent = {}
     while True:
         try:
             batch = sqs.receive_message(QueueUrl=queue, WaitTimeSeconds=15)
             for message in batch.get("Messages", []):
-                process(sqs, db, queue, message)
+                process(sqs, db, queue, message, recent)
         except Exception:
             logging.exception("Delivery failed; unacknowledged messages will retry")
             time.sleep(2)

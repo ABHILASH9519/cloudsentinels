@@ -1,0 +1,117 @@
+id	aliases	diagnosis	proposed repair	verification
+sched-cpu	insufficient cpu	Compare requests with allocatable CPU on eligible nodes.	Right-size verified excessive requests or add eligible CPU capacity.	Pending pod schedules and CPU headroom remains.
+sched-memory	insufficient memory	Compare requests with allocatable memory.	Right-size verified requests or increase eligible memory capacity.	Pod schedules without memory pressure.
+sched-storage	insufficient ephemeral-storage	Inspect ephemeral requests and node disk capacity.	Provide sufficient local capacity or correct requests.	Pod binds with disk headroom.
+sched-pods	too many pods	Compare node pod count with kubelet limits and address pools.	Distribute replicas across eligible nodes.	Pod schedules with a valid IP.
+sched-gpu	insufficient nvidia.com/gpu	Inspect GPU allocatable inventory and device plugin.	Restore GPU registration or add compatible nodes.	Requested GPU is allocatable.
+sched-taint	untolerated taint	Compare node taints with intended placement policy.	Select the intended pool or review a scoped toleration.	Pod schedules on policy-approved nodes.
+sched-affinity	node affinity/selector	Compare necessary node labels with selectors.	Correct stale selectors or labels through configuration review.	An eligible matching node accepts the pod.
+sched-anti-affinity	pod anti-affinity rules	Check topology domains and required separation.	Add eligible domains or review an overly strict rule.	Replicas meet separation requirements.
+sched-spread	topology spread constraints	Check eligible domains and allowed skew.	Rebalance capacity or restore topology labels.	Replica skew meets policy.
+sched-port	free ports for the requested pod ports	Check hostPort allocations on eligible nodes.	Choose a free node or remove an unnecessary hostPort.	Pod schedules and listener binds.
+sched-zone	volume node affinity conflict	Compare volume and node topology.	Schedule into the correct zone or plan storage migration.	Volume mounts on a compatible node.
+sched-attachment	max volume count	Check CSI attachment limit and usage.	Redistribute consumers or add eligible nodes.	Volume attaches successfully.
+sched-cordoned	node(s) were unschedulable	Identify cordons and their maintenance owners.	Restore available capacity or resume nodes after maintenance.	Eligible nodes become schedulable.
+sched-unbound	unbound immediate persistentvolumeclaims	Inspect claim binding, class and capacity.	Provide compatible storage or correct claim class.	Claim binds and pod schedules.
+sched-preemption	no preemption victims found	Check priority and requests against available capacity.	Provide capacity or revise excessive requests.	Pod schedules without disrupting critical workloads.
+image-auth	pull access denied|authentication required	Confirm registry access and pull-secret reference.	Restore approved registry access for the workload.	The pinned image pulls.
+image-tag	manifest unknown|manifest not found	Compare published artifact with rendered image reference.	Restore the correct tag or digest.	Image resolves and pulls.
+image-platform	no matching manifest	Check image manifest platforms and node architecture.	Publish a compatible build or constrain placement.	Compatible container starts.
+image-rate	toomanyrequests|pull rate limit	Verify registry throttle response and pull frequency.	Use an authorized mirror or reduce redundant pulls.	Pull completes without throttling.
+image-name	invalidimagename|invalid reference format	Check image reference syntax.	Correct reference in workload template.	Kubelet accepts the image reference.
+image-secret	failedtoretrieveimagepullsecret	Confirm secret reference exists in namespace.	Restore the intended pull secret from its owner.	Replacement pod pulls image.
+image-backoff	imagepullbackoff|errimagepull|back-off pulling image	Inspect earliest image pull failure.	Resolve verified registry, credential or reference error.	Container starts after successful pull.
+image-gc	imagegcfailed	Check image filesystem usage and GC logs.	Recover disk headroom with node maintenance procedure.	GC completes and disk pressure clears.
+image-capacity	invaliddiskcapacity	Inspect image filesystem mount and runtime statistics.	Repair mount or statistics provider if capacity remains zero.	Kubelet reports positive capacity.
+probe-ready	readiness probe failed	Check configured readiness path and dependencies.	Restore failing dependency or correct probe endpoint.	Pod becomes Ready and joins endpoints.
+probe-live	liveness probe failed	Review previous logs and liveness timing.	Fix handler or measured timing mismatch.	Restart count stabilizes.
+probe-start	startup probe failed	Measure startup duration and inspect boot logs.	Fix startup or adjust measured startup window.	Startup probe succeeds.
+hook-post	failedpoststarthook|poststart hook failed	Inspect hook result and required files.	Fix lifecycle hook in workload template.	New container completes postStart.
+hook-pre	failedprestophook|prestop hook failed	Check hook duration and termination grace.	Repair shutdown handling and grace period.	Planned termination completes.
+pod-crash	crashloopbackoff|back-off restarting failed container	Inspect previous logs and termination reasons.	Fix failing dependency or review reverting the identified regression.	Ready time increases without repeated restarts.
+pod-oom	oomkilled|oom killing	Compare peak memory with limit and pressure.	Fix verified leak or resize within available capacity.	Representative workload completes without OOM.
+pod-config	createcontainerconfigerror	Check ConfigMap, Secret and environment references.	Restore required configuration or correct reference.	Container configuration resolves.
+pod-command	executable file not found|exec format error	Check entrypoint path and binary architecture.	Publish compatible build or correct entrypoint.	Intended process starts.
+pod-readonly	read-only file system	Identify attempted write path.	Mount intended writable storage at that path.	Write succeeds with filesystem policy intact.
+pod-permission	permission denied	Compare required operation with runtime identity.	Review minimum necessary access to the specific resource.	Authorized operation succeeds.
+pod-evicted	evicted|evictionthresholdmet	Check eviction details and node conditions.	Relieve pressure and reconcile workload controller.	Replacement pod stays Ready.
+pod-kill	failedkillpod|failed to kill pod	Check kubelet and runtime logs.	Recover runtime through node maintenance procedure.	Stuck sandbox exits and replicas converge.
+pod-sandbox	failedcreatepodsandbox|failed to create pod sandbox	Check CRI and network setup errors.	Repair failing sandbox dependency.	Pod receives IP and starts.
+pod-sandbox-change	sandboxchanged|pod sandbox changed	Check runtime and network churn.	Stabilize runtime or network plugin.	Sandbox remains stable.
+pod-sync	failedsync|error syncing pod	Inspect first synchronization error.	Correct verified volume, runtime or configuration dependency.	Kubelet reconciles desired spec.
+node-ready	nodenotready|node not ready	Check node conditions, kubelet and API connectivity.	Recover kubelet service or replace unhealthy worker via maintenance.	Ready True and lease renews.
+node-memory	memorypressure|memory pressure	Inspect memory demand and top consumers.	Correct workload pressure or add capacity.	MemoryPressure clears.
+node-disk	diskpressure|disk pressure	Check nodefs and imagefs bytes and inodes.	Recover disposable capacity or expand filesystem.	DiskPressure clears.
+node-pid	pidpressure|pid pressure	Inspect node PID availability and workload process count.	Correct process leakage and restore headroom.	PIDPressure clears.
+node-network	networkunavailable|node network unavailable	Check CNI daemon and node routing.	Restore expected network add-on.	Condition clears and cross-node traffic works.
+node-runtime	containerruntimenotready|container runtime is down	Check configured CRI service status.	Recover runtime using maintenance procedure.	Runtime healthy and new pod starts.
+node-reboot	rebooted|system reboot	Compare boot time with maintenance events.	Restore startup services and reconcile replicas.	Node and replicas healthy.
+node-clock	clock skew|clock not synchronized	Compare time synchronization against trusted peers.	Repair authorized time service.	Clock offset stays within tolerance.
+node-fs	filesystemreadonly|filesystem is read-only	Check kernel and filesystem health.	Plan storage repair with backup coverage.	Filesystem passes integrity checks.
+node-cpu	cputhresholdexceeded|cpu throttling	Check demand, limits and CPU saturation.	Correct offending workload or add capacity.	CPU latency and saturation return within bounds.
+node-shutdown	nodeshutdown|node is shutting down	Check maintenance context and replacement capacity.	Restore available capacity and reconcile replicas.	Healthy desired replica count returns.
+volume-attach	multi-attach error	Identify prior attachment and active writer.	Complete supported handoff after prior writer stops.	Only intended writer has attachment.
+volume-timeout	failedattachvolume|attachvolume.attach failed	Check VolumeAttachment and CSI operation.	Resolve attacher error and let CSI retry.	Attachment becomes healthy.
+volume-mount	failedmount|mountvolume.setup failed	Inspect first mount error and CSI logs.	Correct mount options, path or reference.	Pod mounts expected filesystem.
+volume-detach	faileddetachvolume	Check consumers and CSI detach status.	Finish graceful unmount and let controller reconcile.	Obsolete attachment disappears.
+volume-unmount	failedunmount	Check active mount owners.	Complete graceful workload shutdown and unmount.	Node releases mount without data loss.
+volume-provision	provisioningfailed|failed to provision volume	Check PVC events and provisioner response.	Correct class parameters or backing capacity.	Claim becomes Bound.
+volume-bind	volumemismatch|failedbinding	Compare claim and volume selectors, mode and capacity.	Provide compatible PV or correct claim settings.	Expected PV binds.
+volume-resize	volumeresizefailed|failed to expand volume	Check expansion policy and backend capacity.	Resolve limiting condition and retry supported expansion.	PVC reports requested capacity.
+volume-fsresize	filesystemresizefailed	Check filesystem and node expansion support.	Perform supported filesystem expansion with backup coverage.	Mounted capacity increases.
+volume-lost	claimlost|claimmisbound	Check claim ownership UID and retention policy.	Reconcile storage ownership with responsible operator.	Correct claim reads expected data.
+volume-snapshot	snapshotcreationfailed	Check snapshot controller, class and driver.	Restore matching snapshot class or backend.	Snapshot becomes readyToUse.
+volume-csi	driver name not found|registered csi drivers	Check CSINode and registration logs.	Restore intended CSI node plugin.	Driver registers and sample mount succeeds.
+volume-space	no space left on device	Check bytes and inodes on named volume.	Expand disk or remove approved disposable data.	Failed write succeeds with headroom.
+volume-quota	disk quota exceeded	Check storage tenant limits.	Review quota increase or approved retention change.	Write succeeds within quota.
+volume-mode	incompatible accessmode|incompatible volumemode	Check claim mode against storage driver.	Choose compatible class or controlled migration.	Mounted volume supports required mode.
+net-ipam	failed to assign an ip address|no ip addresses available	Inspect CNI pool and node subnet use.	Expand intended pool or release verified stale leases.	New pod receives usable IP.
+net-cni	cni plugin not initialized|network plugin is not ready	Check CNI configuration and daemon status.	Restore expected network add-on configuration.	Pod networking initializes.
+net-dns	no such host|temporary failure in name resolution	Check queried DNS name and CoreDNS endpoints.	Correct record or resolver path.	Workload resolves expected address.
+net-route	no route to host|network is unreachable	Check node routes and target endpoint.	Restore intended routing or correct destination.	Source reaches intended endpoint.
+net-refused	connection refused	Check listener, readiness and service targetPort.	Restore listener or correct port mapping.	Connection succeeds.
+net-timeout	i/o timeout|connection timed out	Check intended source, route and backend latency.	Resolve verified network or backend problem.	Requests finish within time budget.
+net-reset	connection reset by peer	Correlate resets with backend restarts and proxy settings.	Stabilize backend or correct connection lifecycle.	Repeated requests finish without resets.
+net-lb	syncloadbalancerfailed|failed to ensure load balancer	Check service events and load balancer controller.	Correct supported settings or restore controller capacity.	Address routes traffic.
+net-endpoints	failedtoupdateendpoint	Check endpoint controller error and service selector.	Correct selector or restore controller.	Expected ready EndpointSlice appears.
+net-dnsconfig	dnsconfigforming	Check limits on search domains and nameservers.	Trim redundant DNS configuration.	Effective resolver includes required entries.
+net-portbind	address already in use	Check owner of conflicting port.	Correct conflict or allocate dedicated port.	Intended listener binds.
+tls-expired	certificate has expired|certificate expired	Check expiry, chain and node time.	Renew certificate through authorized issuer.	TLS presents valid certificate.
+tls-trust	certificate signed by unknown authority	Check issuer chain and configured trust source.	Restore approved trust bundle.	Client validates the certificate chain.
+tls-host	certificate is valid for|hostname mismatch	Compare requested name and SAN entries.	Correct service hostname or renew proper certificate.	Hostname validation succeeds.
+tls-secret	failed to load tls secret|invalid tls secret	Check matching certificate and key in managed secret.	Restore appropriate TLS material via secret manager.	Controller presents intended TLS identity.
+admission-webhook	failed calling webhook|failed to call webhook	Check webhook endpoints and serving chain.	Restore backend and valid CA chain.	Approved dry-run request succeeds.
+admission-denied	denied the request|admission webhook denied	Inspect named policy and rejected field.	Adjust manifest to comply with policy.	Server-side dry run passes.
+admission-quota	exceeded quota|exceededquota	Check namespace usage and request.	Right-size or request reviewed quota increase.	Workload admitted within quota.
+admission-limit	maximum cpu usage per container|minimum memory usage per container	Check namespace LimitRange.	Set compliant resources based on measurements.	Workload admitted.
+admission-psa	violates podsecurity|violates pod security	Inspect specific policy violation.	Align security context to namespace policy.	Reviewed spec passes policy validation.
+admission-sa	serviceaccount not found|error looking up service account	Confirm account exists in namespace.	Restore intended managed identity or reference.	Pod uses intended account.
+config-key	couldn't find key|could not find key	Check requested key and config revision.	Correct reference or restore entry.	Expected configuration is available.
+config-env	invalidenvironmentvariablenames	Check derived environment variable names.	Map keys to valid explicit variable names.	Expected variables present.
+config-immutable	field is immutable	Identify immutable field and object identity.	Plan controlled replacement preserving data.	Replacement exposes intended settings.
+config-schema	unknown field|strict decoding error	Compare manifest with served schema.	Correct fields or choose supported API version.	Server-side validation succeeds.
+config-crd	no matches for kind|could not find the requested resource	Check API discovery and required CRD version.	Install matching CRD or migrate manifest.	Discovery recognizes resource.
+config-conflict	object has been modified|operation cannot be fulfilled on	Check concurrent writers and ownership.	Reconcile from latest resource version.	Update succeeds without repeat conflicts.
+controller-rollout	progressdeadlineexceeded|deploymentunhealthy	Check rollout history, readiness and controller status.	Repair blocking revision or review rollback.	Available replicas reach desired count.
+controller-create	failedcreate|failed to create pod	Check controller events and admission response.	Resolve reported template, capacity or policy error.	Controller creates desired pods.
+controller-delete	faileddelete|failed to delete pod	Check resource finalizer and termination state.	Repair responsible controller and allow graceful completion.	Desired state converges.
+controller-scale	failedgetscale|failed to get scale	Check scale target name and subresource.	Correct target or restore supported scale interface.	Autoscaler reads target state.
+hpa-resource	failedgetresourcemetric|failed to get resource metric	Check metrics API and pod requests.	Restore metrics or correct requests.	HPA gets fresh metric.
+hpa-external	failedgetexternalmetric|failed to get external metric	Check configured metrics adapter and selector.	Restore adapter source or adjust selector.	HPA receives fresh external metric.
+hpa-object	failedgetobjectmetric	Check named object metric source.	Correct mapping or recover adapter.	Object metric resolves.
+hpa-pods	failedgetpodsmetric	Check selected pods and custom metric availability.	Correct target selector or metric mapping.	Pod metric resolves.
+hpa-update	failedrescale|failed to rescale	Check scale target error and identity.	Resolve validation or authorized permission issue.	Target accepts intended replicas.
+hpa-compute	failedcomputemetricsreplicas|invalid metrics	Check metric specifications and responses.	Correct invalid target or missing metric.	HPA calculates replicas.
+job-backoff	backofflimitexceeded|job has reached the specified backoff limit	Inspect failed pods and completed side effects.	Repair job input and review idempotent replay.	Replacement job completes once.
+job-deadline	deadlineexceeded|active deadline exceeded	Compare job runtime and deadlines.	Repair blocking dependency or revise measured budget.	Job finishes within deadline.
+cron-missed	toomanymissedtimes|too many missed start times	Check scheduler downtime and deadline.	Restore scheduler and review catch-up policy.	Next expected execution starts.
+cron-active	jobalreadyactive	Check running jobs and concurrency policy.	Resolve stalled execution before reviewing schedule.	Next run follows overlap policy.
+pdb-eviction	would violate the pod's disruption budget|cannot evict pod	Check healthy replicas and disruptionsAllowed.	Restore sufficient healthy capacity.	Approved disruption becomes possible.
+api-throttle	too many requests|client-side throttling	Check API request rates and retry behavior.	Reduce excessive polling or tune reviewed concurrency.	API calls finish within quota.
+api-timeout	context deadline exceeded|request did not complete within requested timeout	Check API latency and dependency errors.	Recover slow dependency.	Request completes within deadline.
+api-etcd	etcdserver: request timed out|etcdserver: leader changed	Check quorum, peer latency and disk health.	Restore healthy peers through supported recovery.	Quorum stabilizes and writes succeed.
+api-storage	etcdserver: mvcc: database space exceeded	Check storage quota and backup health.	Follow supported backup and compaction recovery.	Quota alarm clears and writes succeed.
+api-unavailable	service unavailable|apiserverunavailable	Check API endpoints and control plane health.	Recover unhealthy endpoint through owner.	Authenticated request succeeds.
+runtime-cgroup	failed to create cgroup|cgroup driver mismatch	Compare kubelet and runtime driver.	Align supported configuration during maintenance.	Sandbox starts with correct accounting.
+runtime-overlay	failed to mount overlay|overlayfs mount failed	Check disk and storage driver health.	Repair affected node storage configuration.	Image layers mount correctly.
+runtime-socket	failed to connect to containerd|containerd.sock: connect	Check configured CRI socket and service.	Restore runtime service.	CRI requests and readiness succeed.

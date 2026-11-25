@@ -26,4 +26,22 @@ const procedure = {
     namespace: e.namespace || null
   }
 };
+const incidentCase = classify(e);
+if (incidentCase) {
+  procedure.catalog = incidentCase;
+  procedure.status = incidentCase.lifecycle === "activity" ? "observe-and-audit" : "diagnostic-ready";
+  procedure.priority = ({critical:"P1",high:"P2",warning:"P3",medium:"P3",degraded:"P3"})[e.severity] || "P4";
+  procedure.notification = incidentCase.notification;
+  procedure.mutationActions = [];
+  procedure.requiresHumanApproval = incidentCase.lifecycle !== "activity";
+  if (incidentCase.steps.length) {
+    procedure.recommendedActions = incidentCase.steps.map(s => s.inspect);
+    procedure.proposedRepairs = incidentCase.steps.map(s => s.proposedRepair);
+    procedure.verificationSteps = incidentCase.steps.map(s => s.verify);
+  } else {
+    procedure.recommendedActions = incidentCase.diagnostic ? [incidentCase.diagnostic] : [];
+    procedure.proposedRepairs = incidentCase.proposedRepair ? [incidentCase.proposedRepair] : [];
+    procedure.verificationSteps = [incidentCase.verification];
+  }
+}
 return [{json:{...e, sharedRemediationProcedure:procedure, remediationExecuted:false}}];

@@ -66,6 +66,13 @@ services:
       N8N_SIGNING_SECRET: ${SIGNING_KEY}
     volumes:
       - ./deploy/local/inventory.json:/app/inventory.json:ro
+  watch:
+    build: ./deploy/local
+    command: ["python", "-u", "watch.py"]
+    depends_on: [floci, n8n]
+    restart: unless-stopped
+    volumes:
+      - monitor-data:/var/lib/cloudsentinels
   dashboard:
     build:
       context: .
@@ -75,4 +82,5 @@ services:
 
 volumes:
   floci-data:
+  monitor-data:
   workflows:

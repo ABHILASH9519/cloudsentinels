@@ -13,7 +13,17 @@ let mutationActions = [];
 let status = "observe-and-audit";
 let reason = "Event is recorded and triaged; no target-specific mutation adapter is selected.";
 
-if (/lambda|serverless/.test(text)) {
+if (source === "floci.monitor") {
+  target = e.resourceName;
+  adapter = "floci-observer";
+  const table = e.resourceName === "runbooks";
+  status = e.resourceState === "healthy" ? "recovered" : "diagnostic-ready";
+  reason = e.summary;
+  actions = status === "recovered" ? ["verify-next-probe"] :
+    table ? ["inspect-floci-health", "describe-runbooks-table", "check-persistent-volume"] :
+    e.resourceState === "backlogged" ? ["inspect-dead-letter-message", "inspect-n8n-execution", "verify-consumer-before-redrive"] :
+    ["inspect-floci-health", "verify-queue-exists", "inspect-bridge-logs"];
+} else if (/lambda|serverless/.test(text)) {
   target = "aws-lambda";
   adapter = "aws-lambda-readonly";
   actions = ["inspect-errors", "inspect-throttles", "inspect-duration", "inspect-logs", "check-concurrency"];

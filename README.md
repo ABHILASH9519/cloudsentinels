@@ -89,3 +89,29 @@ python scripts/local.py smoke
 ```
 
 [Floci project](https://github.com/floci-io/floci) · [Workflow definition](deploy/automation/n8n-cloudsentinels-unified.json) · [MIT license](LICENSE)
+
+## Monitoring Floci itself
+
+The `watch` service checks SQS queue availability, the dead-letter queue depth, and the status of the DynamoDB runbooks table every 30 seconds after each probe cycle. On a failure or recovery it records an event in a separate SQLite volume and sends it directly to the n8n workflow. This path can report a Floci outage while its SQS and DynamoDB endpoints are unavailable. Pending notifications retry when n8n recovers. Delivery is at least once.
+
+Read generated notifications with `docker compose --env-file .env.floci logs -f watch`. Each includes the resource, observed state, and the procedure n8n selected. The observer shares the Docker host's failure domain. Whole-host outages require an external probe. Reconciliation that changes a hosted workload requires a configured target adapter.
+
+## Incident catalog and automated triage
+
+The n8n workflow embeds **116 curated Kubernetes failure signals** and supports **6,786 distinct cases**, consisting of 116 individual signals and 6,670 two-signal combinations. A pair represents distinct observations from the same cluster within ten minutes. Each observation retains its resource identity and timestamp. Pairing is evidence for triage, and does not establish a shared root cause. The bridge retains up to four recent distinct signals per cluster in process memory.
+
+The catalog covers scheduling, image pulls, pod lifecycle, probes, node conditions, storage, networking, TLS, admission, controllers, autoscaling, jobs, API availability and runtime failures. It produces a notification, diagnostic steps, proposed repairs and verification criteria. Unknown warnings receive a triage runbook. Recent Normal Kubernetes Events are recorded as activity. The agent also reports node conditions and unhealthy deployment status. Collection depends on what the Kubernetes API exposes and polling frequency.
+
+Runbooks are stored in Floci DynamoDB and the bridge emits structured notification logs. n8n prepares advisory actions for operator review. Recovery is verified separately. The existing Floci observer reports storage and queue outages through n8n.
+
+```sh
+node deploy/automation/catalog/export.mjs > incident-cases.csv
+node deploy/automation/catalog/test.mjs
+node deploy/automation/build-unified-workflow.js
+python scripts/local.py up
+docker compose --env-file .env.floci logs -f bridge watch
+```
+
+The CSV is generated from [signals.tsv](deploy/automation/catalog/signals.tsv). The test executes every case through the generated n8n runbook Code node using synthetic event inputs. It does not inject actual failures into Kubernetes.
+
+References: [Kubernetes application troubleshooting](https://kubernetes.io/docs/tasks/debug/debug-application/) and [Kubernetes probes](https://kubernetes.io/docs/concepts/workloads/pods/probes/).
