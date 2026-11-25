@@ -24,6 +24,8 @@ import {
   useState,
 } from "react";
 
+import { localOperatorMode, localOperatorToken, setLocalOperatorToken } from "./localOperator";
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
@@ -62,7 +64,53 @@ function mapUser(user: User | null): AuthUser | null {
     : null;
 }
 
+function LocalOperatorProvider({ children }: PropsWithChildren) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [input, setInput] = useState("");
+  const [error, setError] = useState("");
+  async function login() {
+    try {
+      const response = await fetch("http://127.0.0.1:8082/api/v1/auth/me", {
+        headers: { Authorization: `Bearer ${input}` },
+      });
+      if (!response.ok) throw new Error("The API rejected this operator token.");
+      const principal = await response.json();
+      setLocalOperatorToken(input);
+      setInput("");
+      setError("");
+      setUser({ id: principal.uid, name: "Local operator", email: null, roles: principal.roles });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The local API is unavailable.");
+    }
+  }
+  if (!user) return (
+    <main className="mx-auto mt-24 max-w-sm space-y-4 p-4">
+      <h1 className="text-2xl font-bold">CloudSentinels</h1>
+      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void login(); }}>
+        <label>Local operator token<input className="block w-full rounded border bg-background p-2"
+          type="password" autoComplete="off" required value={input} onChange={(e) => setInput(e.target.value)} /></label>
+        <p className="text-sm">Use OPERATOR_KEY from your private .env.floci file.</p>
+        <button className="rounded bg-primary px-4 py-2 text-primary-foreground" type="submit">Connect</button>
+        {error && <p role="alert">{error}</p>}
+      </form>
+    </main>
+  );
+  const unavailable = async () => { throw new Error("Use local operator sign-in."); };
+  return <AuthContext.Provider value={{
+    isLoaded: true, isConfigured: true, isSignedIn: true, user, roles: user.roles,
+    isOperator: user.roles.includes("operator"), error: null,
+    signIn: unavailable, signInEmail: unavailable, signUpEmail: unavailable,
+    signOut: async () => { setLocalOperatorToken(null); window.location.reload(); },
+    getToken: async () => localOperatorToken(),
+  }}>{children}</AuthContext.Provider>;
+}
+
 export function FirebaseAuthProvider({ children }: PropsWithChildren) {
+  return localOperatorMode ? <LocalOperatorProvider>{children}</LocalOperatorProvider> :
+    <FirebaseProvider>{children}</FirebaseProvider>;
+}
+
+function FirebaseProvider({ children }: PropsWithChildren) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(
     missingConfig.length

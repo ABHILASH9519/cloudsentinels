@@ -512,6 +512,9 @@ func (a *agent) request(method, path string, payload any, output any) error {
 }
 
 func kubectl(ctx context.Context, args ...string) (string, error) {
+	if name := strings.TrimSpace(os.Getenv("CLOUDSENTINELS_AGENT_KUBECTL_CONTEXT")); name != "" {
+		args = append([]string{"--context", name}, args...)
+	}
 	cmd := exec.CommandContext(ctx, "kubectl", args...)
 	output, err := cmd.CombinedOutput()
 	return string(output), err

@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -6,24 +5,55 @@ interface Props {
   className?: string;
 }
 
+const SEVERITY_MAP: Record<string, { dot: string; text: string; label: string }> = {
+  critical: {
+    dot: "bg-red-500",
+    text: "text-red-400",
+    label: "Critical",
+  },
+  high: {
+    dot: "bg-amber-500",
+    text: "text-amber-400",
+    label: "High",
+  },
+  medium: {
+    dot: "bg-sky-400",
+    text: "text-sky-300",
+    label: "Medium",
+  },
+  low: {
+    dot: "bg-emerald-500",
+    text: "text-emerald-400",
+    label: "Low",
+  },
+  info: {
+    dot: "bg-slate-400",
+    text: "text-slate-300",
+    label: "Info",
+  },
+};
+
 export function SeverityBadge({ severity, className }: Props) {
   const lower = severity.toLowerCase();
-  const variants: Record<string, string> = {
-    critical: "bg-red-500/20 text-red-400 border-red-500/30",
-    high: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-    medium: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-    low: "bg-green-500/20 text-green-400 border-green-500/30",
+  const style = SEVERITY_MAP[lower] ?? {
+    dot: "bg-slate-400",
+    text: "text-muted-foreground",
+    label: severity,
   };
+
   return (
-    <Badge
-      variant="outline"
+    <span
       className={cn(
-        "capitalize font-mono text-xs font-semibold border",
-        variants[lower] ?? "bg-muted text-muted-foreground",
+        "inline-flex items-center gap-1.5 font-mono text-xs font-medium whitespace-nowrap",
+        style.text,
         className,
       )}
     >
-      {severity}
-    </Badge>
+      <span
+        className={cn("h-1.5 w-1.5 shrink-0 rounded-[2px]", style.dot)}
+        aria-hidden="true"
+      />
+      {style.label}
+    </span>
   );
 }

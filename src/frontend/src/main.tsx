@@ -1,4 +1,5 @@
-﻿import ReactDOM from "react-dom/client";
+import ReactDOM from "react-dom/client";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import App from "./App";
 import { FirebaseAuthProvider } from "./auth/FirebaseAuth";
 import "./index.css";
@@ -11,7 +12,9 @@ declare global {
   }
 }
 ReactDOM.createRoot(document.getElementById("root")!).render(
+  <ErrorBoundary>
   <FirebaseAuthProvider>
     <App />
-  </FirebaseAuthProvider>,
+  </FirebaseAuthProvider>
+  </ErrorBoundary>,
 );
