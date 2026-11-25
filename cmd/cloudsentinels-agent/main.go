@@ -44,6 +44,9 @@ type kubeList struct {
 }
 
 type kubeItem struct {
+	Series struct {
+		LastObservedTime string `json:"lastObservedTime"`
+	} `json:"series"`
 	Metadata struct {
 		Name      string `json:"name"`
 		Namespace string `json:"namespace"`
@@ -144,7 +147,7 @@ func (a *agent) collectAndSend() bool {
 		log.Printf("could not read pods: %v", err)
 		return false
 	}
-	eventsRaw, _ := kubectl(ctx, "get", "events", "-A", "--field-selector", "type=Warning", "-o", "json")
+	eventsRaw, _ := kubectl(ctx, "get", "events", "-A", "-o", "json")
 	deploymentsRaw, _ := kubectl(ctx, "get", "deployments", "-A", "-o", "json")
 	var nodes, pods, events, deployments kubeList
 	if json.Unmarshal([]byte(nodesRaw), &nodes) != nil || json.Unmarshal([]byte(podsRaw), &pods) != nil {
@@ -180,7 +183,9 @@ func (a *agent) collectAndSend() bool {
 			}
 		}
 	}
-	recentWarnings := filterRecentWarnings(events.Items, time.Now().UTC(), 5*time.Minute)
+	now := time.Now().UTC()
+	recentWarnings := filterRecentWarnings(events.Items, now, 5*time.Minute)
+	recentEvents := append(recentWarnings, filterEvents(events.Items, now, 5*time.Minute, "Normal")...)
 	cpu, memory := readNodeMetrics(ctx)
 	payload := httpapi.LocalTelemetry{
 		ClusterID: a.clusterID, Context: a.context, SourceType: a.sourceType, Environment: a.environment,
@@ -193,7 +198,7 @@ func (a *agent) collectAndSend() bool {
 		return false
 	}
 	log.Printf("telemetry sent: nodes=%d ready_nodes=%d pods=%d ready_pods=%d warning_events=%d cpu=%.1f%%", payload.NodeCount, payload.ReadyNodeCount, payload.PodCount, payload.HealthyPodCount, payload.WarningEvents, payload.CPUUsagePercent)
-	a.forwardClusterSignals(nodes.Items, recentWarnings, deployments.Items, cpu)
+	a.forwardClusterSignals(nodes.Items, recentEvents, deployments.Items, cpu)
 	return true
 }
 
@@ -216,21 +221,19 @@ func allowedAgentAPIURL(raw string, allowInternalHTTP bool) bool {
 }
 
 func filterRecentWarnings(events []kubeItem, now time.Time, window time.Duration) []kubeItem {
+	return filterEvents(events, now, window, "Warning")
+}
+
+func filterEvents(events []kubeItem, now time.Time, window time.Duration, eventType string) []kubeItem {
 	if window <= 0 {
 		return nil
 	}
 	recent := make([]kubeItem, 0, len(events))
 	for _, event := range events {
-		if !strings.EqualFold(event.Type, "Warning") {
+		if !strings.EqualFold(event.Type, eventType) {
 			continue
 		}
-		timestamp := event.LastTimestamp
-		if timestamp == "" {
-			timestamp = event.EventTime
-		}
-		if timestamp == "" {
-			timestamp = event.FirstTimestamp
-		}
+		timestamp := event.observedTime()
 		occurredAt, err := time.Parse(time.RFC3339Nano, timestamp)
 		if err != nil {
 			continue
@@ -251,7 +254,7 @@ func mapKubernetesWarning(event kubeItem) (eventType, severity string, ok bool) 
 	message := strings.ToLower(strings.TrimSpace(event.Message))
 	kind := strings.ToLower(strings.TrimSpace(event.InvolvedObject.Kind))
 	switch {
-	case kind == "pod" && (strings.Contains(reason, "backoff") || strings.Contains(message, "crashloopbackoff") || strings.Contains(message, "back-off restarting failed container")):
+	case kind == "pod" && (strings.Contains(message, "crashloopbackoff") || strings.Contains(message, "back-off restarting failed container")):
 		return "PodCrashLoopBackOff", "high", true
 	case kind == "node" && (reason == "notready" || strings.Contains(message, "node not ready")):
 		return "NodeNotReady", "critical", true
@@ -277,6 +280,7 @@ func lambdaEventSignature(secret, timestamp, clusterID string, raw []byte) strin
 }
 
 type lambdaClusterEvent struct {
+	ObservedAt   string `json:"-"`
 	EventID      string `json:"eventId"`
 	EventType    string `json:"eventType"`
 	Severity     string `json:"severity"`
@@ -294,30 +298,27 @@ func (a *agent) forwardClusterSignals(nodes, events, deployments []kubeItem, cpu
 			case condition.Type == "Ready" && condition.Status != "True":
 				id := stableEventID(a.clusterID, "node", node.Metadata.Name, condition.LastTransitionTime, condition.Status)
 				a.postClusterEvent(lambdaClusterEvent{EventID: id, EventType: "NodeNotReady", Severity: "critical", Title: "Kubernetes node is not Ready", Message: "Node condition Ready=" + condition.Status, ResourceKind: "Node", ResourceName: node.Metadata.Name})
-			case condition.Type == "MemoryPressure" && condition.Status == "True":
-				id := stableEventID(a.clusterID, "memory", node.Metadata.Name, condition.LastTransitionTime)
-				a.postClusterEvent(lambdaClusterEvent{EventID: id, EventType: "MemoryPressure", Severity: "high", Title: "Kubernetes node memory pressure", Message: "Node reports MemoryPressure=True", ResourceKind: "Node", ResourceName: node.Metadata.Name})
+			case (condition.Type == "MemoryPressure" || condition.Type == "DiskPressure" || condition.Type == "PIDPressure" || condition.Type == "NetworkUnavailable") && condition.Status == "True":
+				id := stableEventID(a.clusterID, condition.Type, node.Metadata.Name, condition.LastTransitionTime)
+				a.postClusterEvent(lambdaClusterEvent{EventID: id, EventType: condition.Type, Severity: "high", Title: "Kubernetes node " + condition.Type, Message: "Node reports " + condition.Type + "=True", ResourceKind: "Node", ResourceName: node.Metadata.Name})
 			}
 		}
 	}
 	for _, event := range events {
 		eventType, severity, ok := mapKubernetesWarning(event)
 		if !ok {
-			continue
+			eventType, severity = "kubernetes.warning", "warning"
+			if strings.EqualFold(event.Type, "Normal") {
+				eventType, severity = "kubernetes.normal", "info"
+			}
 		}
-		eventTime := event.LastTimestamp
-		if eventTime == "" {
-			eventTime = event.FirstTimestamp
-		}
-		if eventTime == "" {
-			eventTime = event.EventTime
-		}
+		eventTime := event.observedTime()
 		id := stableEventID(a.clusterID, event.Metadata.UID, event.InvolvedObject.Kind, event.InvolvedObject.Namespace, event.InvolvedObject.Name, event.Reason, eventTime, event.Message)
 		a.postClusterEvent(lambdaClusterEvent{
 			EventID: id, EventType: eventType, Severity: severity,
-			Title:   "Kubernetes " + eventType + ": " + event.InvolvedObject.Name,
-			Message: event.Message, Namespace: event.InvolvedObject.Namespace,
-			ResourceKind: event.InvolvedObject.Kind, ResourceName: event.InvolvedObject.Name,
+			Title:     truncate("Kubernetes "+event.Reason+": "+event.InvolvedObject.Name, 176),
+			Message: truncate(event.Message, 996), Namespace: event.InvolvedObject.Namespace,
+			ResourceKind: event.InvolvedObject.Kind, ResourceName: event.InvolvedObject.Name, ObservedAt: eventTime,
 		})
 	}
 	for _, deployment := range deployments {
@@ -354,12 +355,25 @@ func (a *agent) forwardClusterSignals(nodes, events, deployments []kubeItem, cpu
 	}
 }
 
+func (e kubeItem) observedTime() string {
+	for _, value := range []string{e.Series.LastObservedTime, e.LastTimestamp, e.EventTime, e.FirstTimestamp} {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func (a *agent) postClusterEvent(event lambdaClusterEvent) {
+	occurred, err := time.Parse(time.RFC3339Nano, event.ObservedAt)
+	if err != nil {
+		occurred = time.Now().UTC()
+	}
 	payload := httpapi.AgentEvent{
 		ClusterID: a.clusterID, ClusterName: a.context, EventID: event.EventID,
 		EventType: event.EventType, Severity: event.Severity, Title: event.Title,
 		Summary: event.Message, ResourceID: event.ResourceName, ResourceKind: event.ResourceKind,
-		ResourceName: event.ResourceName, Namespace: event.Namespace, OccurredAt: time.Now().UTC(),
+		ResourceName: event.ResourceName, Namespace: event.Namespace, OccurredAt: occurred,
 	}
 	if err := a.post("/api/v1/agent/events", payload, nil); err != nil {
 		log.Printf("cluster event upload failed: type=%s error=%v", event.EventType, err)

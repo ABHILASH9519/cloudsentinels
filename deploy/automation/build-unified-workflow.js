@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { signals } from "./catalog/catalog.mjs";
+
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const workflowPath = path.join(dir, "n8n-cloudsentinels-events.json");
 const destination = path.join(dir, "n8n-cloudsentinels-unified.json");
@@ -20,7 +22,7 @@ webhook.parameters.path = "cloudsentinels/unified-events";
 webhook.webhookId = "c9e9d79b-0a9c-49f2-ae32-82d16d97c7e5";
 
 const oldAllowlist = "const allowed = ['schemaVersion','eventId','eventType','occurredAt','clusterId','clusterName','sourceType','environment','severity','title','summary'];";
-const newAllowlist = "const allowed = ['schemaVersion','eventId','eventType','occurredAt','clusterId','clusterName','sourceType','environment','severity','title','summary','resourceId','resourceKind','resourceName','namespace','region','service','accountId','action','resourceState','functionName','alarmName'];";
+const newAllowlist = "const allowed = ['schemaVersion','eventId','eventType','occurredAt','clusterId','clusterName','sourceType','environment','severity','title','summary','resourceId','resourceKind','resourceName','namespace','region','service','accountId','action','resourceState','functionName','alarmName','catalogRecent'];";
 if (!normalize.parameters.jsCode.includes(oldAllowlist)) throw new Error("Base event allowlist did not match expected version.");
 normalize.parameters.jsCode = normalize.parameters.jsCode.replace(oldAllowlist, newAllowlist);
 
@@ -34,7 +36,7 @@ const awsLambdaCode = fs.readFileSync(path.join(nodesDir, "aws-lambda-serverless
 const dockerDesktopCode = fs.readFileSync(path.join(nodesDir, "docker-desktop-kubernetes-connector.js"), "utf8");
 const minikubeCode = fs.readFileSync(path.join(nodesDir, "minikube-kubernetes-connector.js"), "utf8");
 const policyCode = fs.readFileSync(path.join(nodesDir, "unified-remediation-policy.js"), "utf8");
-const runbookCode = fs.readFileSync(path.join(nodesDir, "shared-remediation-runbook.js"), "utf8");
+const runbookCode = ["const catalog = " + JSON.stringify(signals) + ";", fs.readFileSync(path.join(dir, "catalog/classify.js"), "utf8"), fs.readFileSync(path.join(nodesDir, "shared-remediation-runbook.js"), "utf8")].join("\n");
 
 const codeNode = (id, name, jsCode, position) => ({
   parameters: { mode: "runOnceForAllItems", jsCode },
