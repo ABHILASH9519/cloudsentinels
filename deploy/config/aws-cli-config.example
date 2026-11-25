@@ -1,0 +1,4 @@
+[profile cloudsentinels]
+region = ap-south-1
+output = json
+# Configure SSO or role-based credentials separately via the AWS CLI.

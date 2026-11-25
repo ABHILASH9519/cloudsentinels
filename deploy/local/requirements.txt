@@ -1,0 +1,2 @@
+# AWS-compatible SDK, always configured with the local Floci endpoint by bridge.py
+boto3==1.40.75

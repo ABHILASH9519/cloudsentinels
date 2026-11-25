@@ -1,4 +1,4 @@
-﻿import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "@tanstack/react-router";
@@ -49,6 +49,12 @@ const navItems = [
     label: "AI Insights",
     icon: BrainCircuit,
     ocid: "nav.ai_insights.link",
+  },
+  {
+    to: "/connections",
+    label: "Connections",
+    icon: Orbit,
+    ocid: "nav.connections.link",
   },
   {
     to: "/settings",

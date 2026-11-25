@@ -1,0 +1,20 @@
+[Unit]
+Description=CloudSentinels cluster agent (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cloudsentinels
+Group=cloudsentinels
+EnvironmentFile=/etc/cloudsentinels/agent-%i.env
+ExecStart=/opt/cloudsentinels/bin/cloudsentinels-agent
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

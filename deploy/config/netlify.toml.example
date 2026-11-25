@@ -1,0 +1,11 @@
+# Optional dashboard-only hosting. The HTTPS Go API is deployed separately.
+# Copy to the repo root as netlify.toml only when configuring your hosting site.
+[build]
+command = "pnpm install --frozen-lockfile && pnpm --filter @cloudsentinels/frontend build"
+publish = "src/frontend/dist"
+
+[build.environment]
+VITE_LOCAL_OPERATOR = "false"
+VITE_CLOUDSENTINELS_API_URL = "https://api.example.com"
+# Set VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN,
+# VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_APP_ID in host build settings.

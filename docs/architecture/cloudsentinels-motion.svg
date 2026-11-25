@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="660" viewBox="0 0 1120 660" role="img" aria-labelledby="title desc">
+<title id="title">CloudSentinels multi-profile architecture</title>
+<desc id="desc">Kubernetes agents send telemetry to the Go API. Floci queues alerts for n8n and stores generated runbooks. Optional AWS profiles connect via their respective adapters. Motion illustrates designed communication.</desc>
+<defs>
+  <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#071426"/><stop offset="1" stop-color="#0e2036"/></linearGradient>
+  <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#62cbdc"/></marker>
+  <style>
+    text{font-family:system-ui,sans-serif;fill:#f1f7ff}.head{font-size:30px;font-weight:700}.sub{font-size:13px;fill:#a8bed4}.label{font-size:17px;font-weight:650}.small{font-size:12px;fill:#a8bed4}.box{fill:#142943;stroke:#365575;stroke-width:1.4}
+    .flow{fill:none;stroke:#62cbdc;stroke-width:2;marker-end:url(#arrow)}.motion{fill:none;stroke:#c2fcff;stroke-width:3;stroke-dasharray:5 40;animation:move 2s linear infinite;pointer-events:none}.optional{fill:none;stroke:#a88cf7;stroke-width:1.6;stroke-dasharray:6 5}
+    @keyframes move{to{stroke-dashoffset:-90}}@media(prefers-reduced-motion:reduce){.motion{animation:none}}
+  </style>
+</defs>
+<rect width="1120" height="660" rx="22" fill="url(#bg)"/>
+<text x="40" y="52" class="head">CloudSentinels</text>
+<text x="40" y="77" class="sub">MULTI-CLUSTER OBSERVABILITY · EVENT-DRIVEN REMEDIATION PLANNING</text>
+<rect x="40" y="112" width="1040" height="355" rx="16" fill="#0b192b" stroke="#35536e"/>
+<text x="62" y="141" class="small">LOCAL FLOCI PROFILE  /  DOCKER COMPOSE</text>
+<g class="box">
+<rect x="62" y="170" width="188" height="56" rx="9"/><rect x="62" y="245" width="188" height="56" rx="9"/><rect x="62" y="320" width="188" height="56" rx="9"/>
+<rect x="300" y="237" width="166" height="75" rx="10"/>
+<rect x="522" y="237" width="150" height="75" rx="10"/>
+<rect x="728" y="237" width="141" height="75" rx="10"/>
+<rect x="918" y="170" width="140" height="62" rx="10"/><rect x="918" y="320" width="140" height="65" rx="10"/>
+<rect x="522" y="365" width="150" height="56" rx="10"/><rect x="728" y="365" width="141" height="56" rx="10"/>
+</g>
+<g text-anchor="middle">
+<text x="156" y="193" class="label">Docker Desktop</text><text x="156" y="212" class="small">Kubernetes agent</text>
+<text x="156" y="268" class="label">Minikube</text><text x="156" y="287" class="small">Kubernetes agent</text>
+<text x="156" y="343" class="label">React UI</text><text x="156" y="362" class="small">Operator dashboard</text>
+<text x="383" y="269" class="label">Go API</text><text x="383" y="289" class="small">Telemetry + alerts</text>
+<text x="597" y="268" class="label">Alert bridge</text><text x="597" y="289" class="small">Signed ingress / worker</text>
+<text x="799" y="268" class="label">Floci SQS</text><text x="799" y="289" class="small">Queue + retry</text>
+<text x="988" y="196" class="label">n8n</text><text x="988" y="215" class="small">6,786 cases</text>
+<text x="988" y="346" class="label">DynamoDB</text><text x="988" y="366" class="small">Bridge stores runbooks</text>
+<text x="597" y="388" class="label">Observer</text><text x="597" y="407" class="small">Floci health</text>
+<text x="799" y="388" class="label">DLQ</text><text x="799" y="407" class="small">Failed delivery</text>
+</g>
+<g class="flow">
+<path d="M250 198H272V257H300"/><path d="M250 273H300"/><path d="M250 348H272V294H300"/><path d="M466 274H522"/><path d="M672 254H728"/><path d="M728 295H672"/><path d="M597 237V200H918"/><path d="M918 216H610V237M672 277H695V342H918"/><path d="M799 312V365"/><path d="M672 393H695V438H1070V201H1058"/>
+</g>
+<g class="motion">
+<path d="M250 198H272V257H300M250 273H300M250 348H272V294H300M466 274H522M672 254H728M728 295H672M597 237V200H918M918 216H610V237M672 277H695V342H918M799 312V365M672 393H695V438H1070V201H1058"/>
+</g>
+<rect x="40" y="491" width="1040" height="117" rx="16" fill="#171c35" stroke="#69558b"/>
+<text x="62" y="519" class="small">OPTIONAL AWS PROFILES  /  CONFIGURATION AVAILABLE</text>
+<g class="box"><rect x="62" y="539" width="235" height="49" rx="8"/><rect x="323" y="539" width="235" height="49" rx="8"/><rect x="584" y="539" width="235" height="49" rx="8"/><rect x="845" y="539" width="213" height="49" rx="8"/></g>
+<g text-anchor="middle"><text x="179" y="568" class="label">EKS + agent</text><text x="440" y="568" class="label">Lambda / API Gateway</text><text x="701" y="568" class="label">EventBridge + SQS</text><text x="951" y="568" class="label">Zapier / n8n</text></g>
+<path d="M179 539V482H383V312M558 564H584M819 564H845" class="optional"/>
+<text x="40" y="637" class="small">Architecture illustration · animated event paths · optional profiles require configuration and provisioned resources</text>
+</svg>

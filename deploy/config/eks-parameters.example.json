@@ -1,0 +1,14 @@
+[
+  {"ParameterKey":"ClusterName","ParameterValue":"cloudsentinels-review"},
+  {"ParameterKey":"KubernetesVersion","ParameterValue":"REPLACE_SUPPORTED_VERSION"},
+  {"ParameterKey":"VpcId","ParameterValue":"REPLACE_VPC_ID"},
+  {"ParameterKey":"PrivateSubnetIds","ParameterValue":"REPLACE_SUBNET_A,REPLACE_SUBNET_B"},
+  {"ParameterKey":"ClusterRoleArn","ParameterValue":"REPLACE_CLUSTER_ROLE_ARN"},
+  {"ParameterKey":"NodeRoleArn","ParameterValue":"REPLACE_NODE_ROLE_ARN"},
+  {"ParameterKey":"ClusterAdminRoleArn","ParameterValue":"REPLACE_REVIEW_OPERATOR_ROLE_ARN"},
+  {"ParameterKey":"NodeInstanceType","ParameterValue":"REPLACE_APPROVED_INSTANCE_TYPE"},
+  {"ParameterKey":"MinSize","ParameterValue":"1"},
+  {"ParameterKey":"DesiredSize","ParameterValue":"1"},
+  {"ParameterKey":"MaxSize","ParameterValue":"1"},
+  {"ParameterKey":"PublicAccessCidrs","ParameterValue":"REPLACE_APPROVED_NARROW_CIDR"}
+]

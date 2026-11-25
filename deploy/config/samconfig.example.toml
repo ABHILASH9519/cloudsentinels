@@ -1,0 +1,14 @@
+version = 0.1
+
+[default.build.parameters]
+template_file = "deploy/lambda/template.yaml"
+build_dir = ".aws-sam/build"
+
+[default.deploy.parameters]
+stack_name = "cloudsentinels-go"
+region = "ap-south-1"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+# Fill in the real ARN and project ID before using this template.
+parameter_overrides = "FirebaseProjectID=REPLACE_PROJECT FirebaseAdminSecretArn=REPLACE_SECRET_ARN AllowedOrigins=https://app.example.com"

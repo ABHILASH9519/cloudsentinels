@@ -2,7 +2,19 @@
 
 A local observability and incident-response system for Docker Desktop Kubernetes and Minikube. Each cluster reports to a shared Go API using its own credential. Floci supplies SQS for alert delivery and DynamoDB for runbooks. n8n converts each event into diagnostic steps with its cluster and resource attached. The default stack runs on one computer without cloud accounts.
 
+> **Prepared source release.** Floci is the default local provider. The AWS EKS, Lambda and monitoring assets are available as optional deployment profiles. This update prepares the files without provisioning infrastructure or executing the project.
+
+[![Go](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go)](go.mod)
+[![Floci](https://img.shields.io/badge/Floci-2.5.0-32B8C6)](compose.yaml)
+[![n8n](https://img.shields.io/badge/n8n-2.16.1-EA4B71?logo=n8n)](deploy/automation)
+[![License](https://img.shields.io/github/license/ABHILASH9519/cloudsentinels)](LICENSE)
+
 ## Architecture
+
+![Animated multi-cluster and automation architecture](docs/architecture/cloudsentinels-motion.svg)
+
+The animation illustrates the configured communication paths. The optional AWS profile is shown separately from the local Floci process.
+
 
 ```mermaid
 flowchart TD
@@ -19,6 +31,39 @@ flowchart TD
 ```
 
 The ingress and worker run in the same bridge process. A successful API event acknowledgment means the bridge queued the alert. The worker acknowledges SQS after it stores the returned runbook. Delivery is at least once. Redelivery checks the event ID and original message fingerprint before invoking n8n again. A crash between webhook completion and storage can repeat a workflow execution. Runbooks are advisory, and cluster mutations are disabled in the local profile.
+
+## Build and deployment assets
+
+| Area | Entry point |
+|---|---|
+| Build-only native executables and Lambda ZIP | [scripts/build-artifacts.py](scripts/build-artifacts.py) |
+| Linux / macOS launcher | [run.sh](run.sh) |
+| Windows PowerShell launcher | [run.ps1](run.ps1) |
+| Docker microservices | [compose.yaml](compose.yaml) |
+| Environment and cloud configuration | [deploy/config](deploy/config) |
+| Kubernetes agents and service accounts | [deploy/agent/kubernetes](deploy/agent/kubernetes) |
+| Native Linux services | [deploy/systemd](deploy/systemd) |
+| AWS EKS and serverless configurations | [deploy/eks](deploy/eks), [deploy/lambda](deploy/lambda), [deploy/aws](deploy/aws) |
+| Incident automation and catalog | [deploy/automation](deploy/automation) |
+
+[Full configuration and release inventory](docs/BUILD_AND_DEPLOY.md)
+
+### Optional AWS path
+```mermaid
+flowchart TD
+    EKS["EKS / read-only agent"] --> API["Go control plane"]
+    Client["Authenticated dashboard"] --> Gateway["API Gateway"]
+    Gateway --> Lambda["Operations Lambda"]
+    Lambda --> Dynamo["AWS DynamoDB"]
+    Lambda --> EB["EventBridge"]
+    EB --> SQS["AWS SQS"]
+    SQS --> Poller["Local event poller"]
+    Poller --> N8N["n8n runbook"]
+    API --> N8N
+    Lambda --> Zapier["Configured Zapier relay"]
+```
+
+This is a prepared topology. The standalone Go Lambda uses its own SAM template, and the Node.js operations runtime uses the separate CloudFormation templates.
 
 ## Run on your PC
 
@@ -76,6 +121,10 @@ python scripts/local.py down
 Stop host agents with Ctrl+C. Docker volumes retain Floci data and n8n workflows across restarts. The Go API keeps its incident and telemetry views in process memory. Keep the stack on loopback. Cluster agents use your local kubeconfig. Floci's published endpoint accepts local test credentials.
 
 ## Repository consolidation
+
+The dashboard includes a Connections view that brings the sibling repository's deployment-target overview into the Go-first interface. It uses the existing platform and telemetry endpoints for reported status, alongside documented local and AWS configurations.
+
+
 
 This repository combines the Go control plane, agent, locked frontend workspace and workflow from [cloudsentinels](https://github.com/ABHILASH9519/cloudsentinels) with dashboard error handling and severity/status components from [Cloud-Sentinels at f624719](https://github.com/ABHILASH9519/Cloud-Sentinels/tree/f6247199222a0ba77204eab14fa30ec4eb1415e4). The local profile has one Go API, one React dashboard and one n8n workflow. Historical AWS templates and PowerShell profiles are reference material. The default startup uses Floci and local operator authentication. Hosted AWS provisioning workflows are archived under `docs/legacy/workflows`.
 

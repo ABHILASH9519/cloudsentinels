@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -12,6 +12,7 @@ import { Layout } from "./components/Layout";
 import { getCloudSentinelsConfigError } from "./lib/cloudSentinels";
 import { AIInsightsPage } from "./pages/AIInsightsPage";
 import { ClustersPage } from "./pages/ClustersPage";
+import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { IncidentDetailPage } from "./pages/IncidentDetailPage";
 import { IncidentsPage } from "./pages/IncidentsPage";
@@ -106,6 +107,11 @@ const aiInsightsRoute = createRoute({
   path: "/ai-insights",
   component: AIInsightsPage,
 });
+const connectionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/connections",
+  component: ConnectionsPage,
+});
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
@@ -118,6 +124,7 @@ const routeTree = rootRoute.addChildren([
   monitoringRoute,
   clustersRoute,
   aiInsightsRoute,
+  connectionsRoute,
   settingsRoute,
 ]);
 const router = createRouter({ routeTree, history: createHashHistory() });

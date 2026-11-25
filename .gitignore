@@ -3,6 +3,7 @@ src/backend/secrets/
 .env
 .env.*
 !.env.example
+!.env.floci.example
 
 # Go build outputs
 /cloudsentinels
@@ -42,3 +43,8 @@ src/frontend/.env.local
 
 # Local review stack processes, logs and generated binaries
 .local-review-*
+
+# Prepared release bundle output
+/artifacts/
+/.aws-sam/
+/samconfig.toml
